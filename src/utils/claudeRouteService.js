@@ -61,7 +61,7 @@ export async function generateClaudeRoutes(params) {
     console.log('Claude prompt:', prompt);
     
     const response = await claude.messages.create({
-      model: 'claude-3-5-sonnet-20241220',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 2000,
       temperature: 0.7,
       messages: [
@@ -333,7 +333,7 @@ Respond in JSON format:
 }`;
 
     const response = await claude.messages.create({
-      model: 'claude-3-5-sonnet-20241220',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 800,
       temperature: 0.6,
       messages: [{ role: 'user', content: prompt }]
@@ -384,7 +384,7 @@ Analyze their patterns and provide recommendations in JSON format:
 }`;
 
     const response = await claude.messages.create({
-      model: 'claude-3-5-sonnet-20241220',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 600,
       temperature: 0.5,
       messages: [{ role: 'user', content: prompt }]

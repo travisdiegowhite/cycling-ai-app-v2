@@ -91,7 +91,13 @@ export async function generateAIRoutes(params) {
       // Convert Claude suggestions to full routes with coordinates
       for (const claudeRoute of claudeRoutes) {
         console.log('Converting Claude route:', claudeRoute.name);
-        const enhancedRoute = await convertClaudeToFullRoute(claudeRoute, startLocation, targetDistance);
+        // Pass route type and riding patterns to the conversion
+        const routeWithContext = {
+          ...claudeRoute,
+          routeType,
+          pastRidePatterns: ridingPatterns
+        };
+        const enhancedRoute = await convertClaudeToFullRoute(routeWithContext, startLocation, targetDistance);
         if (enhancedRoute) {
           console.log(`✅ Successfully converted: ${enhancedRoute.name}`);
           routes.push(enhancedRoute);
@@ -560,7 +566,9 @@ async function convertClaudeToFullRoute(claudeRoute, startLocation, targetDistan
     const waypoints = await generateWaypointsFromDirections(
       claudeRoute.keyDirections, 
       startLocation, 
-      claudeRoute.estimatedDistance
+      claudeRoute.distance || claudeRoute.estimatedDistance,
+      claudeRoute.routeType || 'loop',
+      claudeRoute.pastRidePatterns
     );
 
     // Use Mapbox to create realistic route
@@ -597,35 +605,147 @@ async function convertClaudeToFullRoute(claudeRoute, startLocation, targetDistan
   };
 }
 
-// Generate waypoints from Claude's turn-by-turn directions
-async function generateWaypointsFromDirections(directions, startLocation, targetDistance) {
+// Generate waypoints from Claude's turn-by-turn directions with route type awareness
+async function generateWaypointsFromDirections(directions, startLocation, targetDistance, routeType = 'loop', pastRidePatterns = null) {
+  console.log('🧭 Generating waypoints:', {directions, startLocation, targetDistance, routeType});
   const waypoints = [startLocation];
   
-  if (!directions || directions.length === 0) {
-    // Generate simple waypoints for the target distance
-    const numWaypoints = Math.min(4, Math.max(2, Math.floor(targetDistance / 10)));
-    
-    for (let i = 1; i <= numWaypoints; i++) {
-      const bearing = (i * (360 / (numWaypoints + 1))) + Math.random() * 30 - 15;
-      const distance = (targetDistance / (numWaypoints + 1)) * i;
-      const waypoint = calculateDestinationPoint(startLocation, distance, bearing);
-      waypoints.push(waypoint);
-    }
-    
-    return waypoints;
+  // Use different strategies based on route type
+  if (routeType === 'loop') {
+    return generateLoopWaypoints(startLocation, targetDistance, directions, pastRidePatterns);
+  } else if (routeType === 'out_back') {
+    return generateOutAndBackWaypoints(startLocation, targetDistance, directions, pastRidePatterns);
+  } else if (routeType === 'point_to_point') {
+    return generatePointToPointWaypoints(startLocation, targetDistance, directions, pastRidePatterns);
   }
+  
+  // Fallback to loop if route type not recognized
+  return generateLoopWaypoints(startLocation, targetDistance, directions, pastRidePatterns);
+}
 
-  // For now, generate waypoints based on direction count
-  // In a more advanced implementation, we could parse the actual directions
-  const numWaypoints = Math.min(directions.length, 6);
+// Generate realistic loop route waypoints
+function generateLoopWaypoints(startLocation, targetDistance, directions, pastRidePatterns) {
+  const waypoints = [startLocation];
+  const numWaypoints = Math.min(6, Math.max(3, Math.floor(targetDistance / 12)));
+  
+  // Create a more realistic loop using varied distances and intelligent bearing selection
+  const baseRadius = targetDistance / (2 * Math.PI) * 0.8;
+  
+  // If we have past ride patterns, bias towards those areas
+  const preferredDirections = pastRidePatterns?.preferredDirections || [];
   
   for (let i = 1; i <= numWaypoints; i++) {
-    const bearing = (i * (360 / (numWaypoints + 1))) + Math.random() * 45 - 22.5;
-    const distance = (targetDistance / (numWaypoints + 1)) * i;
-    const waypoint = calculateDestinationPoint(startLocation, distance, bearing);
+    let angle;
+    
+    if (preferredDirections.length > 0 && Math.random() > 0.3) {
+      // 70% chance to use preferred directions from past rides
+      const preferred = preferredDirections[Math.floor(Math.random() * preferredDirections.length)];
+      const baseAngle = preferred.direction === 'north' ? 0 : 
+                      preferred.direction === 'northeast' ? 45 :
+                      preferred.direction === 'east' ? 90 :
+                      preferred.direction === 'southeast' ? 135 :
+                      preferred.direction === 'south' ? 180 :
+                      preferred.direction === 'southwest' ? 225 :
+                      preferred.direction === 'west' ? 270 : 315;
+      angle = baseAngle + (i * 360 / numWaypoints) + Math.random() * 40 - 20;
+    } else {
+      // Create varied, non-uniform spacing for more natural routes
+      const progress = i / numWaypoints;
+      const baseAngle = progress * 360;
+      angle = baseAngle + Math.sin(progress * Math.PI * 2) * 30 + Math.random() * 25 - 12.5;
+    }
+    
+    // Vary distance to create interesting shapes (not perfect circles)
+    const distanceVariation = Math.sin(i * Math.PI / 2) * 0.3 + 1; // Creates oval/figure-8 shapes
+    const distance = baseRadius * distanceVariation + Math.random() * (baseRadius * 0.2) - (baseRadius * 0.1);
+    
+    const waypoint = calculateDestinationPoint(startLocation, distance, angle);
+    console.log(`📍 Loop Waypoint ${i}:`, {angle: Math.round(angle), distance: Math.round(distance), waypoint});
     waypoints.push(waypoint);
   }
+  
+  // Always return to start for loops
+  waypoints.push(startLocation);
+  console.log('🧭 Final loop waypoints:', waypoints.length);
+  return waypoints;
+}
 
+// Generate out-and-back route waypoints
+function generateOutAndBackWaypoints(startLocation, targetDistance, directions, pastRidePatterns) {
+  const waypoints = [startLocation];
+  const outboundDistance = targetDistance / 2;
+  
+  // Choose a primary direction for the out-and-back
+  let primaryBearing = Math.random() * 360;
+  
+  // Use preferred directions if available
+  if (pastRidePatterns?.preferredDirections?.length > 0) {
+    const preferred = pastRidePatterns.preferredDirections[0];
+    const directionMap = {
+      'north': 0, 'northeast': 45, 'east': 90, 'southeast': 135,
+      'south': 180, 'southwest': 225, 'west': 270, 'northwest': 315
+    };
+    primaryBearing = directionMap[preferred.direction] || Math.random() * 360;
+  }
+  
+  // Add some waypoints along the outbound journey
+  const numOutboundWaypoints = Math.min(3, Math.max(1, Math.floor(outboundDistance / 10)));
+  
+  for (let i = 1; i <= numOutboundWaypoints; i++) {
+    const progress = i / (numOutboundWaypoints + 1);
+    const distance = outboundDistance * progress;
+    const bearing = primaryBearing + Math.random() * 20 - 10; // Small variations
+    
+    const waypoint = calculateDestinationPoint(startLocation, distance, bearing);
+    console.log(`📍 Outbound Waypoint ${i}:`, {bearing: Math.round(bearing), distance: Math.round(distance)});
+    waypoints.push(waypoint);
+  }
+  
+  // Final outbound point (turnaround)
+  const turnaroundPoint = calculateDestinationPoint(startLocation, outboundDistance, primaryBearing);
+  waypoints.push(turnaroundPoint);
+  console.log(`🔄 Turnaround point:`, {bearing: Math.round(primaryBearing), distance: Math.round(outboundDistance)});
+  
+  // Return journey - same points in reverse (Mapbox will route back)
+  waypoints.push(startLocation);
+  
+  console.log('🧭 Final out-and-back waypoints:', waypoints.length);
+  return waypoints;
+}
+
+// Generate point-to-point route waypoints  
+function generatePointToPointWaypoints(startLocation, targetDistance, directions, pastRidePatterns) {
+  const waypoints = [startLocation];
+  
+  // Choose destination direction
+  let destinationBearing = Math.random() * 360;
+  if (pastRidePatterns?.preferredDirections?.length > 0) {
+    const preferred = pastRidePatterns.preferredDirections[0];
+    const directionMap = {
+      'north': 0, 'northeast': 45, 'east': 90, 'southeast': 135,
+      'south': 180, 'southwest': 225, 'west': 270, 'northwest': 315
+    };
+    destinationBearing = directionMap[preferred.direction] || Math.random() * 360;
+  }
+  
+  // Add intermediate waypoints
+  const numWaypoints = Math.min(4, Math.max(2, Math.floor(targetDistance / 15)));
+  
+  for (let i = 1; i <= numWaypoints; i++) {
+    const progress = i / (numWaypoints + 1);
+    const distance = targetDistance * progress;
+    const bearing = destinationBearing + Math.random() * 30 - 15; // Allow some meandering
+    
+    const waypoint = calculateDestinationPoint(startLocation, distance, bearing);
+    console.log(`📍 P2P Waypoint ${i}:`, {bearing: Math.round(bearing), distance: Math.round(distance)});
+    waypoints.push(waypoint);
+  }
+  
+  // Final destination
+  const destination = calculateDestinationPoint(startLocation, targetDistance, destinationBearing);
+  waypoints.push(destination);
+  
+  console.log('🧭 Final point-to-point waypoints:', waypoints.length);
   return waypoints;
 }
 

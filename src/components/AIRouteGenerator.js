@@ -14,6 +14,7 @@ import {
   Alert,
   Loader,
   Center,
+  TextInput,
 } from '@mantine/core';
 import {
   Brain,
@@ -24,6 +25,8 @@ import {
   Play,
   RotateCcw,
   Navigation,
+  MapPin,
+  Search,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -31,7 +34,7 @@ import { useUnits } from '../utils/units';
 import { getWeatherData, getMockWeatherData } from '../utils/weather';
 import { generateAIRoutes } from '../utils/aiRouteGenerator';
 
-const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet }) => {
+const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, externalStartLocation }) => {
   const { user } = useAuth();
   const { formatDistance, formatElevation, formatTemperature, formatSpeed } = useUnits();
   
@@ -40,12 +43,15 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet }) => {
   const [trainingGoal, setTrainingGoal] = useState('endurance');
   const [routeType, setRouteType] = useState('loop');
   const [startLocation, setStartLocation] = useState(null);
+  const [addressInput, setAddressInput] = useState('');
+  const [currentAddress, setCurrentAddress] = useState('');
   
   // Generation state
   const [generating, setGenerating] = useState(false);
   const [generatedRoutes, setGeneratedRoutes] = useState([]);
   const [weatherData, setWeatherData] = useState(null);
   const [error, setError] = useState(null);
+  const [geocoding, setGeocoding] = useState(false);
 
   // Training goal options
   const trainingGoals = [
@@ -81,8 +87,95 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet }) => {
     }
   };
 
+  // Geocode address to coordinates using Mapbox Geocoding API
+  const geocodeAddress = async (address) => {
+    if (!address.trim()) return null;
+    
+    const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
+    if (!mapboxToken) {
+      toast.error('Mapbox token not available for geocoding');
+      return null;
+    }
+
+    try {
+      setGeocoding(true);
+      const encodedAddress = encodeURIComponent(address);
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedAddress}.json?access_token=${mapboxToken}&country=US&types=address,poi`
+      );
+      
+      const data = await response.json();
+      
+      if (data.features && data.features.length > 0) {
+        const feature = data.features[0];
+        const [longitude, latitude] = feature.center;
+        return {
+          coordinates: [longitude, latitude],
+          address: feature.place_name
+        };
+      } else {
+        toast.error('Address not found');
+        return null;
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      toast.error('Failed to find address');
+      return null;
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  // Reverse geocode coordinates to address
+  const reverseGeocode = async (location) => {
+    const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
+    if (!mapboxToken || !location) return '';
+
+    try {
+      const [longitude, latitude] = location;
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxToken}&types=address,poi`
+      );
+      
+      const data = await response.json();
+      
+      if (data.features && data.features.length > 0) {
+        return data.features[0].place_name;
+      }
+      return '';
+    } catch (error) {
+      console.warn('Reverse geocoding failed:', error);
+      return '';
+    }
+  };
+
+  // Handle address search
+  const handleAddressSearch = async () => {
+    const result = await geocodeAddress(addressInput);
+    if (result) {
+      const location = result.coordinates;
+      setStartLocation(location);
+      setCurrentAddress(result.address);
+      onStartLocationSet && onStartLocationSet(location);
+      
+      // Fetch weather for this location
+      await fetchWeatherData(location);
+      
+      // Center map on the location
+      if (mapRef?.current) {
+        mapRef.current.flyTo({
+          center: location,
+          zoom: 13,
+          duration: 1000
+        });
+      }
+      
+      toast.success('Location set from address');
+    }
+  };
+
   // Get current location
-  const getCurrentLocation = useCallback(() => {
+  const getCurrentLocation = useCallback(async () => {
     if (!navigator.geolocation) {
       toast.error('Geolocation not supported');
       return;
@@ -93,6 +186,11 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet }) => {
         const location = [position.coords.longitude, position.coords.latitude];
         setStartLocation(location);
         onStartLocationSet && onStartLocationSet(location);
+        
+        // Get address for current location
+        const address = await reverseGeocode(location);
+        setCurrentAddress(address);
+        
         toast.success('Current location set as start point');
         
         // Fetch weather for this location
@@ -126,6 +224,11 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet }) => {
       const location = [lng, lat];
       setStartLocation(location);
       onStartLocationSet && onStartLocationSet(location);
+      
+      // Get address for clicked location
+      const address = await reverseGeocode(location);
+      setCurrentAddress(address);
+      
       toast.success('Start location set');
       
       // Fetch weather for clicked location
@@ -135,6 +238,19 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet }) => {
     map.on('click', handleMapClick);
     return () => map.off('click', handleMapClick);
   }, [mapRef]);
+
+  // Handle external location changes (e.g., from map marker dragging)
+  useEffect(() => {
+    if (externalStartLocation && externalStartLocation !== startLocation) {
+      setStartLocation(externalStartLocation);
+      // Update address for the new location
+      reverseGeocode(externalStartLocation).then(address => {
+        setCurrentAddress(address);
+      });
+      // Fetch weather for new location
+      fetchWeatherData(externalStartLocation);
+    }
+  }, [externalStartLocation]);
 
   // Generate intelligent routes
   const generateRoutes = async () => {
@@ -248,6 +364,34 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet }) => {
         {/* Start Location */}
         <div>
           <Text size="sm" fw={500} mb="xs">Start Location</Text>
+          
+          {/* Address Input */}
+          <Group gap="sm" mb="sm">
+            <TextInput
+              placeholder="Enter address or location name..."
+              value={addressInput}
+              onChange={(e) => setAddressInput(e.target.value)}
+              leftSection={<MapPin size={16} />}
+              style={{ flex: 1 }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddressSearch();
+                }
+              }}
+            />
+            <Button
+              variant="light"
+              leftSection={geocoding ? <Loader size={16} /> : <Search size={16} />}
+              onClick={handleAddressSearch}
+              loading={geocoding}
+              disabled={!addressInput.trim()}
+              size="sm"
+            >
+              Search
+            </Button>
+          </Group>
+
+          {/* Location Buttons */}
           <Group gap="sm">
             <Button
               variant="light"
@@ -263,9 +407,17 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet }) => {
               </Badge>
             )}
           </Group>
+
+          {/* Current Address Display */}
+          {currentAddress && (
+            <Text size="xs" c="blue" mt="xs">
+              📍 {currentAddress}
+            </Text>
+          )}
+          
           {!startLocation && (
             <Text size="xs" c="dimmed" mt="xs">
-              Click on the map or use current location to set start point
+              Enter an address above, click on the map, or use current location
             </Text>
           )}
         </div>

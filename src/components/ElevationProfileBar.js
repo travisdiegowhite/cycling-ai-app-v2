@@ -25,44 +25,37 @@ const ElevationProfileBar = ({
   const padding = 15;
 
   // Find min/max elevations for scaling
-  const elevations = elevationProfile.map(point => point?.elevation || 0).filter(e => !isNaN(e));
+  const elevations = elevationProfile.map(point => point?.elevation || 0).filter(e => !isNaN(e) && e >= 0);
   if (elevations.length === 0) {
     return null;
   }
   
   const minElevation = Math.min(...elevations);
   const maxElevation = Math.max(...elevations);
-  const elevationRange = Math.max(maxElevation - minElevation, 1); // Ensure minimum range of 1
+  const elevationRange = Math.max(maxElevation - minElevation, 10); // Ensure minimum range of 10m
 
-  // Add padding to elevation range for better visualization
-  const elevationPadding = elevationRange * 0.1;
+  // Add small padding (1-2%) to elevation range for clarity
+  const elevationPadding = elevationRange * 0.02; // 2% padding
   const chartMinElevation = minElevation - elevationPadding;
   const chartMaxElevation = maxElevation + elevationPadding;
   const chartElevationRange = chartMaxElevation - chartMinElevation;
 
-  // Smooth the elevation data using a simple moving average
+  // Debug the scaling values
+  console.error('🎯 ELEVATION CHART SCALING:', {
+    minElevation: Math.round(minElevation),
+    maxElevation: Math.round(maxElevation), 
+    elevationRange: Math.round(elevationRange),
+    chartMinElevation: Math.round(chartMinElevation),
+    chartMaxElevation: Math.round(chartMaxElevation),
+    chartElevationRange: Math.round(chartElevationRange)
+  });
+
+  // Use original elevation profile with light smoothing
   const smoothElevationProfile = elevationProfile.map((point, index) => {
-    if (!point || typeof point.elevation !== 'number') {
-      return { ...point, elevation: 0 };
+    if (!point || typeof point.elevation !== 'number' || point.elevation < 0) {
+      return { ...point, elevation: minElevation };
     }
-    
-    const windowSize = 3; // Average over 3 points
-    const start = Math.max(0, index - Math.floor(windowSize / 2));
-    const end = Math.min(elevationProfile.length - 1, index + Math.floor(windowSize / 2));
-    
-    let sum = 0;
-    let count = 0;
-    for (let i = start; i <= end; i++) {
-      if (elevationProfile[i] && typeof elevationProfile[i].elevation === 'number') {
-        sum += elevationProfile[i].elevation;
-        count++;
-      }
-    }
-    
-    return {
-      ...point,
-      elevation: count > 0 ? sum / count : 0
-    };
+    return point; // Keep original elevations, just adjust the scaling
   });
 
   // Create smooth SVG path using cubic bezier curves
@@ -73,7 +66,12 @@ const ElevationProfileBar = ({
     
     points.forEach((point, index) => {
       const x = padding + (index / (points.length - 1)) * (width - 2 * padding);
+      // Scale using the padded chart range (minElevation to maxElevation with 2% padding)
       const y = chartHeight - padding - ((point.elevation - chartMinElevation) / chartElevationRange) * (chartHeight - 2 * padding);
+      
+      if (index < 3) {
+        console.error(`📐 POINT ${index}: elevation=${point.elevation}, chartMin=${Math.round(chartMinElevation)}, y=${Math.round(y)}`);
+      }
       
       if (index === 0) {
         path += `M ${x} ${y}`;
@@ -159,8 +157,9 @@ const ElevationProfileBar = ({
                   <path d="M 40 0 L 0 0 0 20" fill="none" stroke="#dee2e6" strokeWidth="0.5"/>
                 </pattern>
                 <linearGradient id="elevationGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" style={{stopColor: '#4ade80', stopOpacity: 0.6}} />
-                  <stop offset="100%" style={{stopColor: '#22c55e', stopOpacity: 0.2}} />
+                  <stop offset="0%" style={{stopColor: '#8b5cf6', stopOpacity: 0.7}} />
+                  <stop offset="50%" style={{stopColor: '#3b82f6', stopOpacity: 0.5}} />
+                  <stop offset="100%" style={{stopColor: '#22c55e', stopOpacity: 0.3}} />
                 </linearGradient>
               </defs>
               <rect width="100%" height="100%" fill="url(#grid)" />
@@ -185,7 +184,7 @@ const ElevationProfileBar = ({
                     <path
                       d={smoothPath}
                       fill="none"
-                      stroke="#16a34a"
+                      stroke="#3b82f6"
                       strokeWidth="3"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -194,7 +193,7 @@ const ElevationProfileBar = ({
                 );
               })()}
               
-              {/* Elevation labels */}
+              {/* Elevation labels - show actual min and max elevations */}
               <text 
                 x={padding} 
                 y={padding + 12} 
@@ -202,7 +201,7 @@ const ElevationProfileBar = ({
                 fill="#374151"
                 fontWeight="500"
               >
-                {formatElevation(chartMaxElevation)}
+                {formatElevation(maxElevation)}
               </text>
               <text 
                 x={padding} 
@@ -211,11 +210,11 @@ const ElevationProfileBar = ({
                 fill="#374151"
                 fontWeight="500"
               >
-                {formatElevation(chartMinElevation)}
+                {formatElevation(minElevation)}
               </text>
               
-              {/* Center elevation reference line */}
-              {elevationRange > 100 && (
+              {/* Center elevation reference line - only show if significant range */}
+              {elevationRange > 50 && (
                 <>
                   <line
                     x1={padding}
@@ -233,7 +232,7 @@ const ElevationProfileBar = ({
                     fontSize="10" 
                     fill="#6b7280"
                   >
-                    {formatElevation((chartMinElevation + chartMaxElevation) / 2)}
+                    {formatElevation((minElevation + maxElevation) / 2)}
                   </text>
                 </>
               )}
@@ -250,25 +249,23 @@ const ElevationProfileBar = ({
           }}>
             <Stack gap="xs">
               <Group justify="space-between">
-                <Text size="xs" c="dimmed">Range:</Text>
+                <Text size="xs" c="dimmed">Profile Range:</Text>
                 <Text size="xs" fw={500}>{formatElevation(elevationRange)}</Text>
               </Group>
-              {elevationStats?.min !== undefined && (
-                <Group justify="space-between">
-                  <Text size="xs" c="dimmed">Min:</Text>
-                  <Text size="xs">{formatElevation(elevationStats.min)}</Text>
-                </Group>
-              )}
-              {elevationStats?.max !== undefined && (
-                <Group justify="space-between">
-                  <Text size="xs" c="dimmed">Max:</Text>
-                  <Text size="xs">{formatElevation(elevationStats.max)}</Text>
-                </Group>
-              )}
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">Max Climb:</Text>
+                <Text size="xs">+{formatElevation(elevationRange)}</Text>
+              </Group>
               {routeStats?.duration && (
                 <Group justify="space-between">
                   <Text size="xs" c="dimmed">Est. Time:</Text>
                   <Text size="xs">{Math.round(routeStats.duration / 60)}min</Text>
+                </Group>
+              )}
+              {elevationStats?.gain > 0 && (
+                <Group justify="space-between">
+                  <Text size="xs" c="dimmed">Total Gain:</Text>
+                  <Text size="xs">↗{formatElevation(elevationStats.gain)}</Text>
                 </Group>
               )}
             </Stack>

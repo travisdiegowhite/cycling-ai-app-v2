@@ -62,6 +62,7 @@ const AIRouteMap = () => {
           mapRef={mapRef}
           onRouteGenerated={handleRouteGenerated}
           onStartLocationSet={handleStartLocationSet}
+          externalStartLocation={startLocation}
         />
       </div>
 
@@ -99,12 +100,17 @@ const AIRouteMap = () => {
             </Source>
           )}
           
-          {/* Display start location marker */}
+          {/* Display start location marker - draggable */}
           {startLocation && (
             <Marker
               longitude={startLocation[0]}
               latitude={startLocation[1]}
               anchor="center"
+              draggable={true}
+              onDragEnd={(e) => {
+                const newLocation = [e.lngLat.lng, e.lngLat.lat];
+                handleStartLocationSet(newLocation);
+              }}
             >
               <div style={{
                 width: 20,
@@ -112,7 +118,8 @@ const AIRouteMap = () => {
                 borderRadius: '50%',
                 backgroundColor: '#228be6',
                 border: '3px solid white',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                cursor: 'grab'
               }} />
             </Marker>
           )}

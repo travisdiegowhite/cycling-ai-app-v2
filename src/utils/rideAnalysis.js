@@ -14,7 +14,6 @@ export async function fetchPastRides(userId, limit = 50) {
         id,
         name,
         filename,
-        activity_type,
         created_at,
         distance_km,
         duration_seconds,
@@ -26,7 +25,6 @@ export async function fetchPastRides(userId, limit = 50) {
         bounds_west
       `)
       .eq('user_id', userId)
-      .eq('activity_type', 'cycling')
       .order('created_at', { ascending: false })
       .limit(limit);
 
