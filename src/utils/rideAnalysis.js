@@ -7,25 +7,55 @@ export async function fetchPastRides(userId, limit = 50) {
   try {
     console.log('🔍 Fetching past rides for learning from user:', userId);
     
-    // First, get the routes metadata
+    // Get enhanced routes metadata from new comprehensive schema
     const { data: routes, error: routesError } = await supabase
       .from('routes')
       .select(`
         id,
         name,
-        filename,
-        created_at,
+        description,
+        activity_type,
+        strava_id,
+        imported_from,
         distance_km,
         duration_seconds,
         elevation_gain_m,
         elevation_loss_m,
+        average_speed,
+        max_speed,
+        average_pace,
+        average_heartrate,
+        max_heartrate,
+        hr_zones,
+        average_watts,
+        max_watts,
+        normalized_power,
+        intensity_factor,
+        training_stress_score,
+        kilojoules,
+        start_latitude,
+        start_longitude,
+        end_latitude,
+        end_longitude,
         bounds_north,
         bounds_south,
         bounds_east,
-        bounds_west
+        bounds_west,
+        surface_type,
+        route_type,
+        difficulty_rating,
+        training_goal,
+        effort_level,
+        tags,
+        has_gps_data,
+        has_heart_rate_data,
+        has_power_data,
+        track_points_count,
+        recorded_at,
+        created_at
       `)
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
+      .order('recorded_at', { ascending: false })
       .limit(limit);
 
     if (routesError) {
@@ -108,11 +138,18 @@ export async function fetchPastRides(userId, limit = 50) {
   }
 }
 
-// Analyze riding patterns from past rides
+// Analyze riding patterns from past rides with Strava data prioritization
 export function analyzeRidingPatterns(pastRides) {
   if (!pastRides || pastRides.length === 0) {
     return getDefaultPatterns();
   }
+
+  // Separate Strava and manual rides for different analysis approaches
+  const stravaRides = pastRides.filter(ride => ride.imported_from === 'strava' && ride.strava_id);
+  const manualRides = pastRides.filter(ride => ride.imported_from !== 'strava');
+  const fileUploads = pastRides.filter(ride => ride.imported_from === 'file_upload');
+  
+  console.log(`📊 Analyzing ${stravaRides.length} Strava rides, ${manualRides.length} manual rides, and ${fileUploads.length} file uploads`);
 
   const patterns = {
     preferredDistances: [],
@@ -123,11 +160,18 @@ export function analyzeRidingPatterns(pastRides) {
     timePreferences: {},
     distanceDistribution: {},
     elevationTolerance: { min: 0, max: 1000, preferred: 300 },
-    routeSegments: [], // New: actual route segments from past rides
-    routeTemplates: [] // New: route templates based on past rides
+    routeSegments: [], // Actual route segments from past rides
+    routeTemplates: [], // Route templates based on past rides
+    performanceMetrics: {}, // Enhanced performance data from Strava
+    trainingGoalPreferences: {}, // Training goal distribution
+    routeTypePreferences: {}, // Route type preferences (loop, out-back, etc.)
+    surfacePreferences: {}, // Surface type preferences (road, gravel, etc.)
+    difficultyPreferences: {}, // Difficulty rating preferences
+    dataSource: stravaRides.length > 0 ? 'strava_enhanced' : 'basic',
+    confidence: stravaRides.length > manualRides.length ? 0.9 : 0.6
   };
 
-  // Analyze distance preferences
+  // Analyze distance preferences (prioritize Strava data)
   const distances = pastRides
     .map(ride => ride.distance_km)
     .filter(d => d && d > 0);
@@ -136,8 +180,14 @@ export function analyzeRidingPatterns(pastRides) {
     patterns.preferredDistances = analyzeDistanceDistribution(distances);
     patterns.distanceDistribution = getDistanceDistribution(distances);
   }
+  
+  // Analyze performance metrics from Strava data
+  if (stravaRides.length > 0) {
+    patterns.performanceMetrics = analyzePerformanceMetrics(stravaRides);
+    patterns.averageSpeed = patterns.performanceMetrics.averageSpeed || 23;
+  }
 
-  // Analyze elevation preferences
+  // Analyze elevation preferences (enhanced with Strava data)
   const elevationGains = pastRides
     .map(ride => ride.elevation_gain_m)
     .filter(e => e !== null && e !== undefined);
@@ -145,6 +195,11 @@ export function analyzeRidingPatterns(pastRides) {
   if (elevationGains.length > 0) {
     patterns.elevationTolerance = analyzeElevationPreference(elevationGains);
     patterns.elevationPreference = categorizeElevationPreference(elevationGains);
+  }
+  
+  // Enhanced elevation analysis with Strava power data
+  if (stravaRides.length > 0) {
+    patterns.elevationTolerance = analyzeStravaElevationPatterns(stravaRides, patterns.elevationTolerance);
   }
 
   // Analyze frequent areas and directions from track points
@@ -181,6 +236,37 @@ export function analyzeRidingPatterns(pastRides) {
     patterns.routeSegments = [];
     patterns.routeTemplates = [];
   }
+
+  // Analyze training goal preferences
+  if (pastRides.some(ride => ride.training_goal)) {
+    patterns.trainingGoalPreferences = analyzeTrainingGoals(pastRides);
+  }
+  
+  // Analyze route type preferences
+  if (pastRides.some(ride => ride.route_type)) {
+    patterns.routeTypePreferences = analyzeRouteTypes(pastRides);
+  }
+  
+  // Analyze surface preferences
+  if (pastRides.some(ride => ride.surface_type)) {
+    patterns.surfacePreferences = analyzeSurfaceTypes(pastRides);
+  }
+  
+  // Analyze difficulty preferences
+  if (pastRides.some(ride => ride.difficulty_rating)) {
+    patterns.difficultyPreferences = analyzeDifficultyRatings(pastRides);
+  }
+
+  // Calculate overall data confidence based on data sources
+  patterns.confidence = calculateDataConfidence(pastRides, stravaRides, manualRides, fileUploads);
+  
+  console.log(`✅ Pattern analysis complete:`, {
+    totalRides: pastRides.length,
+    stravaRides: stravaRides.length,
+    dataSource: patterns.dataSource,
+    confidence: patterns.confidence,
+    hasPerformanceMetrics: patterns.performanceMetrics.averageSpeed ? true : false
+  });
 
   return patterns;
 }
@@ -871,6 +957,329 @@ function analyzeRoutePattern(keyPoints) {
   return 'very_winding';
 }
 
+// Analyze performance metrics from Strava data
+function analyzePerformanceMetrics(stravaRides) {
+  const validRides = stravaRides.filter(ride => {
+    return ride.average_speed && ride.distance_km > 5; // Valid rides with reasonable distance
+  });
+
+  if (validRides.length === 0) {
+    return { confidence: 0 };
+  }
+
+  const speeds = validRides.map(r => r.average_speed).filter(s => s > 0);
+  const heartRates = validRides
+    .map(r => r.average_heartrate)
+    .filter(hr => hr && hr > 50 && hr < 200); // Reasonable HR range
+  const powerValues = validRides
+    .map(r => r.average_watts)
+    .filter(p => p && p > 50 && p < 500); // Reasonable power range
+  const maxSpeeds = validRides.map(r => r.max_speed).filter(s => s > 0);
+
+  const metrics = {
+    confidence: validRides.length / Math.max(stravaRides.length, 1),
+    sampleSize: validRides.length
+  };
+
+  if (speeds.length > 0) {
+    metrics.averageSpeed = speeds.reduce((sum, s) => sum + s, 0) / speeds.length;
+    metrics.speedRange = {
+      min: Math.min(...speeds),
+      max: Math.max(...speeds),
+      variance: calculateVariance(speeds)
+    };
+  }
+
+  if (maxSpeeds.length > 0) {
+    metrics.maxSpeed = Math.max(...maxSpeeds);
+    metrics.sprintCapability = maxSpeeds.reduce((sum, s) => sum + s, 0) / maxSpeeds.length;
+  }
+
+  if (heartRates.length > 0) {
+    metrics.averageHeartRate = heartRates.reduce((sum, hr) => sum + hr, 0) / heartRates.length;
+    metrics.heartRateZones = analyzeHeartRateZones(heartRates);
+    metrics.fitnessLevel = estimateFitnessLevel(heartRates, speeds);
+  }
+
+  if (powerValues.length > 0) {
+    metrics.averagePower = powerValues.reduce((sum, p) => sum + p, 0) / powerValues.length;
+    metrics.powerProfile = categorizePowerProfile(powerValues);
+    metrics.functionalThresholdPower = estimateFTP(powerValues);
+  }
+
+  // Analyze energy expenditure if available
+  const energyValues = validRides
+    .map(r => r.kilojoules)
+    .filter(e => e && e > 0);
+  
+  if (energyValues.length > 0) {
+    metrics.averageEnergyExpenditure = energyValues.reduce((sum, e) => sum + e, 0) / energyValues.length;
+    metrics.efficiencyRatio = metrics.averagePower && metrics.averageEnergyExpenditure ?
+      metrics.averagePower / (metrics.averageEnergyExpenditure * 1000 / 3600) : null;
+  }
+
+  return metrics;
+}
+
+// Analyze Strava elevation patterns with power data
+function analyzeStravaElevationPatterns(stravaRides, existingTolerance) {
+  const ridesWithPower = stravaRides.filter(ride => 
+    ride.average_watts && ride.elevation_gain_m !== null
+  );
+
+  if (ridesWithPower.length === 0) {
+    return existingTolerance;
+  }
+
+  // Calculate power-to-weight ratios for climbs
+  const climbingEfficiency = ridesWithPower.map(ride => {
+    const elevationRatio = ride.elevation_gain_m / ride.distance_km; // m/km
+    const powerPerKg = ride.average_watts / 70; // Assume 70kg rider (could be enhanced)
+    return {
+      elevationGain: ride.elevation_gain_m,
+      elevationRatio,
+      powerPerKg,
+      efficiency: powerPerKg / Math.max(elevationRatio, 1)
+    };
+  });
+
+  // Find the rider's climbing sweet spot
+  const sortedByEfficiency = climbingEfficiency
+    .sort((a, b) => b.efficiency - a.efficiency)
+    .slice(0, Math.ceil(climbingEfficiency.length * 0.3)); // Top 30% most efficient
+
+  if (sortedByEfficiency.length > 0) {
+    const optimalElevation = sortedByEfficiency
+      .reduce((sum, climb) => sum + climb.elevationGain, 0) / sortedByEfficiency.length;
+    
+    return {
+      ...existingTolerance,
+      optimal: Math.round(optimalElevation),
+      powerBasedRecommendation: true,
+      climbingEfficiency: {
+        average: climbingEfficiency.reduce((sum, c) => sum + c.efficiency, 0) / climbingEfficiency.length,
+        range: {
+          min: Math.min(...climbingEfficiency.map(c => c.elevationGain)),
+          max: Math.max(...climbingEfficiency.map(c => c.elevationGain))
+        }
+      }
+    };
+  }
+
+  return existingTolerance;
+}
+
+// Calculate variance for performance metrics
+function calculateVariance(values) {
+  if (values.length < 2) return 0;
+  
+  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+  const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+  return squaredDiffs.reduce((sum, diff) => sum + diff, 0) / (values.length - 1);
+}
+
+// Analyze heart rate zones
+function analyzeHeartRateZones(heartRates) {
+  const maxHR = Math.max(...heartRates);
+  const avgHR = heartRates.reduce((sum, hr) => sum + hr, 0) / heartRates.length;
+  
+  // Estimate zones based on common percentages
+  return {
+    zone1: Math.round(maxHR * 0.5), // Active recovery
+    zone2: Math.round(maxHR * 0.65), // Aerobic base
+    zone3: Math.round(maxHR * 0.75), // Aerobic
+    zone4: Math.round(maxHR * 0.85), // Threshold
+    zone5: Math.round(maxHR * 0.95), // Neuromuscular
+    averageHR: Math.round(avgHR),
+    maxObserved: Math.round(maxHR)
+  };
+}
+
+// Estimate fitness level based on HR and speed data
+function estimateFitnessLevel(heartRates, speeds) {
+  if (heartRates.length === 0 || speeds.length === 0) return 'unknown';
+  
+  const avgHR = heartRates.reduce((sum, hr) => sum + hr, 0) / heartRates.length;
+  const avgSpeed = speeds.reduce((sum, s) => sum + s, 0) / speeds.length;
+  
+  // Simple fitness estimation based on speed at given HR
+  const fitnessScore = avgSpeed / (avgHR / 100); // Speed per HR percentage
+  
+  if (fitnessScore > 25) return 'excellent';
+  if (fitnessScore > 22) return 'good';
+  if (fitnessScore > 18) return 'moderate';
+  return 'developing';
+}
+
+// Categorize power profile
+function categorizePowerProfile(powerValues) {
+  const avgPower = powerValues.reduce((sum, p) => sum + p, 0) / powerValues.length;
+  const maxPower = Math.max(...powerValues);
+  
+  // Rough categorization (would be more accurate with body weight)
+  if (avgPower > 250) return 'strong';
+  if (avgPower > 200) return 'moderate';
+  if (avgPower > 150) return 'developing';
+  return 'beginner';
+}
+
+// Estimate Functional Threshold Power
+function estimateFTP(powerValues) {
+  // Very rough estimation - would need structured test for accuracy
+  const avgPower = powerValues.reduce((sum, p) => sum + p, 0) / powerValues.length;
+  return Math.round(avgPower * 1.15); // Rough multiplier for FTP estimation
+}
+
+// Calculate confidence in data based on sources
+function calculateDataConfidence(allRides, stravaRides, manualRides, fileUploads = []) {
+  let confidence = 0.3; // Base confidence
+  
+  // Boost confidence based on data quality
+  if (stravaRides.length > 0) {
+    confidence += 0.4 * Math.min(stravaRides.length / 10, 1); // Up to 40% boost for Strava data
+  }
+  
+  if (manualRides.length > 0) {
+    confidence += 0.15 * Math.min(manualRides.length / 20, 1); // Up to 15% boost for manual data
+  }
+  
+  if (fileUploads.length > 0) {
+    confidence += 0.25 * Math.min(fileUploads.length / 10, 1); // Up to 25% boost for file uploads
+  }
+  
+  // Boost for having track points (using new schema field)
+  const ridesWithTrackPoints = allRides.filter(ride => 
+    (ride.track_points && ride.track_points.length > 10) || 
+    (ride.track_points_count && ride.track_points_count > 10)
+  ).length;
+  
+  if (ridesWithTrackPoints > 0) {
+    confidence += 0.1 * Math.min(ridesWithTrackPoints / 5, 1);
+  }
+  
+  // Boost for enhanced data (training goals, route types, etc.)
+  const enhancedDataRides = allRides.filter(ride => 
+    ride.training_goal || ride.route_type || ride.surface_type || 
+    ride.difficulty_rating || (ride.tags && ride.tags.length > 0)
+  ).length;
+  
+  if (enhancedDataRides > 0) {
+    confidence += 0.1 * Math.min(enhancedDataRides / 10, 1);
+  }
+  
+  return Math.min(confidence, 1.0);
+}
+
+// Analyze training goal preferences
+function analyzeTrainingGoals(pastRides) {
+  const goals = {};
+  let total = 0;
+  
+  pastRides.forEach(ride => {
+    if (ride.training_goal) {
+      goals[ride.training_goal] = (goals[ride.training_goal] || 0) + 1;
+      total++;
+    }
+  });
+  
+  // Convert to percentages
+  const preferences = {};
+  Object.keys(goals).forEach(goal => {
+    preferences[goal] = {
+      count: goals[goal],
+      percentage: (goals[goal] / total) * 100,
+      preference: goals[goal] / total
+    };
+  });
+  
+  return {
+    distribution: preferences,
+    mostCommon: Object.keys(goals).reduce((a, b) => goals[a] > goals[b] ? a : b, 'endurance'),
+    diversity: Object.keys(goals).length,
+    confidence: total > 5 ? 0.8 : total > 2 ? 0.6 : 0.4
+  };
+}
+
+// Analyze route type preferences
+function analyzeRouteTypes(pastRides) {
+  const types = {};
+  let total = 0;
+  
+  pastRides.forEach(ride => {
+    if (ride.route_type) {
+      types[ride.route_type] = (types[ride.route_type] || 0) + 1;
+      total++;
+    }
+  });
+  
+  const preferences = {};
+  Object.keys(types).forEach(type => {
+    preferences[type] = {
+      count: types[type],
+      percentage: (types[type] / total) * 100,
+      preference: types[type] / total
+    };
+  });
+  
+  return {
+    distribution: preferences,
+    mostCommon: Object.keys(types).reduce((a, b) => types[a] > types[b] ? a : b, 'unknown'),
+    diversity: Object.keys(types).length
+  };
+}
+
+// Analyze surface type preferences
+function analyzeSurfaceTypes(pastRides) {
+  const surfaces = {};
+  let total = 0;
+  
+  pastRides.forEach(ride => {
+    if (ride.surface_type) {
+      surfaces[ride.surface_type] = (surfaces[ride.surface_type] || 0) + 1;
+      total++;
+    }
+  });
+  
+  const preferences = {};
+  Object.keys(surfaces).forEach(surface => {
+    preferences[surface] = {
+      count: surfaces[surface],
+      percentage: (surfaces[surface] / total) * 100,
+      preference: surfaces[surface] / total
+    };
+  });
+  
+  return {
+    distribution: preferences,
+    mostCommon: Object.keys(surfaces).reduce((a, b) => surfaces[a] > surfaces[b] ? a : b, 'road'),
+    diversity: Object.keys(surfaces).length
+  };
+}
+
+// Analyze difficulty rating preferences
+function analyzeDifficultyRatings(pastRides) {
+  const ratings = {};
+  const efforts = pastRides.filter(ride => ride.difficulty_rating).map(ride => ride.difficulty_rating);
+  
+  if (efforts.length === 0) return { averageRating: 3, preferredRange: [2, 4] };
+  
+  efforts.forEach(rating => {
+    ratings[rating] = (ratings[rating] || 0) + 1;
+  });
+  
+  const average = efforts.reduce((sum, rating) => sum + rating, 0) / efforts.length;
+  const sorted = efforts.sort((a, b) => a - b);
+  const p25 = sorted[Math.floor(sorted.length * 0.25)];
+  const p75 = sorted[Math.floor(sorted.length * 0.75)];
+  
+  return {
+    averageRating: Math.round(average * 10) / 10,
+    preferredRange: [p25, p75],
+    distribution: ratings,
+    mostCommon: Object.keys(ratings).reduce((a, b) => ratings[a] > ratings[b] ? a : b, '3')
+  };
+}
+
 // Default patterns for new users
 function getDefaultPatterns() {
   return {
@@ -894,6 +1303,9 @@ function getDefaultPatterns() {
     },
     elevationTolerance: { min: 0, max: 1000, preferred: 300, mean: 300 },
     routeSegments: [],
-    routeTemplates: []
+    routeTemplates: [],
+    performanceMetrics: { confidence: 0 },
+    dataSource: 'default',
+    confidence: 0.3
   };
 }

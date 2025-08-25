@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AppShell,
   Container,
@@ -12,13 +13,19 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, BarChart3 } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, BarChart3, Activity, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
 const AppLayout = ({ children, activePage, setActivePage }) => {
   const { user, signOut } = useAuth();
   const [opened, { toggle }] = useDisclosure();
+  const navigate = useNavigate();
+  
+  const handleNavigation = (page, path) => {
+    setActivePage(page);
+    navigate(path);
+  };
 
   if (!user) {
     return (
@@ -86,7 +93,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           <Button
             variant={activePage === 'ai-routes' ? 'filled' : 'subtle'}
             leftSection={<Brain size={18} />}
-            onClick={() => setActivePage('ai-routes')}
+            onClick={() => handleNavigation('ai-routes', '/')}
             justify="flex-start"
             fullWidth
           >
@@ -96,7 +103,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           <Button
             variant={activePage === 'upload' ? 'filled' : 'subtle'}
             leftSection={<Upload size={18} />}
-            onClick={() => setActivePage('upload')}
+            onClick={() => handleNavigation('upload', '/upload')}
             justify="flex-start"
             fullWidth
           >
@@ -106,7 +113,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           <Button
             variant={activePage === 'map' ? 'filled' : 'subtle'}
             leftSection={<Map size={18} />}
-            onClick={() => setActivePage('map')}
+            onClick={() => handleNavigation('map', '/map')}
             justify="flex-start"
             fullWidth
           >
@@ -116,11 +123,31 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           <Button
             variant={activePage === 'analysis' ? 'filled' : 'subtle'}
             leftSection={<BarChart3 size={18} />}
-            onClick={() => setActivePage('analysis')}
+            onClick={() => handleNavigation('analysis', '/analysis')}
             justify="flex-start"
             fullWidth
           >
             Ride Analysis
+          </Button>
+
+          <Button
+            variant={activePage === 'smart-analysis' ? 'filled' : 'subtle'}
+            leftSection={<Sparkles size={18} />}
+            onClick={() => handleNavigation('smart-analysis', '/smart-analysis')}
+            justify="flex-start"
+            fullWidth
+          >
+            Smart Analysis
+          </Button>
+          
+          <Button
+            variant={activePage === 'strava' ? 'filled' : 'subtle'}
+            leftSection={<Activity size={18} />}
+            onClick={() => handleNavigation('strava', '/strava')}
+            justify="flex-start"
+            fullWidth
+          >
+            Strava Integration
           </Button>
         </Flex>
 

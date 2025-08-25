@@ -58,11 +58,23 @@ export async function generateAIRoutes(params) {
     }
   }
 
-  // Calculate target distance, potentially adjusted by patterns
-  let targetDistance = calculateTargetDistance(timeAvailable, trainingGoal);
+  // Calculate target distance, enhanced with Strava performance data
+  let targetDistance = calculateTargetDistance(timeAvailable, trainingGoal, ridingPatterns?.performanceMetrics);
   if (patternBasedSuggestions?.adjustedDistance) {
     targetDistance = patternBasedSuggestions.adjustedDistance;
     console.log(`Adjusted target distance from ${calculateTargetDistance(timeAvailable, trainingGoal)}km to ${targetDistance}km based on riding patterns`);
+  }
+  
+  // Log enhanced pattern information
+  if (ridingPatterns) {
+    console.log('🎯 Enhanced riding patterns analysis:', {
+      dataSource: ridingPatterns.dataSource,
+      confidence: ridingPatterns.confidence,
+      averageSpeed: ridingPatterns.performanceMetrics?.averageSpeed || ridingPatterns.averageSpeed,
+      fitnessLevel: ridingPatterns.performanceMetrics?.fitnessLevel,
+      powerProfile: ridingPatterns.performanceMetrics?.powerProfile,
+      preferredElevation: ridingPatterns.elevationTolerance?.optimal || ridingPatterns.elevationTolerance?.preferred
+    });
   }
   
   // Try to build routes from actual segments first
@@ -200,20 +212,62 @@ export async function generateAIRoutes(params) {
   return scoredRoutes.slice(0, 4);
 }
 
-// Calculate target distance based on time and training goal
-function calculateTargetDistance(timeMinutes, trainingGoal) {
-  // Average speeds by training type (km/h)
-  const speedMap = {
+// Calculate target distance based on time, training goal, and performance metrics
+function calculateTargetDistance(timeMinutes, trainingGoal, performanceMetrics = null) {
+  // Default average speeds by training type (km/h)
+  const defaultSpeedMap = {
     recovery: 20,
     endurance: 25,
     intervals: 22, // Lower due to rest periods
     hills: 18      // Slower due to climbing
   };
 
-  const speed = speedMap[trainingGoal] || 23;
+  let baseSpeed = defaultSpeedMap[trainingGoal] || 23;
+
+  // Enhance with Strava performance data if available
+  if (performanceMetrics && performanceMetrics.averageSpeed && performanceMetrics.confidence > 0.5) {
+    const userSpeed = performanceMetrics.averageSpeed;
+    
+    // Adjust base speed based on training goal and user's actual performance
+    const speedMultipliers = {
+      recovery: 0.8,   // 20% slower for recovery
+      endurance: 1.0,  // Normal pace for endurance
+      intervals: 0.9,  // 10% slower due to rest periods
+      hills: 0.75      // 25% slower for hills
+    };
+    
+    const adjustedUserSpeed = userSpeed * (speedMultipliers[trainingGoal] || 1.0);
+    
+    // Blend user's speed with default (70% user data, 30% default)
+    const confidence = Math.min(performanceMetrics.confidence, 0.8); // Max 80% influence
+    baseSpeed = adjustedUserSpeed * confidence + baseSpeed * (1 - confidence);
+    
+    console.log(`🚴 Speed calculation enhanced with Strava data:`, {
+      userAverageSpeed: userSpeed,
+      trainingGoal,
+      adjustedSpeed: adjustedUserSpeed,
+      finalSpeed: baseSpeed,
+      confidence: performanceMetrics.confidence
+    });
+  }
+
   const hours = timeMinutes / 60;
+  const targetDistance = hours * baseSpeed;
   
-  return hours * speed;
+  // Apply fitness level adjustments if available
+  if (performanceMetrics?.fitnessLevel) {
+    const fitnessMultipliers = {
+      'excellent': 1.1,
+      'good': 1.0,
+      'moderate': 0.9,
+      'developing': 0.8
+    };
+    
+    const multiplier = fitnessMultipliers[performanceMetrics.fitnessLevel] || 1.0;
+    return targetDistance * multiplier;
+  }
+  
+  return targetDistance;
 }
 
 // Generate routes using Mapbox Directions API (NO geometric patterns)

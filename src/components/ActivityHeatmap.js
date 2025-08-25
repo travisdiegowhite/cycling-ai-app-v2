@@ -1,47 +1,154 @@
-import React, { useMemo } from 'react';
-import { Paper, Title, Text, Group, Tooltip } from '@mantine/core';
+import React, { useMemo, useState } from 'react';
+import { Paper, Title, Text, Group, Tooltip, Select, Badge } from '@mantine/core';
 import dayjs from 'dayjs';
 import minMax from 'dayjs/plugin/minMax';
+import { getRouteDate } from '../utils/dateUtils';
 
 dayjs.extend(minMax);
 
 const ActivityHeatmap = ({ routes, formatDistance }) => {
-  // Generate heatmap data for the last year
+  const [selectedYear, setSelectedYear] = useState('latest'); // 'latest', 'peak', or specific year
+  
+  
+  // Generate heatmap data for the last year  
   const heatmapData = useMemo(() => {
+    if (!routes || routes.length === 0) {
+      return [];
+    }
+    
+    try {
+      console.log('🗓️ ActivityHeatmap: Processing', routes.length, 'routes');
+    console.log('🔍 First 3 routes:', routes.slice(0, 3).map(r => ({
+      id: r.id,
+      name: r.name,
+      created_at: r.created_at,
+      distance_km: r.distance_km
+    })));
+    
     const today = dayjs();
-    // Show last 52 weeks, but if no recent data, adjust to show where the data actually is
+    // Show last 52 weeks
     let startDate = today.subtract(52, 'weeks').startOf('week');
     let endDate = today.endOf('week');
     
-    // Find the actual date range of the data
+    // Debug: log the date range we're showing
+    console.log('📅 Date range:', {
+      start: startDate.format('YYYY-MM-DD'),
+      end: endDate.format('YYYY-MM-DD')
+    });
+    
+    // Find the actual date range of the data (using proper route dates)
     if (routes.length > 0) {
-      const routeDates = routes.map(r => dayjs(r.created_at));
-      const earliestRoute = dayjs.min(routeDates);
-      const latestRoute = dayjs.max(routeDates);
-      
-      // If the latest route is more than a year old, show the last year of actual activity
-      if (latestRoute.isBefore(today.subtract(1, 'year'))) {
-        endDate = latestRoute.endOf('week');
-        startDate = endDate.subtract(52, 'weeks').startOf('week');
+      const routeDates = routes
+        .map(r => {
+          const routeDate = getRouteDate(r);
+          return routeDate;
+        })
+        .filter(date => date && date.isValid());
+        
+      if (routeDates.length > 0) {
+        const earliestRoute = dayjs.min(routeDates);
+        const latestRoute = dayjs.max(routeDates);
+        
+        console.log('🎯 Actual data range:', {
+          earliest: earliestRoute.format('YYYY-MM-DD'),
+          latest: latestRoute.format('YYYY-MM-DD'),
+          totalSpan: latestRoute.diff(earliestRoute, 'years', true).toFixed(1) + ' years'
+        });
+        
+        // Show year distribution
+        const yearCounts = {};
+        routeDates.forEach(date => {
+          const year = date.year();
+          yearCounts[year] = (yearCounts[year] || 0) + 1;
+        });
+        const yearEntries = Object.entries(yearCounts)
+          .sort(([a], [b]) => a - b);
+          
+        console.log('📅 Activity by year:', yearEntries
+          .map(([year, count]) => `${year}: ${count} rides`)
+        );
+        
+        console.log('📅 Recent years:', yearEntries.slice(-5)
+          .map(([year, count]) => `${year}: ${count} rides`)
+        );
+        
+        // Debug: Check if we have any recent data
+        const recentYears = yearEntries.filter(([year]) => parseInt(year) >= 2024);
+        console.log('🔍 2024+ data:', recentYears.length ? recentYears : 'No 2024+ data found');
+        
+        // Determine which time period to show based on selection
+        if (selectedYear === 'latest') {
+          // Show the last 52 weeks from today (current activity)
+          endDate = today.endOf('week');
+          startDate = today.subtract(52, 'weeks').startOf('week');
+        } else if (selectedYear === 'peak') {
+          // Find the year with most activity
+          const peakYear = Object.entries(yearCounts)
+            .sort(([,a], [,b]) => b - a)[0][0];
+          startDate = dayjs(`${peakYear}-01-01`).startOf('week');
+          endDate = dayjs(`${peakYear}-12-31`).endOf('week');
+        } else {
+          // Show specific year
+          const year = parseInt(selectedYear);
+          startDate = dayjs(`${year}-01-01`).startOf('week');
+          endDate = dayjs(`${year}-12-31`).endOf('week');
+        }
+        
+        console.log('📊 Showing period:', {
+          selection: selectedYear,
+          start: startDate.format('YYYY-MM-DD'),
+          end: endDate.format('YYYY-MM-DD')
+        });
       }
     }
-    
     
     // Create a map of date -> activity data
     const activityMap = {};
     routes.forEach(route => {
-      const date = dayjs(route.created_at).format('YYYY-MM-DD');
-      if (!activityMap[date]) {
-        activityMap[date] = {
+      const routeDate = getRouteDate(route);
+      
+      if (!routeDate.isValid()) {
+        console.warn('⚠️ Route with invalid date:', route.id, route.name);
+        return;
+      }
+      
+      const dateStr = routeDate.format('YYYY-MM-DD');
+      
+      // Debug specific route dates - show first 5 and any from 2024+
+      const routeYear = routeDate.year();
+      if (routes.indexOf(route) < 5 || routeYear >= 2024) {
+        console.log('📍 Route date parsing:', {
+          routeName: route.name,
+          created_at: route.created_at,
+          recorded_at: route.recorded_at,
+          parsedDate: dateStr,
+          parsedYear: routeYear,
+          distance: route.distance_km,
+          isRecent: routeYear >= 2024 ? '🔥 RECENT!' : ''
+        });
+      }
+      
+      if (!activityMap[dateStr]) {
+        activityMap[dateStr] = {
           rides: 0,
           distance: 0,
           elevation: 0
         };
       }
-      activityMap[date].rides += 1;
-      activityMap[date].distance += route.distance_km || 0;
-      activityMap[date].elevation += route.elevation_gain_m || 0;
+      activityMap[dateStr].rides += 1;
+      activityMap[dateStr].distance += route.distance_km || 0;
+      activityMap[dateStr].elevation += route.elevation_gain_m || 0;
     });
+    
+    console.log('🗂️ Activity map created:', Object.keys(activityMap).length, 'days with activity');
+    console.log('📈 Sample activities:', Object.entries(activityMap).slice(0, 5));
+    console.log('🔍 Activity map keys (first 10):', Object.keys(activityMap).slice(0, 10));
+    
+    // Show latest 10 activity dates to understand data range
+    const latestActivityDates = Object.keys(activityMap)
+      .sort()
+      .slice(-10);
+    console.log('🕐 Latest activity dates in map:', latestActivityDates);
     
 
     // Generate weeks array
@@ -82,8 +189,28 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
       weeks.push(currentWeek);
     }
 
+    console.log('📊 Final heatmap data:', {
+      weeksGenerated: weeks.length,
+      totalDays: weeks.reduce((sum, week) => sum + week.length, 0),
+      daysWithActivity: weeks.flat().filter(day => day.level > 0).length,
+      sampleWeek: weeks[0] ? weeks[0].map(d => ({
+        date: d.dateStr,
+        level: d.level,
+        rides: d.activity.rides
+      })) : []
+    });
+    
     return weeks;
-  }, [routes]);
+    
+    } catch (error) {
+      console.error('❌ Error in ActivityHeatmap processing:', error);
+      console.error('Error stack:', error.stack);
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      return []; // Return empty array on error
+    }
+  }, [routes?.length, selectedYear, routes]);
+
 
   // Color scheme for cycling (different from GitHub)
   const getColor = (level) => {
@@ -100,31 +227,121 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const days = ['', 'M', '', 'W', '', 'F', ''];
 
+  // Create year options from actual data - must be before any conditional returns
+  const yearOptions = useMemo(() => {
+    if (!routes?.length) return [];
+    
+    const yearCounts = {};
+    routes.forEach(route => {
+      const routeDate = getRouteDate(route);
+      if (routeDate.isValid()) {
+        const year = routeDate.year();
+        yearCounts[year] = (yearCounts[year] || 0) + 1;
+      }
+    });
+    
+    const peakYear = Object.entries(yearCounts)
+      .sort(([,a], [,b]) => b - a)[0]?.[0];
+    
+    const currentYear = new Date().getFullYear();
+    const lastYear = currentYear - 1;
+    
+    const options = [
+      { value: 'latest', label: `Last 52 Weeks (${lastYear}-${currentYear})` },
+      { value: 'peak', label: `Peak Year (${peakYear} - ${yearCounts[peakYear]} rides)` },
+    ];
+    
+    // Add individual years
+    Object.entries(yearCounts)
+      .sort(([a], [b]) => b - a)
+      .forEach(([year, count]) => {
+        options.push({ 
+          value: year, 
+          label: `${year} (${count} rides)` 
+        });
+      });
+    
+    return options;
+  }, [routes]);
+
+  if (!heatmapData || heatmapData.length === 0) {
+    return (
+      <Paper p="md" withBorder>
+        <Group justify="space-between" mb="md">
+          <div>
+            <Title order={4}>Activity Heatmap</Title>
+            <Text size="sm" c="red">No activity data available for heatmap</Text>
+          </div>
+        </Group>
+      </Paper>
+    );
+  }
+
+  const activeDays = heatmapData.flat().filter(d => d.level > 0).length;
+  const totalDays = heatmapData.flat().length;
+
   return (
-    <Paper p="md" withBorder>
+    <Paper p="md" withBorder style={{ backgroundColor: '#f8f9fa', border: '2px solid #228be6' }}>
       <Group justify="space-between" mb="md">
         <div>
-          <Title order={4}>Activity Heatmap</Title>
-          <Text size="sm" c="dimmed">Your cycling activity over the past year</Text>
+          <Title order={4} c="blue">🗓️ Activity Heatmap ({heatmapData.length} weeks)</Title>
+          <Text size="sm" c="dimmed">{activeDays} active days out of {totalDays} total days</Text>
+        </div>
+        
+        <div>
+          <Select
+            value={selectedYear}
+            onChange={setSelectedYear}
+            data={yearOptions}
+            size="sm"
+            w={200}
+            label="Time Period"
+          />
+          <Group gap="xs" mt="xs">
+            <Badge size="sm" color="green">{activeDays} active</Badge>
+            <Badge size="sm" variant="light">{Math.round((activeDays/totalDays)*100)}% active</Badge>
+          </Group>
         </div>
       </Group>
 
       <div style={{ overflowX: 'auto' }}>
-        {/* Month labels */}
-        <div style={{ display: 'flex', marginBottom: '8px', marginLeft: '20px' }}>
-          {months.map((month, index) => (
-            <div
-              key={month}
-              style={{
-                width: `${100 / 12}%`,
-                fontSize: '12px',
-                color: '#6b7280',
-                textAlign: 'left'
-              }}
-            >
-              {month}
-            </div>
-          ))}
+        {/* Month labels - simplified and properly aligned */}
+        <div style={{ display: 'flex', marginBottom: '8px', marginLeft: '20px', position: 'relative', minHeight: '16px' }}>
+          {heatmapData.length > 0 && (() => {
+            // Show month labels based on actual week data
+            const monthLabels = [];
+            let lastMonth = null;
+            
+            heatmapData.forEach((week, weekIndex) => {
+              if (week.length > 0) {
+                const weekDate = dayjs(week[0].date);
+                const monthName = weekDate.format('MMM');
+                
+                if (monthName !== lastMonth) {
+                  monthLabels.push({
+                    name: monthName,
+                    weekIndex,
+                    position: (weekIndex / heatmapData.length) * 100
+                  });
+                  lastMonth = monthName;
+                }
+              }
+            });
+            
+            return monthLabels.map((label, index) => (
+              <div
+                key={`${label.name}-${index}`}
+                style={{
+                  position: 'absolute',
+                  left: `${label.position}%`,
+                  fontSize: '12px',
+                  color: '#6b7280'
+                }}
+              >
+                {label.name}
+              </div>
+            ));
+          })()}
         </div>
 
         <div style={{ display: 'flex' }}>
