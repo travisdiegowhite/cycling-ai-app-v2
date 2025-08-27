@@ -36,13 +36,19 @@
     "web-vitals": "^2.1.4",
     "xml2js": "^0.6.2"
   },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "deploy": "vercel --prod",
-    "dev": "npm start"
+    "dev": "npm start",
+    "vercel-build": "npm run build",
+    "build-test": "node build-test.js"
   },
   "eslintConfig": {
     "extends": [

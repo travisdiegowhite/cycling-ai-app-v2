@@ -209,7 +209,7 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
       console.error('Error message:', error.message);
       return []; // Return empty array on error
     }
-  }, [routes?.length, selectedYear, routes]);
+  }, [routes, selectedYear]);
 
 
   // Color scheme for cycling (different from GitHub)
@@ -224,7 +224,6 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
     }
   };
 
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const days = ['', 'M', '', 'W', '', 'F', ''];
 
   // Create year options from actual data - must be before any conditional returns

@@ -1,0 +1,25 @@
+# Development files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build test files
+build-test.js
+
+# Documentation
+README.deployment.md
+
+# Backup files
+**/*-backup*
+
+# Node modules (already handled by Vercel)
+node_modules/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

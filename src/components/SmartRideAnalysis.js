@@ -40,7 +40,7 @@ import {
   Info,
   CheckCircle
 } from 'lucide-react';
-import dayjs from 'dayjs';
+// import dayjs from 'dayjs'; // Unused import removed
 import { useAuth } from '../contexts/AuthContext';
 import { useUnits } from '../utils/units';
 import { supabase } from '../supabase';
