@@ -1,5 +1,9 @@
 # Cycling AI App 🚴‍♂️
 
+![Deploy Status](https://img.shields.io/badge/deploy-vercel-000000?style=for-the-badge&logo=vercel)
+![Last Updated](https://img.shields.io/badge/updated-2025--01--28-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0-green?style=for-the-badge)
+
 An intelligent cycling route generation and analysis application powered by Claude AI, designed to create personalized training routes based on your preferences, past rides, and current conditions.
 
 ## ✨ Features
