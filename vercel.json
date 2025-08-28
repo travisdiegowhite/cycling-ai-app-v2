@@ -14,14 +14,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "env": {
-    "REACT_APP_SUPABASE_URL": "@react_app_supabase_url",
-    "REACT_APP_SUPABASE_ANON_KEY": "@react_app_supabase_anon_key",
-    "REACT_APP_MAPBOX_ACCESS_TOKEN": "@react_app_mapbox_access_token",
-    "REACT_APP_OPENWEATHERMAP_API_KEY": "@react_app_openweathermap_api_key",
-    "REACT_APP_ANTHROPIC_API_KEY": "@react_app_anthropic_api_key",
-    "REACT_APP_STRAVA_CLIENT_ID": "@react_app_strava_client_id",
-    "REACT_APP_STRAVA_CLIENT_SECRET": "@react_app_strava_client_secret"
-  }
+  ]
 }
