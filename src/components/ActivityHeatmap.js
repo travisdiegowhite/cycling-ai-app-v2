@@ -304,48 +304,10 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
       </Group>
 
       <div style={{ overflowX: 'auto' }}>
-        {/* Month labels - simplified and properly aligned */}
-        <div style={{ display: 'flex', marginBottom: '8px', marginLeft: '20px', position: 'relative', minHeight: '16px' }}>
-          {heatmapData.length > 0 && (() => {
-            // Show month labels based on actual week data
-            const monthLabels = [];
-            let lastMonth = null;
-            
-            heatmapData.forEach((week, weekIndex) => {
-              if (week.length > 0) {
-                const weekDate = dayjs(week[0].date);
-                const monthName = weekDate.format('MMM');
-                
-                if (monthName !== lastMonth) {
-                  monthLabels.push({
-                    name: monthName,
-                    weekIndex,
-                    position: (weekIndex / heatmapData.length) * 100
-                  });
-                  lastMonth = monthName;
-                }
-              }
-            });
-            
-            return monthLabels.map((label, index) => (
-              <div
-                key={`${label.name}-${index}`}
-                style={{
-                  position: 'absolute',
-                  left: `${label.position}%`,
-                  fontSize: '12px',
-                  color: '#6b7280'
-                }}
-              >
-                {label.name}
-              </div>
-            ));
-          })()}
-        </div>
-
+        {/* Improved layout with month blocks */}
         <div style={{ display: 'flex' }}>
           {/* Day labels */}
-          <div style={{ display: 'flex', flexDirection: 'column', marginRight: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', marginRight: '8px', paddingTop: '24px' }}>
             {days.map((day, index) => (
               <div
                 key={index}
@@ -364,52 +326,108 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
             ))}
           </div>
 
-          {/* Heatmap grid */}
-          <div style={{ display: 'flex', gap: '2px' }}>
-            {heatmapData.map((week, weekIndex) => (
-              <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                {week.map((day, dayIndex) => (
-                  <Tooltip
-                    key={`${weekIndex}-${dayIndex}`}
-                    label={
-                      <div>
-                        <Text size="xs" fw={500}>
-                          {dayjs(day.date).format('MMM D, YYYY')}
-                        </Text>
-                        {day.activity.rides > 0 ? (
-                          <div>
-                            <Text size="xs">
-                              {day.activity.rides} ride{day.activity.rides > 1 ? 's' : ''}
-                            </Text>
-                            <Text size="xs">
-                              {formatDistance(day.activity.distance)}
-                            </Text>
-                            <Text size="xs">
-                              ↗ {Math.round(day.activity.elevation)}m elevation
-                            </Text>
-                          </div>
-                        ) : (
-                          <Text size="xs">No rides</Text>
-                        )}
+          {/* Group weeks by month for better alignment */}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {(() => {
+              // Group weeks by month
+              const monthGroups = {};
+              heatmapData.forEach((week, weekIndex) => {
+                if (week.length > 0) {
+                  const monthKey = dayjs(week[0].date).format('YYYY-MM');
+                  const monthName = dayjs(week[0].date).format('MMM');
+                  
+                  if (!monthGroups[monthKey]) {
+                    monthGroups[monthKey] = {
+                      name: monthName,
+                      weeks: [],
+                      fullName: dayjs(week[0].date).format('MMM YYYY')
+                    };
+                  }
+                  monthGroups[monthKey].weeks.push({ ...week, weekIndex });
+                }
+              });
+
+              return Object.entries(monthGroups).map(([monthKey, monthData]) => (
+                <div key={monthKey} style={{ display: 'flex', flexDirection: 'column' }}>
+                  {/* Month header */}
+                  <div style={{ 
+                    height: '20px', 
+                    marginBottom: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Text size="xs" fw={500} c="blue.7" style={{
+                      fontSize: '11px',
+                      textAlign: 'center',
+                      whiteSpace: 'nowrap',
+                      width: `${monthData.weeks.length * 14}px`
+                    }}>
+                      {monthData.name}
+                    </Text>
+                  </div>
+                  
+                  {/* Month weeks */}
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '2px',
+                    border: '1px solid #e1e7ef',
+                    borderRadius: '4px',
+                    padding: '4px',
+                    backgroundColor: '#f8fafc'
+                  }}>
+                    {monthData.weeks.map((week, monthWeekIndex) => (
+                      <div key={`${monthKey}-${monthWeekIndex}`} style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '2px' 
+                      }}>
+                        {week.map((day, dayIndex) => (
+                          <Tooltip
+                            key={`${monthKey}-${monthWeekIndex}-${dayIndex}`}
+                            label={
+                              <div>
+                                <Text size="xs" fw={500}>
+                                  {dayjs(day.date).format('MMM D, YYYY')}
+                                </Text>
+                                {day.activity.rides > 0 ? (
+                                  <div>
+                                    <Text size="xs">
+                                      {day.activity.rides} ride{day.activity.rides > 1 ? 's' : ''}
+                                    </Text>
+                                    <Text size="xs">
+                                      {formatDistance(day.activity.distance)}
+                                    </Text>
+                                    <Text size="xs">
+                                      ↗ {Math.round(day.activity.elevation)}m elevation
+                                    </Text>
+                                  </div>
+                                ) : (
+                                  <Text size="xs">No rides</Text>
+                                )}
+                              </div>
+                            }
+                            position="top"
+                            withArrow
+                          >
+                            <div
+                              style={{
+                                width: '12px',
+                                height: '12px',
+                                backgroundColor: getColor(day.level),
+                                borderRadius: '2px',
+                                cursor: 'pointer',
+                                border: '1px solid #e5e7eb'
+                              }}
+                            />
+                          </Tooltip>
+                        ))}
                       </div>
-                    }
-                    position="top"
-                    withArrow
-                  >
-                    <div
-                      style={{
-                        width: '12px',
-                        height: '12px',
-                        backgroundColor: getColor(day.level),
-                        borderRadius: '2px',
-                        cursor: 'pointer',
-                        border: '1px solid #e5e7eb'
-                      }}
-                    />
-                  </Tooltip>
-                ))}
-              </div>
-            ))}
+                    ))}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
 
