@@ -38,7 +38,7 @@ import ActivityHeatmap from './ActivityHeatmap';
 
 const RideAnalysis = () => {
   const { user } = useAuth();
-  const { formatDistance, formatElevation } = useUnits();
+  const { formatDistance, formatElevation, distanceUnit } = useUnits();
   const [routes, setRoutes] = useState([]);
   const [monthlyData, setMonthlyData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -327,12 +327,14 @@ const RideAnalysis = () => {
                 yAxisId="distance"
                 tickFormatter={(value) => formatDistance(value)}
                 fontSize={12}
+                label={{ value: `Distance (${distanceUnit})`, angle: -90, position: 'insideLeft' }}
               />
               <YAxis 
                 yAxisId="trend" 
                 orientation="right"
                 tickFormatter={(value) => `${value > 0 ? '+' : ''}${formatDistance(value)}`}
                 fontSize={12}
+                label={{ value: `Trend (${distanceUnit})`, angle: 90, position: 'insideRight' }}
               />
               <Tooltip 
                 formatter={(value, name) => [

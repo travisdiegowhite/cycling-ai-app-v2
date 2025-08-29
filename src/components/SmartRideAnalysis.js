@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 // import dayjs from 'dayjs'; // Unused import removed
 import { useAuth } from '../contexts/AuthContext';
-import { useUnits } from '../utils/units';
+import { useUnits, convertDistance, convertSpeed } from '../utils/units';
 import { supabase } from '../supabase';
 import { 
   LineChart, 
@@ -66,7 +66,7 @@ import ActivityHeatmap from './ActivityHeatmap';
 
 const SmartRideAnalysis = () => {
   const { user } = useAuth();
-  const { formatDistance, formatElevation } = useUnits();
+  const { formatDistance, formatElevation, formatSpeed, speedUnit, distanceUnit, useImperial } = useUnits();
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState('all');
@@ -418,9 +418,6 @@ const SmartRideAnalysis = () => {
     return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
   };
 
-  const formatSpeed = (kmh) => {
-    return `${kmh.toFixed(1)} km/h`;
-  };
 
   if (loading) {
     return (
@@ -871,14 +868,14 @@ const SmartRideAnalysis = () => {
                     data={stravaRoutes
                       .filter(r => r.average_speed && r.distance_km)
                       .map(r => ({
-                        speed: r.average_speed,
-                        distance: r.distance_km,
+                        speed: useImperial ? convertSpeed.kmhToMph(r.average_speed) : r.average_speed,
+                        distance: useImperial ? convertDistance.kmToMiles(r.distance_km) : r.distance_km,
                         name: r.name
                       }))
                     }
                   >
-                    <XAxis dataKey="distance" name="Distance" unit=" km" />
-                    <YAxis dataKey="speed" name="Speed" unit=" km/h" />
+                    <XAxis dataKey="distance" name="Distance" unit={` ${distanceUnit}`} />
+                    <YAxis dataKey="speed" name="Speed" unit={` ${speedUnit}`} />
                     <ChartTooltip cursor={{ strokeDasharray: '3 3' }} />
                     <Scatter dataKey="speed" fill="#228be6" />
                   </ScatterChart>
