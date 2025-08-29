@@ -103,7 +103,16 @@ const StravaIntegration = () => {
     }
 
     try {
+      // Debug: Log the redirect URI being used
+      console.log('🔍 Strava Configuration:', {
+        redirectUri: stravaService.redirectUri,
+        clientId: stravaService.clientId,
+        windowOrigin: window.location.origin
+      });
+      
       const authUrl = stravaService.getAuthorizationUrl();
+      console.log('🔗 Full Auth URL:', authUrl);
+      
       window.location.href = authUrl;
     } catch (error) {
       console.error('Error generating Strava auth URL:', error);
