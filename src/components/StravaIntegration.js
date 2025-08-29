@@ -438,6 +438,22 @@ const StravaIntegration = () => {
                 </div>
               </Group>
 
+              {/* Debug Info - Remove after fixing */}
+              <Card withBorder p="sm" bg="yellow.0">
+                <Text size="xs" fw={600} mb="xs">Debug: OAuth Configuration</Text>
+                <Stack gap={4}>
+                  <Text size="xs" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                    Redirect: {stravaService.redirectUri || 'Not set'}
+                  </Text>
+                  <Text size="xs" style={{ fontFamily: 'monospace' }}>
+                    Origin: {window.location.origin}
+                  </Text>
+                  <Text size="xs" style={{ fontFamily: 'monospace' }}>
+                    Client: {stravaService.clientId || 'Not set'}
+                  </Text>
+                </Stack>
+              </Card>
+
               <Button 
                 size="lg"
                 color="orange"
