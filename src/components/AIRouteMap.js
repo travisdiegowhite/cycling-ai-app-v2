@@ -1,11 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { Map, Source, Layer, Marker, NavigationControl } from 'react-map-gl';
+import { useMediaQuery } from '@mantine/hooks';
 import { buildLineString } from '../utils/geo';
 import AIRouteGenerator from './AIRouteGenerator';
 import RouteProfile from './RouteProfile';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 const AIRouteMap = () => {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [viewState, setViewState] = useState({
     longitude: -0.09,
     latitude: 51.505,
@@ -55,9 +57,18 @@ const AIRouteMap = () => {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', gap: '1rem' }}>
+    <div style={{ 
+      display: 'flex', 
+      height: '100vh', 
+      gap: '1rem',
+      flexDirection: isMobile ? 'column' : 'row'
+    }}>
       {/* AI Route Generator Panel */}
-      <div style={{ width: '400px', overflowY: 'auto' }}>
+      <div style={{ 
+        width: isMobile ? '100%' : '400px',
+        maxHeight: isMobile ? '40vh' : '100vh',
+        overflowY: 'auto' 
+      }}>
         <AIRouteGenerator 
           mapRef={mapRef}
           onRouteGenerated={handleRouteGenerated}
@@ -67,9 +78,20 @@ const AIRouteMap = () => {
       </div>
 
       {/* Map and Route Profile Container */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
+      <div style={{ 
+        flex: 1, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: '1rem', 
+        overflowY: 'auto',
+        minHeight: isMobile ? '60vh' : 'auto'
+      }}>
         {/* Map */}
-        <div style={{ flex: 1, minHeight: '60vh', position: 'relative' }}>
+        <div style={{ 
+          flex: 1, 
+          minHeight: isMobile ? '50vh' : '60vh', 
+          position: 'relative' 
+        }}>
           <Map
             ref={mapRef}
             {...viewState}

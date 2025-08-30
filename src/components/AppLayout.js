@@ -37,40 +37,40 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
 
   return (
     <AppShell
-      header={{ height: 70 }}
+      header={{ height: { base: 60, sm: 70 } }}
       navbar={{
-        width: 280,
-        breakpoint: 'sm',
+        width: { base: 250, sm: 280 },
+        breakpoint: 'md',
         collapsed: { mobile: !opened },
       }}
-      padding="md"
+      padding={{ base: 'xs', sm: 'md' }}
     >
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
+        <Group h="100%" px={{ base: 'xs', sm: 'md' }} justify="space-between">
           <Group>
-            <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <Group gap="xs">
+            <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" />
+            <Group gap="xs" visibleFrom="xs">
               <Route size={24} color="#2196f3" />
-              <Text size="xl" fw={700} c="blue">
+              <Text size={{ base: 'lg', sm: 'xl' }} fw={700} c="blue">
                 Cycling AI
               </Text>
             </Group>
           </Group>
 
-          <Group gap="sm">
+          <Group gap={{ base: 'xs', sm: 'sm' }}>
             <UnitSettings />
             <Menu shadow="md" width={200}>
               <Menu.Target>
                 <UnstyledButton>
                   <Group gap="xs">
-                    <Avatar size={36} color="blue">
+                    <Avatar size={{ base: 30, sm: 36 }} color="blue">
                       <User size={20} />
                     </Avatar>
-                    <div style={{ flex: 1 }}>
-                      <Text size="sm" fw={500}>
+                    <div style={{ flex: 1, display: { base: 'none', sm: 'block' } }}>
+                      <Text size="sm" fw={500} visibleFrom="sm">
                         {user.email?.split('@')[0] || 'User'}
                       </Text>
-                      <Text size="xs" c="dimmed">
+                      <Text size="xs" c="dimmed" visibleFrom="sm">
                         {user.email}
                       </Text>
                     </div>

@@ -97,7 +97,7 @@ const ElevationProfileBar = ({
   return (
     <Paper 
       shadow="sm" 
-      p="md" 
+      p={{ base: 'xs', sm: 'md' }}
       style={{ 
         position: 'fixed',
         bottom: 0,
@@ -109,11 +109,11 @@ const ElevationProfileBar = ({
       }}
     >
       <Stack gap="sm">
-        <Group justify="space-between" align="center">
-          <Text size="sm" fw={600}>
+        <Group justify="space-between" align="center" wrap="wrap">
+          <Text size={{ base: 'xs', sm: 'sm' }} fw={600}>
             {isRouteBuilder ? 'Route Builder' : 'Route Profile'}
           </Text>
-          <Group gap="xs">
+          <Group gap="xs" wrap="wrap">
             {routeStats?.distance && (
               <Badge variant="light" color="blue">
                 {formatDistance(routeStats.distance)}
