@@ -27,12 +27,14 @@ import {
   Navigation,
   MapPin,
   Search,
+  Settings,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnits } from '../utils/units';
 import { getWeatherData, getMockWeatherData } from '../utils/weather';
 import { generateAIRoutes } from '../utils/aiRouteGenerator';
+import PreferenceSettings from './PreferenceSettings';
 
 const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, externalStartLocation }) => {
   const { user } = useAuth();
@@ -52,6 +54,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   const [weatherData, setWeatherData] = useState(null);
   const [error, setError] = useState(null);
   const [geocoding, setGeocoding] = useState(false);
+  const [preferencesOpened, setPreferencesOpened] = useState(false);
 
   // Training goal options
   const trainingGoals = [
@@ -318,18 +321,33 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   const timeOfDay = getTimeOfDay();
 
   return (
-    <Paper shadow="sm" p="xl" radius="md">
-      <Stack gap="lg">
-        {/* Header */}
-        <div style={{ textAlign: 'center' }}>
-          <Brain size={48} style={{ color: '#228be6', marginBottom: '1rem' }} />
-          <Text size="xl" fw={600} mb="xs">
-            AI Training Route Generator
-          </Text>
-          <Text size="sm" c="dimmed">
-            Smart routes optimized for your training goals and conditions
-          </Text>
-        </div>
+    <>
+      <PreferenceSettings 
+        opened={preferencesOpened} 
+        onClose={() => setPreferencesOpened(false)} 
+      />
+      
+      <Paper shadow="sm" p="xl" radius="md">
+        <Stack gap="lg">
+          {/* Header */}
+          <div style={{ textAlign: 'center' }}>
+            <Brain size={48} style={{ color: '#228be6', marginBottom: '1rem' }} />
+            <Group justify="center" align="center" mb="xs">
+              <Text size="xl" fw={600}>
+                AI Training Route Generator
+              </Text>
+              <ActionIcon 
+                variant="subtle" 
+                onClick={() => setPreferencesOpened(true)}
+                title="Route Preferences"
+              >
+                <Settings size={20} />
+              </ActionIcon>
+            </Group>
+            <Text size="sm" c="dimmed">
+              Smart routes optimized for your training goals and conditions
+            </Text>
+          </div>
 
         {/* Current Conditions */}
         <Card withBorder p="sm" style={{ backgroundColor: '#f8f9fa' }}>
@@ -592,6 +610,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         )}
       </Stack>
     </Paper>
+    </>
   );
 };
 

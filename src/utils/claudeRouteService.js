@@ -2,6 +2,7 @@
 // Uses Claude AI to generate intelligent cycling route suggestions
 
 import Anthropic from '@anthropic-ai/sdk';
+import { EnhancedContextCollector } from './enhancedContext';
 
 // Initialize Claude client
 const initClaude = () => {
@@ -52,12 +53,28 @@ export async function generateClaudeRoutes(params) {
     routeType,
     weatherData,
     ridingPatterns,
-    targetDistance
+    targetDistance,
+    userId
   } = params;
 
   try {
     console.log('🧠 Calling Claude API for route generation...');
-    const prompt = buildRoutePrompt(params);
+    
+    // Try to get enhanced context if userId is available
+    let prompt;
+    if (userId) {
+      try {
+        const enhancedContext = await EnhancedContextCollector.gatherDetailedPreferences(userId, params);
+        console.log('Using enhanced context for route generation');
+        prompt = EnhancedContextCollector.buildEnhancedRoutePrompt(enhancedContext);
+      } catch (error) {
+        console.warn('Failed to get enhanced context, using basic prompt:', error);
+        prompt = buildRoutePrompt(params);
+      }
+    } else {
+      prompt = buildRoutePrompt(params);
+    }
+    
     console.log('Claude prompt:', prompt);
     
     const response = await claude.messages.create({

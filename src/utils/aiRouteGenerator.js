@@ -93,7 +93,8 @@ export async function generateAIRoutes(params) {
       weatherData,
       ridingPatterns,
       targetDistance,
-      claudeAnalysis
+      claudeAnalysis,
+      userId
     });
     
     console.log(`✅ Claude returned ${claudeRoutes.length} route suggestions`);
