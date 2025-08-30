@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Paper, Title, Text, Group, Tooltip, Select, Badge } from '@mantine/core';
+import { Paper, Title, Text, Group, Tooltip, Select, Badge, Stack } from '@mantine/core';
 import dayjs from 'dayjs';
 import minMax from 'dayjs/plugin/minMax';
 import { getRouteDate } from '../utils/dateUtils';
@@ -280,30 +280,30 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
   const totalDays = heatmapData.flat().length;
 
   return (
-    <Paper p="md" withBorder style={{ backgroundColor: '#f8f9fa', border: '2px solid #228be6' }}>
-      <Group justify="space-between" mb="md">
+    <Paper p={{ base: 'xs', sm: 'md' }} withBorder style={{ backgroundColor: '#f8f9fa', border: '2px solid #228be6' }}>
+      <Stack gap="sm" mb="md">
         <div>
-          <Title order={4} c="blue">🗓️ Activity Heatmap ({heatmapData.length} weeks)</Title>
-          <Text size="sm" c="dimmed">{activeDays} active days out of {totalDays} total days</Text>
+          <Title order={4} c="blue" size={{ base: 'md', sm: 'lg' }}>🗓️ Activity Heatmap</Title>
+          <Text size="xs" c="dimmed">{activeDays} active days • {Math.round((activeDays/totalDays)*100)}% active</Text>
         </div>
         
-        <div>
+        <Group justify="space-between" wrap="wrap" gap="xs">
           <Select
             value={selectedYear}
             onChange={setSelectedYear}
             data={yearOptions}
-            size="sm"
-            w={200}
+            size="xs"
+            w={{ base: '100%', xs: 200 }}
             label="Time Period"
           />
-          <Group gap="xs" mt="xs">
+          <Group gap="xs" visibleFrom="xs">
             <Badge size="sm" color="green">{activeDays} active</Badge>
-            <Badge size="sm" variant="light">{Math.round((activeDays/totalDays)*100)}% active</Badge>
+            <Badge size="sm" variant="light">{heatmapData.length} weeks</Badge>
           </Group>
-        </div>
-      </Group>
+        </Group>
+      </Stack>
 
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', paddingBottom: '10px', WebkitOverflowScrolling: 'touch' }}>
         {/* Month headers with better alignment */}
         <div style={{ display: 'flex', marginBottom: '8px', marginLeft: '20px', position: 'relative', minHeight: '20px' }}>
           {(() => {
@@ -368,17 +368,21 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
         </div>
 
         <div style={{ display: 'flex' }}>
-          {/* Day labels */}
-          <div style={{ display: 'flex', flexDirection: 'column', marginRight: '8px' }}>
+          {/* Day labels - hide on very small screens */}
+          <div style={{ 
+            display: window.innerWidth < 400 ? 'none' : 'flex', 
+            flexDirection: 'column', 
+            marginRight: '8px' 
+          }}>
             {days.map((day, index) => (
               <div
                 key={index}
                 style={{
-                  height: '12px',
+                  height: window.innerWidth < 640 ? '10px' : '12px',
                   marginBottom: '2px',
-                  fontSize: '10px',
+                  fontSize: window.innerWidth < 640 ? '9px' : '10px',
                   color: '#6b7280',
-                  lineHeight: '12px',
+                  lineHeight: window.innerWidth < 640 ? '10px' : '12px',
                   textAlign: 'right',
                   width: '12px'
                 }}
@@ -418,15 +422,15 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
                   key={`month-group-${groupIndex}`}
                   style={{ 
                     display: 'flex', 
-                    gap: '2px',
-                    padding: '3px',
+                    gap: window.innerWidth < 640 ? '1px' : '2px',
+                    padding: window.innerWidth < 640 ? '2px' : '3px',
                     backgroundColor: '#f8fafc',
-                    borderRadius: '6px',
+                    borderRadius: window.innerWidth < 640 ? '4px' : '6px',
                     border: '1px solid #e2e8f0'
                   }}
                 >
                   {monthGroup.map(({ week, weekIndex }) => (
-                    <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: window.innerWidth < 640 ? '1px' : '2px' }}>
                       {week.map((day, dayIndex) => (
                         <Tooltip
                           key={`${weekIndex}-${dayIndex}`}
@@ -457,8 +461,8 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
                         >
                           <div
                             style={{
-                              width: '12px',
-                              height: '12px',
+                              width: window.innerWidth < 640 ? '10px' : '12px',
+                              height: window.innerWidth < 640 ? '10px' : '12px',
                               backgroundColor: getColor(day.level),
                               borderRadius: '2px',
                               cursor: 'pointer',
@@ -476,25 +480,27 @@ const ActivityHeatmap = ({ routes, formatDistance }) => {
         </div>
 
         {/* Legend */}
-        <div style={{ display: 'flex', alignItems: 'center', marginTop: '16px', gap: '8px' }}>
-          <Text size="xs" c="dimmed">Less</Text>
-          {[0, 1, 2, 3, 4].map(level => (
-            <div
-              key={level}
-              style={{
-                width: '12px',
-                height: '12px',
-                backgroundColor: getColor(level),
-                borderRadius: '2px',
-                border: '1px solid #e5e7eb'
-              }}
-            />
-          ))}
-          <Text size="xs" c="dimmed">More</Text>
-          <Text size="xs" c="dimmed" style={{ marginLeft: '16px' }}>
+        <Stack gap="xs" mt="md">
+          <Group gap="xs">
+            <Text size="xs" c="dimmed">Less</Text>
+            {[0, 1, 2, 3, 4].map(level => (
+              <div
+                key={level}
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  backgroundColor: getColor(level),
+                  borderRadius: '2px',
+                  border: '1px solid #e5e7eb'
+                }}
+              />
+            ))}
+            <Text size="xs" c="dimmed">More</Text>
+          </Group>
+          <Text size="xs" c="dimmed" visibleFrom="sm">
             Based on distance: 0km, &lt;20km, 20-50km, 50-100km, 100km+
           </Text>
-        </div>
+        </Stack>
       </div>
     </Paper>
   );

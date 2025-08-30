@@ -455,31 +455,33 @@ const SmartRideAnalysis = () => {
   return (
     <Stack gap="lg">
       {/* Header */}
-      <Group justify="space-between">
-        <div>
-          <Title order={2}>
-            <Group gap="sm">
-              <Brain size={28} />
-              Smart Ride Analysis
+      <Stack gap="sm">
+        <Group justify="space-between" wrap="wrap">
+          <Title order={2} size={{ base: 'h3', sm: 'h2' }}>
+            <Group gap="xs">
+              <Brain size={window.innerWidth < 640 ? 20 : 28} />
+              <Text span size={{ base: 'lg', sm: 'xl' }}>Smart Analysis</Text>
             </Group>
           </Title>
-          <Text c="dimmed">
-            Intelligent insights from {stats.totalRoutes} cycling activities ({stats.stravaRoutes} with detailed performance metrics)
-          </Text>
-        </div>
-        
-        <Select
-          value={timeFilter}
-          onChange={setTimeFilter}
-          data={[
-            { value: 'all', label: 'All time' },
-            { value: '30d', label: 'Last 30 days' },
-            { value: '90d', label: 'Last 90 days' },
-            { value: 'year', label: 'Last year' }
-          ]}
-          leftSection={<Filter size={16} />}
-        />
-      </Group>
+          
+          <Select
+            value={timeFilter}
+            onChange={setTimeFilter}
+            data={[
+              { value: 'all', label: 'All time' },
+              { value: '30d', label: '30 days' },
+              { value: '90d', label: '90 days' },
+              { value: 'year', label: '1 year' }
+            ]}
+            leftSection={<Filter size={14} />}
+            size="xs"
+            w={{ base: 120, sm: 150 }}
+          />
+        </Group>
+        <Text c="dimmed" size={{ base: 'xs', sm: 'sm' }}>
+          {stats.totalRoutes} activities • {stats.stravaRoutes} enhanced
+        </Text>
+      </Stack>
 
       <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List>
@@ -502,59 +504,51 @@ const SmartRideAnalysis = () => {
 
         <Tabs.Panel value="overview" pt="md">
           {/* Key Metrics Grid */}
-          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md" mb="lg">
-            <Card padding="md" withBorder>
-              <Group justify="space-between">
-                <div>
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Rides</Text>
-                  <Text fw={700} size="xl">{stats.totalRoutes}</Text>
-                  <Text size="xs" c="blue">{stats.stravaRoutes} enhanced</Text>
-                </div>
-                <ThemeIcon size={38} variant="light" color="blue">
-                  <Route size={20} />
+          <SimpleGrid cols={{ base: 2, xs: 2, sm: 4 }} spacing={{ base: 'xs', sm: 'md' }} mb="lg">
+            <Card padding={{ base: 'xs', sm: 'md' }} withBorder>
+              <Stack gap={4}>
+                <ThemeIcon size={{ base: 28, sm: 38 }} variant="light" color="blue" visibleFrom="sm">
+                  <Route size={16} />
                 </ThemeIcon>
-              </Group>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Rides</Text>
+                <Text fw={700} size={{ base: 'lg', sm: 'xl' }}>{stats.totalRoutes}</Text>
+                <Text size="xs" c="blue" visibleFrom="xs">{stats.stravaRoutes} enhanced</Text>
+              </Stack>
             </Card>
 
-            <Card padding="md" withBorder>
-              <Group justify="space-between">
-                <div>
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Distance</Text>
-                  <Text fw={700} size="xl">{formatDistance(stats.totalDistance)}</Text>
-                  <Text size="xs" c="green">~{formatDistance(stats.weeklyDistance)}/week</Text>
-                </div>
-                <ThemeIcon size={38} variant="light" color="green">
-                  <MapPin size={20} />
+            <Card padding={{ base: 'xs', sm: 'md' }} withBorder>
+              <Stack gap={4}>
+                <ThemeIcon size={{ base: 28, sm: 38 }} variant="light" color="green" visibleFrom="sm">
+                  <MapPin size={16} />
                 </ThemeIcon>
-              </Group>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Distance</Text>
+                <Text fw={700} size={{ base: 'lg', sm: 'xl' }}>{formatDistance(stats.totalDistance)}</Text>
+                <Text size="xs" c="green" visibleFrom="xs">~{formatDistance(stats.weeklyDistance)}/wk</Text>
+              </Stack>
             </Card>
 
-            <Card padding="md" withBorder>
-              <Group justify="space-between">
-                <div>
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Elevation</Text>
-                  <Text fw={700} size="xl">{formatElevation(stats.totalElevation)}</Text>
-                  <Text size="xs" c="orange">Max: {formatElevation(stats.highestElevation)}</Text>
-                </div>
-                <ThemeIcon size={38} variant="light" color="orange">
-                  <Mountain size={20} />
+            <Card padding={{ base: 'xs', sm: 'md' }} withBorder>
+              <Stack gap={4}>
+                <ThemeIcon size={{ base: 28, sm: 38 }} variant="light" color="orange" visibleFrom="sm">
+                  <Mountain size={16} />
                 </ThemeIcon>
-              </Group>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Elevation</Text>
+                <Text fw={700} size={{ base: 'lg', sm: 'xl' }}>{formatElevation(stats.totalElevation)}</Text>
+                <Text size="xs" c="orange" visibleFrom="xs">Max: {formatElevation(stats.highestElevation)}</Text>
+              </Stack>
             </Card>
 
-            <Card padding="md" withBorder>
-              <Group justify="space-between">
-                <div>
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Time</Text>
-                  <Text fw={700} size="xl">{formatDuration(stats.totalTime)}</Text>
-                  {stats.totalEnergy > 0 && (
-                    <Text size="xs" c="violet">{Math.round(stats.totalEnergy).toLocaleString()} kJ</Text>
-                  )}
-                </div>
-                <ThemeIcon size={38} variant="light" color="violet">
-                  <Clock size={20} />
+            <Card padding={{ base: 'xs', sm: 'md' }} withBorder>
+              <Stack gap={4}>
+                <ThemeIcon size={{ base: 28, sm: 38 }} variant="light" color="violet" visibleFrom="sm">
+                  <Clock size={16} />
                 </ThemeIcon>
-              </Group>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Time</Text>
+                <Text fw={700} size={{ base: 'lg', sm: 'xl' }}>{formatDuration(stats.totalTime)}</Text>
+                {stats.totalEnergy > 0 && (
+                  <Text size="xs" c="violet" visibleFrom="xs">{Math.round(stats.totalEnergy).toLocaleString()} kJ</Text>
+                )}
+              </Stack>
             </Card>
           </SimpleGrid>
 
@@ -971,7 +965,7 @@ const SmartRideAnalysis = () => {
               {/* Monthly Distance Trend */}
               <Card withBorder p="md">
                 <Title order={5} mb="md">Monthly Distance Progress</Title>
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 200 : 300}>
                   <AreaChart data={monthlyTrends}>
                     <XAxis dataKey="monthName" />
                     <YAxis />
@@ -992,7 +986,7 @@ const SmartRideAnalysis = () => {
                 <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
                   <Card withBorder p="md">
                     <Title order={5} mb="md">Speed Progression</Title>
-                    <ResponsiveContainer width="100%" height={200}>
+                    <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 150 : 200}>
                       <LineChart data={monthlyTrends}>
                         <XAxis dataKey="monthName" fontSize={10} />
                         <YAxis />
@@ -1019,7 +1013,7 @@ const SmartRideAnalysis = () => {
                   {monthlyTrends.some(m => m.avgHR > 0) && (
                     <Card withBorder p="md">
                       <Title order={5} mb="md">Heart Rate Trends</Title>
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 150 : 200}>
                         <LineChart data={monthlyTrends}>
                           <XAxis dataKey="monthName" fontSize={10} />
                           <YAxis />
@@ -1048,7 +1042,7 @@ const SmartRideAnalysis = () => {
               <Badge variant="light">{filteredRoutes.length} activities</Badge>
             </Group>
             
-            <ScrollArea style={{ height: 500 }}>
+            <ScrollArea style={{ height: window.innerWidth < 640 ? 400 : 500 }}>
               <Stack gap="xs">
                 {filteredRoutes.slice(0, 50).map((route) => (
                   <Card key={route.id} padding="sm" withBorder>
