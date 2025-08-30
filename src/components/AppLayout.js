@@ -25,6 +25,10 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
   const handleNavigation = (page, path) => {
     setActivePage(page);
     navigate(path);
+    // Close mobile menu after navigation
+    if (opened) {
+      toggle();
+    }
   };
 
   if (!user) {
