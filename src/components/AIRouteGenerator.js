@@ -39,6 +39,7 @@ import PreferenceSettings from './PreferenceSettings';
 const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, externalStartLocation }) => {
   const { user } = useAuth();
   const { formatDistance, formatElevation, formatTemperature, formatSpeed } = useUnits();
+
   
   // User inputs
   const [timeAvailable, setTimeAvailable] = useState(60); // minutes
@@ -282,7 +283,6 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       });
       
       console.log('🎯 Generated routes:', routes);
-
       setGeneratedRoutes(routes);
       
       if (routes.length > 0) {
@@ -332,22 +332,28 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
           {/* Header */}
           <div style={{ textAlign: 'center' }}>
             <Brain size={48} style={{ color: '#228be6', marginBottom: '1rem' }} />
-            <Group justify="center" align="center" mb="xs">
-              <Text size="xl" fw={600}>
-                AI Training Route Generator
-              </Text>
-              <ActionIcon 
-                variant="subtle" 
-                onClick={() => setPreferencesOpened(true)}
-                title="Route Preferences"
-              >
-                <Settings size={20} />
-              </ActionIcon>
-            </Group>
+            <Text size="xl" fw={600} mb="xs">
+              AI Training Route Generator
+            </Text>
             <Text size="sm" c="dimmed">
               Smart routes optimized for your training goals and conditions
             </Text>
           </div>
+
+        {/* Route Preferences Button */}
+        <Button
+          variant="gradient"
+          gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+          leftSection={<Settings size={20} />}
+          onClick={() => setPreferencesOpened(true)}
+          fullWidth
+          size="md"
+        >
+          Customize Route Preferences
+        </Button>
+        <Text size="xs" c="dimmed" mt="-8">
+          Set your safety, surface, scenic preferences and avoid specific areas
+        </Text>
 
         {/* Current Conditions */}
         <Card withBorder p="sm" style={{ backgroundColor: '#f8f9fa' }}>

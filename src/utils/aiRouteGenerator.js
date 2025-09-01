@@ -7,6 +7,8 @@ import { calculateBearing } from './routeUtils';
 import { fetchPastRides, analyzeRidingPatterns, generateRouteFromPatterns, buildRouteFromSegments } from './rideAnalysis';
 import { getGraphHopperCyclingDirections, selectGraphHopperProfile, validateGraphHopperService, GRAPHHOPPER_PROFILES } from './graphHopper';
 import { generateClaudeRoutes, enhanceRouteWithClaude, analyzeRidingPatternsWithClaude } from './claudeRouteService';
+import { EnhancedContextCollector } from './enhancedContext';
+import { filterRoutesByInfrastructure, enhanceRouteWithInfrastructure, generateInfrastructureReport } from './infrastructureValidator';
 
 // Main AI route generation function
 export async function generateAIRoutes(params) {
@@ -80,6 +82,17 @@ export async function generateAIRoutes(params) {
   // Try to build routes from actual segments first
   const routes = [];
   
+  // Get user preferences if available
+  let userPreferences = null;
+  if (userId) {
+    try {
+      userPreferences = await EnhancedContextCollector.gatherDetailedPreferences(userId, params);
+      console.log('🎯 Loaded user preferences, bike infrastructure:', userPreferences?.safetyPreferences?.bikeInfrastructure);
+    } catch (error) {
+      console.warn('Could not load user preferences:', error);
+    }
+  }
+  
   // Priority 0: Generate Claude AI route suggestions first
   console.log('🧠 Generating intelligent routes with Claude AI...');
   console.log('Claude parameters:', { startLocation, timeAvailable, trainingGoal, routeType, targetDistance });
@@ -110,7 +123,7 @@ export async function generateAIRoutes(params) {
           routeType,
           pastRidePatterns: ridingPatterns
         };
-        const enhancedRoute = await convertClaudeToFullRoute(routeWithContext, startLocation, targetDistance);
+        const enhancedRoute = await convertClaudeToFullRoute(routeWithContext, startLocation, targetDistance, userPreferences);
         if (enhancedRoute) {
           console.log(`✅ Successfully converted: ${enhancedRoute.name}`);
           routes.push(enhancedRoute);
@@ -273,7 +286,7 @@ function calculateTargetDistance(timeMinutes, trainingGoal, performanceMetrics =
 
 // Generate routes using Mapbox Directions API (NO geometric patterns)
 async function generateMapboxBasedRoutes(params) {
-  const { startLocation, targetDistance, trainingGoal, routeType, weatherData, patternBasedSuggestions } = params;
+  const { startLocation, targetDistance, trainingGoal, routeType, weatherData, patternBasedSuggestions, userPreferences } = params;
   const routes = [];
   
   console.log('Generating routes using Mapbox cycling intelligence');
@@ -309,7 +322,42 @@ async function generateMapboxBasedRoutes(params) {
     }
   }
   
-  return routes.filter(route => route !== null && route.coordinates && route.coordinates.length > 10);
+  // Filter valid routes
+  let validRoutes = routes.filter(route => route !== null && route.coordinates && route.coordinates.length > 10);
+  
+  // Apply infrastructure validation and filtering if preferences exist
+  if (userPreferences?.safetyPreferences?.bikeInfrastructure) {
+    console.log('🚴 Applying infrastructure validation...');
+    
+    // Filter and enhance routes based on infrastructure
+    validRoutes = filterRoutesByInfrastructure(validRoutes, userPreferences);
+    
+    // Add infrastructure metadata to each route
+    validRoutes = validRoutes.map(route => enhanceRouteWithInfrastructure(route, userPreferences));
+    
+    // Generate infrastructure report
+    const report = generateInfrastructureReport(validRoutes, userPreferences);
+    console.log('📊 Infrastructure Report:', report.summary);
+    if (report.recommendation) {
+      console.log('💡 Recommendation:', report.recommendation);
+    }
+    
+    // Add infrastructure info to route descriptions
+    validRoutes = validRoutes.map(route => {
+      if (route.infrastructure) {
+        const infraNote = route.infrastructure.coverage 
+          ? ` (${route.infrastructure.coverage} bike infrastructure)`
+          : '';
+        return {
+          ...route,
+          description: `${route.description || ''}${infraNote}`.trim()
+        };
+      }
+      return route;
+    });
+  }
+  
+  return validRoutes;
 }
 
 // Generate smart cycling destinations using real cycling data
@@ -605,7 +653,7 @@ function calculateDestinationPoint(start, distanceKm, bearingDegrees) {
 }
 
 // Convert Claude route suggestion to full route with coordinates
-async function convertClaudeToFullRoute(claudeRoute, startLocation, targetDistance) {
+async function convertClaudeToFullRoute(claudeRoute, startLocation, targetDistance, preferences = null) {
   const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
   if (!mapboxToken) {
     console.warn('Mapbox token not available for Claude route conversion');
@@ -628,7 +676,8 @@ async function convertClaudeToFullRoute(claudeRoute, startLocation, targetDistan
 
     // Use Mapbox to create realistic route
     const route = await getCyclingDirections(waypoints, mapboxToken, {
-      profile: getMapboxProfile(claudeRoute.trainingGoal)
+      profile: getMapboxProfile(claudeRoute.trainingGoal),
+      preferences: preferences
     });
 
     if (route && route.coordinates && route.coordinates.length > 10) {
@@ -1440,7 +1489,7 @@ async function generateLoopPattern(startLocation, targetDistance, pattern, train
       pattern: pattern.variation,
       confidence: snappedRoute.confidence,
       elevationProfile,
-      windFactor: calculateWindFactor(snappedRoute.coordinates, weatherData),
+      windFactor: calculateWindFactor(snappedRoute.coordinates, weatherData)
     };
 
   } catch (error) {
@@ -1590,6 +1639,7 @@ function getRouteNameByGoal(goal) {
   };
   return names[goal] || 'Training Ride';
 }
+
 
 // Generate route description
 function generateRouteDescription(trainingGoal, pattern, elevationStats) {
@@ -1933,7 +1983,7 @@ async function generateOutAndBackPattern(startLocation, halfDistance, direction,
       pattern: 'out_back',
       confidence: outboundRoute.confidence,
       elevationProfile,
-      windFactor: calculateWindFactor(fullCoordinates, weatherData),
+      windFactor: calculateWindFactor(fullCoordinates, weatherData)
     };
     
   } catch (error) {

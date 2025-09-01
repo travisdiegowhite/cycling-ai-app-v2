@@ -364,7 +364,9 @@ SURFACE & SAFETY:
 - Primary surfaces: ${surfacePreferences.primarySurfaces.join(', ')}
 - Surface quality requirement: ${surfacePreferences.surfaceQuality}
 - Gravel tolerance: ${(surfacePreferences.gravelTolerance * 100).toFixed(0)}% of route
-- Bike infrastructure importance: ${safetyPreferences.bikeInfrastructure}
+- Bike infrastructure importance: ${safetyPreferences.bikeInfrastructure}${
+  safetyPreferences.bikeInfrastructure === 'required' ? ' (MANDATORY - ONLY USE BIKE LANES/PATHS)' : ''
+}
 - Shoulder width: ${safetyPreferences.shoulderWidth}
 - Rest stop frequency: every ${safetyPreferences.restStopFrequency}km
 
@@ -446,11 +448,26 @@ FORMAT YOUR RESPONSE AS JSON:
 
 CRITICAL REQUIREMENTS:
 - Prioritize rider safety above all else
-- Ensure routes match specified surface and traffic preferences
+- Ensure routes match specified surface and traffic preferences${
+  safetyPreferences.bikeInfrastructure === 'required' ? `
+- MANDATORY: Route MUST use ONLY dedicated bike lanes, bike paths, or protected cycling infrastructure
+- DO NOT include any road segments without bike infrastructure
+- Each waypoint MUST be on a bike path or protected bike lane
+- If insufficient bike infrastructure exists, clearly state this limitation` : 
+  safetyPreferences.bikeInfrastructure === 'strongly_preferred' ? `
+- STRONGLY prioritize bike lanes, paths, and cycling infrastructure (80%+ of route)
+- Minimize segments without bike infrastructure` : ''
+}
 - Provide waypoints with enough detail for confident navigation
 - Consider local traffic patterns and infrastructure
 - Balance training goals with scenic and enjoyment factors
-- Include practical considerations (facilities, weather adaptations)`;
+- Include practical considerations (facilities, weather adaptations)
+${safetyPreferences.bikeInfrastructure === 'required' || safetyPreferences.bikeInfrastructure === 'strongly_preferred' ? `
+
+INFRASTRUCTURE VALIDATION:
+For each waypoint, specify:
+- Infrastructure type: "bike_path", "bike_lane", "shared_path", "road_with_shoulder", or "road_no_infrastructure"
+- If no bike infrastructure available, mark as "CAUTION: No bike infrastructure"` : ''}`;
 
     return prompt;
   }

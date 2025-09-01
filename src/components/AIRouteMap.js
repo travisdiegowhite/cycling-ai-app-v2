@@ -20,6 +20,7 @@ const AIRouteMap = () => {
   const [startLocation, setStartLocation] = useState(null);
   const mapRef = useRef(null);
 
+
   const handleRouteGenerated = (route) => {
     console.log('Route generated with coordinates:', route.coordinates?.length || 0, 'points');
     setSelectedRoute(route);

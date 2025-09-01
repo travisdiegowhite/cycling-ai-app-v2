@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Map, Source, Layer, Marker, Popup, NavigationControl } from 'react-map-gl';
 import {
   Paper,
@@ -20,7 +20,7 @@ import { useUnits } from '../utils/units';
 import { supabase } from '../supabase';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './Map.css';
-import RouteBuilder from './RouteBuilder';
+import ProfessionalRouteBuilder from './ProfessionalRouteBuilder';
 import RouteProfile from './RouteProfile';
 import ElevationProfileBar from './ElevationProfileBar';
 
@@ -43,8 +43,8 @@ const MapComponent = () => {
   const mapRef = useRef(null);
   const [refreshFlag, setRefreshFlag] = useState(0); // used to refetch after save
   const [selectedRouteData, setSelectedRouteData] = useState(null); // Full route data for profile
-  const [routeBuilderMapElements, setRouteBuilderMapElements] = useState(null); // Map elements from route builder
-  const [routeBuilderData, setRouteBuilderData] = useState(null); // Route builder elevation and stats data
+  // Removed routeBuilderMapElements and routeBuilderData - no longer needed
+  const routeBuilderRef = useRef(null); // Reference to route builder for map clicks
 
   // Center map at user current location if available and no stored routes yet
   useEffect(() => {
@@ -103,8 +103,31 @@ const MapComponent = () => {
     return colors[index % colors.length];
   };
 
+  // Handle map clicks for route builder
+  const handleMapClick = useCallback((e) => {
+    if (builderActive && routeBuilderRef.current && routeBuilderRef.current.addPoint) {
+      routeBuilderRef.current.addPoint(e.lngLat);
+    }
+  }, [builderActive]);
+
   return (
     <div className="map-container">
+      {/* Full Route Builder Overlay */}
+      {builderActive && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
+          <ProfessionalRouteBuilder
+            ref={routeBuilderRef}
+            active={builderActive}
+            onExit={() => setBuilderActive(false)}
+            onSaved={(newRoute) => {
+              setBuilderActive(false);
+              setRefreshFlag(f => f + 1);
+              if (newRoute?.id) setSelectedRoute(newRoute.id);
+            }}
+            inline={false}
+          />
+        </div>
+      )}
       <Paper className="routes-sidebar" shadow="sm" p="md">
         <Stack gap="md">
           <Group justify="space-between" align="center">
@@ -125,21 +148,7 @@ const MapComponent = () => {
             {builderActive ? 'Finish Building' : 'Build New Route'}
           </Button>
 
-          {builderActive && (
-            <RouteBuilder
-              active={builderActive}
-              mapRef={mapRef}
-              onExit={() => setBuilderActive(false)}
-              onSaved={(newRoute) => {
-                setBuilderActive(false);
-                setRefreshFlag(f => f + 1);
-                setSelectedRoute(newRoute.id);
-              }}
-              inline={true}
-              onMapElementsChange={setRouteBuilderMapElements}
-              onRouteDataChange={setRouteBuilderData}
-            />
-          )}
+          {/* Route Builder in inline mode */}
 
           <ScrollArea style={{ height: builderActive ? 'calc(100vh - 600px)' : 'calc(100vh - 300px)' }}>
             {isLoading ? (
@@ -211,6 +220,7 @@ const MapComponent = () => {
           ref={mapRef}
           initialViewState={viewState}
           onMove={evt => setViewState(evt.viewState)}
+          onClick={handleMapClick}
           style={{ width: '100%', height: '100%' }}
           mapStyle="mapbox://styles/mapbox/streets-v11"
           mapboxAccessToken={process.env.REACT_APP_MAPBOX_TOKEN}
@@ -220,8 +230,8 @@ const MapComponent = () => {
         >
         <NavigationControl position="top-right" />
         
-        {/* Render route builder map elements */}
-        {routeBuilderMapElements}
+        
+        {/* Route builder map elements are now handled by the overlay component */}
         
           {routes.map((route, index) => {
             if (!route.track_points?.length) return null;
@@ -295,15 +305,15 @@ const MapComponent = () => {
       )}
 
       {/* Elevation Profile Bar - shows for route builder or selected route */}
-      {(routeBuilderData?.elevationProfile || selectedRouteData) && (
+      {selectedRouteData && (
         <ElevationProfileBar
           elevationProfile={
-            routeBuilderData?.elevationProfile || 
+   
             selectedRouteData?.elevation_profile || 
             []
           }
           elevationStats={
-            routeBuilderData?.elevationStats || 
+   
             {
               gain: selectedRouteData?.summary?.elevation_gain,
               loss: selectedRouteData?.summary?.elevation_loss,
@@ -312,14 +322,14 @@ const MapComponent = () => {
             }
           }
           routeStats={
-            routeBuilderData?.routeStats || 
+   
             {
               distance: selectedRouteData?.summary?.distance,
               confidence: selectedRouteData?.summary?.confidence,
               duration: selectedRouteData?.summary?.duration
             }
           }
-          isRouteBuilder={!!routeBuilderData}
+          isRouteBuilder={false}
         />
       )}
     </div>

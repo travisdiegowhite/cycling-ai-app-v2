@@ -84,13 +84,13 @@ export async function mapMatchRoute(waypoints, accessToken, options = {}) {
   return await getCyclingDirections(waypoints, accessToken, { profile });
 }
 
-// Elevation fetching using Mapbox Tilequery API
+// Elevation fetching using real elevation data
 export async function fetchElevationProfile(coordinates, accessToken) {
   if (!coordinates || coordinates.length < 2) return [];
   
   try {
-    // Sample points along the route (max 50 points for API rate limits)
-    const maxPoints = 50;
+    // Sample points along the route (max 100 points for better accuracy)
+    const maxPoints = 100;
     const step = Math.max(1, Math.floor(coordinates.length / maxPoints));
     const sampledCoords = coordinates.filter((_, i) => i % step === 0);
     
@@ -102,28 +102,94 @@ export async function fetchElevationProfile(coordinates, accessToken) {
     // Calculate total distance for proper distance values
     const totalDistance = calculateRouteDistance(coordinates);
     
-    const elevationPromises = sampledCoords.map(async ([lon, lat], index) => {
-      try {
-        // Use realistic elevation simulation directly to avoid API issues
-        const elevation = getRealisticElevation(lat, lon);
-        
-        // Calculate distance along route
-        const distanceRatio = index / (sampledCoords.length - 1);
-        const distance = totalDistance * distanceRatio;
-        
-        return {
-          coordinate: [lon, lat],
-          elevation: Math.round(elevation),
-          distance: Math.round(distance)
-        };
-      } catch (err) {
-        console.warn(`Failed to fetch elevation for point ${index}:`, err);
-        return {
-          coordinate: [lon, lat],
-          elevation: Math.round(getRealisticElevation(lat, lon)),
-          distance: Math.round((index / (sampledCoords.length - 1)) * totalDistance)
-        };
+    // Try to get real elevation data from multiple sources
+    let elevationData = [];
+    
+    // Option 1: Try Open-Elevation API (free, no key required)
+    try {
+      const locations = sampledCoords.map(([lon, lat]) => ({
+        latitude: lat,
+        longitude: lon
+      }));
+      
+      // Open-Elevation API accepts up to 100 points per request
+      const response = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ locations }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+          console.log('✅ Got real elevation data from Open-Elevation API');
+          elevationData = data.results.map((result, index) => ({
+            coordinate: [result.longitude, result.latitude],
+            elevation: Math.round(result.elevation),
+            distance: Math.round((index / (sampledCoords.length - 1)) * totalDistance)
+          }));
+          return elevationData;
+        }
       }
+    } catch (error) {
+      console.warn('Open-Elevation API failed, trying Mapbox:', error);
+    }
+    
+    // Option 2: Try Mapbox Terrain API if we have a token
+    if (accessToken) {
+      try {
+        const elevationPromises = sampledCoords.map(async ([lon, lat], index) => {
+          // Use Mapbox Tilequery API for elevation
+          const url = `https://api.mapbox.com/v4/mapbox.mapbox-terrain-v2/tilequery/${lon},${lat}.json?layers=contour&limit=50&access_token=${accessToken}`;
+          
+          const response = await fetch(url);
+          if (response.ok) {
+            const data = await response.json();
+            let elevation = 1600; // Default Denver elevation
+            
+            if (data.features && data.features.length > 0) {
+              // Look for elevation contour lines
+              for (const feature of data.features) {
+                if (feature.properties && feature.properties.ele) {
+                  elevation = feature.properties.ele;
+                  break;
+                }
+              }
+            }
+            
+            return {
+              coordinate: [lon, lat],
+              elevation: Math.round(elevation),
+              distance: Math.round((index / (sampledCoords.length - 1)) * totalDistance)
+            };
+          }
+          
+          // Fallback to realistic elevation
+          return {
+            coordinate: [lon, lat],
+            elevation: Math.round(getRealisticElevation(lat, lon)),
+            distance: Math.round((index / (sampledCoords.length - 1)) * totalDistance)
+          };
+        });
+        
+        elevationData = await Promise.all(elevationPromises);
+        console.log('✅ Got elevation data from Mapbox Terrain API');
+        return elevationData;
+      } catch (error) {
+        console.warn('Mapbox Terrain API failed:', error);
+      }
+    }
+    
+    // Option 3: Fallback to realistic elevation simulation
+    console.log('⚠️ Using simulated elevation data (API failed)');
+    const elevationPromises = sampledCoords.map(async ([lon, lat], index) => {
+      return {
+        coordinate: [lon, lat],
+        elevation: Math.round(getRealisticElevation(lat, lon)),
+        distance: Math.round((index / (sampledCoords.length - 1)) * totalDistance)
+      };
     });
 
     return await Promise.all(elevationPromises);
@@ -281,17 +347,34 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
     alternatives = false,
     steps = false,
     geometries = 'geojson',
-    overview = 'full'
+    overview = 'full',
+    preferences = null // User preferences for enhanced routing
   } = options;
 
   // Format coordinates for the API
   const coordinates = waypoints.map(([lon, lat]) => `${lon},${lat}`).join(';');
   
-  const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinates}?` +
+  // Build exclude parameter based on preferences
+  let excludeParam = '';
+  if (preferences?.safetyPreferences?.bikeInfrastructure === 'required') {
+    // For required bike infrastructure, exclude motorways and ferries
+    // Consider using walking profile for strictest bike path routing
+    excludeParam = '&exclude=motorway,toll,ferry';
+  } else if (preferences?.safetyPreferences?.bikeInfrastructure === 'strongly_preferred') {
+    // For strongly preferred, exclude just motorways
+    excludeParam = '&exclude=motorway';
+  }
+  
+  // Use walking profile for strictest bike-path-only routing when required
+  const routingProfile = (preferences?.safetyPreferences?.bikeInfrastructure === 'required') 
+    ? 'walking' // Walking profile often follows bike paths better
+    : profile;
+  
+  const url = `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${coordinates}?` +
     `alternatives=${alternatives}&` +
     `geometries=${geometries}&` +
     `overview=${overview}&` +
-    `steps=${steps}&` +
+    `steps=${steps}${excludeParam}&` +
     `access_token=${accessToken}`;
 
   try {

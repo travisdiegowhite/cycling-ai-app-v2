@@ -1,0 +1,6 @@
+npm warn using --force Recommended protections disabled.
+
+> cycling-ai-app@0.1.0 start
+> react-scripts start
+
+Something is already running on port 3000.
