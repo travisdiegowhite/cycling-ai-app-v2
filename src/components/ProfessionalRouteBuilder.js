@@ -819,16 +819,16 @@ const ProfessionalRouteBuilder = forwardRef(({
             </div>
 
             {/* Main Content */}
-            <Tabs defaultValue="route" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Tabs defaultValue="route" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <Tabs.List>
                 <Tabs.Tab value="route" leftSection={<Route size={14} />}>Route</Tabs.Tab>
                 <Tabs.Tab value="saved" leftSection={<Save size={14} />}>Saved</Tabs.Tab>
                 <Tabs.Tab value="settings" leftSection={<Settings size={14} />}>Settings</Tabs.Tab>
               </Tabs.List>
               
-              <ScrollArea style={{ flex: 1 }} p="md">
-                {/* Route Tab */}
-                <Tabs.Panel value="route">
+              {/* Route Tab */}
+              <Tabs.Panel value="route" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <ScrollArea style={{ flex: 1 }} p="md">
                   <Stack gap="md">
                     {/* Route Details */}
                     <Card withBorder>
@@ -1025,10 +1025,12 @@ const ProfessionalRouteBuilder = forwardRef(({
                       </Card>
                     )}
                   </Stack>
-                </Tabs.Panel>
-                
-                {/* Saved Routes Tab */}
-                <Tabs.Panel value="saved">
+                </ScrollArea>
+              </Tabs.Panel>
+              
+              {/* Saved Tab */}
+              <Tabs.Panel value="saved" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <ScrollArea style={{ flex: 1 }} p="md">
                   <Stack gap="md">
                     <Group justify="space-between">
                       <Text fw={500}>Saved Routes</Text>
@@ -1038,7 +1040,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                         onClick={fetchSavedRoutes} 
                         loading={loadingSavedRoutes}
                       >
-                        <RefreshCw size={14} />
+                        <RefreshCw size={16} />
                       </ActionIcon>
                     </Group>
                     
@@ -1088,10 +1090,12 @@ const ProfessionalRouteBuilder = forwardRef(({
                       </Stack>
                     )}
                   </Stack>
-                </Tabs.Panel>
-                
-                {/* Settings Tab */}
-                <Tabs.Panel value="settings">
+                </ScrollArea>
+              </Tabs.Panel>
+              
+              {/* Settings Tab */}
+              <Tabs.Panel value="settings" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <ScrollArea style={{ flex: 1 }} p="md">
                   <Stack gap="md">
                     <Card withBorder>
                       <Text fw={500} size="sm" mb="sm">Routing Options</Text>
@@ -1144,8 +1148,8 @@ const ProfessionalRouteBuilder = forwardRef(({
                       </Stack>
                     </Card>
                   </Stack>
-                </Tabs.Panel>
-              </ScrollArea>
+                </ScrollArea>
+              </Tabs.Panel>
             </Tabs>
 
             {/* Footer Actions */}
@@ -1363,85 +1367,155 @@ const ProfessionalRouteBuilder = forwardRef(({
           ))}
         </Map>
         
-        {/* Map Overlay Controls */}
-        <Paper
-          shadow="sm"
+        {/* Map Overlay Controls - Top Center */}
+        <div
           style={{
             position: 'absolute',
             top: 20,
-            right: 20,
-            padding: '8px',
-            display: 'flex',
-            gap: 8,
+            left: '50%',
+            transform: 'translateX(-50%)',
             zIndex: 5,
+            display: 'flex',
+            justifyContent: 'center',
           }}
         >
-          <Tooltip label="Undo (Ctrl+Z)">
-            <ActionIcon onClick={undo} disabled={historyIndex <= 0} variant="default">
-              <Undo2 size={18} />
-            </ActionIcon>
-          </Tooltip>
-          
-          <Tooltip label="Redo (Ctrl+Y)">
-            <ActionIcon onClick={redo} disabled={historyIndex >= history.length - 1} variant="default">
-              <Redo2 size={18} />
-            </ActionIcon>
-          </Tooltip>
-          
-          <Divider orientation="vertical" />
-          
-          <Menu position="bottom-end">
-            <Menu.Target>
-              <ActionIcon variant="default">
-                <Layers size={18} />
+          <Paper
+            shadow="sm"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px',
+              backgroundColor: 'white',
+              borderRadius: '8px',
+            }}
+          >
+            <Tooltip label="Undo (Ctrl+Z)">
+              <ActionIcon onClick={undo} disabled={historyIndex <= 0} variant="default">
+                <Undo2 size={18} />
               </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Label>Map Style</Menu.Label>
-              {mapStyles.map(style => (
+            </Tooltip>
+            
+            <Tooltip label="Redo (Ctrl+Y)">
+              <ActionIcon onClick={redo} disabled={historyIndex >= history.length - 1} variant="default">
+                <Redo2 size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Divider orientation="vertical" />
+            
+            <Tooltip label="Clear all">
+              <ActionIcon onClick={clearRoute} disabled={waypoints.length === 0} variant="default">
+                <Trash2 size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Tooltip label="Snap to roads">
+              <ActionIcon 
+                onClick={snapToRoads} 
+                disabled={waypoints.length < 2 || snapping} 
+                variant="default"
+                loading={snapping}
+              >
+                <Route size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Divider orientation="vertical" />
+            
+            <Tooltip label="Save route">
+              <ActionIcon 
+                onClick={saveRoute} 
+                disabled={waypoints.length < 2 || !routeName} 
+                variant="default"
+              >
+                <Save size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Tooltip label="Export GPX">
+              <ActionIcon 
+                onClick={exportGPX} 
+                disabled={waypoints.length < 2} 
+                variant="default"
+              >
+                <Download size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Tooltip label="Import GPX">
+              <ActionIcon 
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.gpx';
+                  input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (file) importGPX(file);
+                  };
+                  input.click();
+                }} 
+                variant="default"
+              >
+                <Upload size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Divider orientation="vertical" />
+            
+            <Menu position="bottom-end">
+              <Menu.Target>
+                <ActionIcon variant="default">
+                  <Layers size={18} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>Map Style</Menu.Label>
+                {mapStyles.map(style => (
+                  <Menu.Item
+                    key={style.value}
+                    onClick={() => setMapStyle(style.value)}
+                    leftSection={mapStyle === style.value && <Check size={14} />}
+                  >
+                    {style.label}
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
+            
+            <Menu position="bottom-end">
+              <Menu.Target>
+                <ActionIcon variant="default">
+                  <Settings size={18} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>Routing Profile</Menu.Label>
                 <Menu.Item
-                  key={style.value}
-                  onClick={() => setMapStyle(style.value)}
-                  leftSection={mapStyle === style.value && <Check size={14} />}
+                  leftSection={<Bike size={14} />}
+                  onClick={() => setRoutingProfile('cycling')}
+                  rightSection={routingProfile === 'cycling' && <Check size={14} />}
                 >
-                  {style.label}
+                  Cycling
                 </Menu.Item>
-              ))}
-            </Menu.Dropdown>
-          </Menu>
-          
-          <Menu position="bottom-end">
-            <Menu.Target>
-              <ActionIcon variant="default">
-                <Settings size={18} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Label>Routing Profile</Menu.Label>
-              <Menu.Item
-                leftSection={<Bike size={14} />}
-                onClick={() => setRoutingProfile('cycling')}
-                rightSection={routingProfile === 'cycling' && <Check size={14} />}
-              >
-                Cycling
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<Footprints size={14} />}
-                onClick={() => setRoutingProfile('walking')}
-                rightSection={routingProfile === 'walking' && <Check size={14} />}
-              >
-                Walking
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<Car size={14} />}
-                onClick={() => setRoutingProfile('driving')}
-                rightSection={routingProfile === 'driving' && <Check size={14} />}
-              >
-                Driving
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-        </Paper>
+                <Menu.Item
+                  leftSection={<Footprints size={14} />}
+                  onClick={() => setRoutingProfile('walking')}
+                  rightSection={routingProfile === 'walking' && <Check size={14} />}
+                >
+                  Walking
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<Car size={14} />}
+                  onClick={() => setRoutingProfile('driving')}
+                  rightSection={routingProfile === 'driving' && <Check size={14} />}
+                >
+                  Driving
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Paper>
+        </div>
 
         {/* Mode Badge */}
         <Badge
