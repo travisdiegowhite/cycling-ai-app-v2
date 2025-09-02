@@ -44,29 +44,46 @@ export async function fetchElevationFromOpenTopo(coordinates) {
  */
 export async function fetchElevationFromOpenElevation(coordinates) {
   try {
-    const locations = coordinates.map(([lon, lat]) => ({
-      latitude: lat,
-      longitude: lon
-    }));
+    // Open-Elevation API works best with smaller batches
+    const batchSize = 50;
+    const results = [];
     
-    const response = await fetch('https://api.open-elevation.com/api/v1/lookup', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ locations }),
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (data.results) {
-        return data.results.map(r => ({
-          lat: r.latitude,
-          lon: r.longitude,
-          elevation: r.elevation || 0
-        }));
+    for (let i = 0; i < coordinates.length; i += batchSize) {
+      const batch = coordinates.slice(i, i + batchSize);
+      const locations = batch.map(([lon, lat]) => ({
+        latitude: lat,
+        longitude: lon
+      }));
+      
+      const response = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ locations }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+          results.push(...data.results.map(r => ({
+            lat: r.latitude,
+            lon: r.longitude,
+            elevation: r.elevation || 0
+          })));
+        }
+      } else {
+        console.warn(`Open-Elevation API batch failed: ${response.status}`);
+        // Continue with other batches
+      }
+      
+      // Small delay between requests to be respectful
+      if (i + batchSize < coordinates.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
+    
+    return results.length > 0 ? results : null;
   } catch (error) {
     console.error('Open-Elevation API failed:', error);
   }
@@ -187,23 +204,15 @@ export async function getElevationData(coordinates, mapboxToken = null) {
   
   // Try different elevation sources in order of preference
   
-  // 1. Try OpenTopoData first (most reliable free option)
-  console.log('Trying OpenTopoData API...');
-  let elevationData = await fetchElevationFromOpenTopo(coordinates);
-  if (elevationData && elevationData.length > 0) {
-    console.log('✅ Got elevation from OpenTopoData');
-    return elevationData;
-  }
-  
-  // 2. Try Open-Elevation API
+  // 1. Try Open-Elevation API first (more reliable for CORS)
   console.log('Trying Open-Elevation API...');
-  elevationData = await fetchElevationFromOpenElevation(coordinates);
+  let elevationData = await fetchElevationFromOpenElevation(coordinates);
   if (elevationData && elevationData.length > 0) {
     console.log('✅ Got elevation from Open-Elevation');
     return elevationData;
   }
   
-  // 3. Try Mapbox if we have a token
+  // 2. Try Mapbox if we have a token (high accuracy)
   if (mapboxToken) {
     console.log('Trying Mapbox Terrain API...');
     elevationData = await fetchElevationFromMapbox(coordinates, mapboxToken);
@@ -211,6 +220,14 @@ export async function getElevationData(coordinates, mapboxToken = null) {
       console.log('✅ Got elevation from Mapbox');
       return elevationData;
     }
+  }
+  
+  // 3. Try OpenTopoData (might have CORS issues from browser)
+  console.log('Trying OpenTopoData API...');
+  elevationData = await fetchElevationFromOpenTopo(coordinates);
+  if (elevationData && elevationData.length > 0) {
+    console.log('✅ Got elevation from OpenTopoData');
+    return elevationData;
   }
   
   // 4. Fallback to estimation
@@ -225,7 +242,7 @@ export async function getElevationData(coordinates, mapboxToken = null) {
 /**
  * Calculate elevation statistics from elevation profile
  */
-export function calculateElevationMetrics(elevationProfile) {
+export function calculateElevationMetrics(elevationProfile, isImperial = false) {
   if (!elevationProfile || elevationProfile.length < 2) {
     return {
       gain: 0,
@@ -237,6 +254,7 @@ export function calculateElevationMetrics(elevationProfile) {
     };
   }
   
+  // Elevation data is always in meters for calculations
   const elevations = elevationProfile.map(p => p.elevation);
   const distances = elevationProfile.map(p => p.distance || 0);
   
@@ -245,8 +263,8 @@ export function calculateElevationMetrics(elevationProfile) {
   const min = Math.min(...elevations);
   const max = Math.max(...elevations);
   
-  // Calculate gain/loss with smoothing
-  const smoothingThreshold = 3; // meters - ignore changes smaller than this
+  // Calculate gain/loss with smoothing - always use meters threshold (3m = ~10ft)
+  const smoothingThreshold = 3; // meters
   let lastSignificantElevation = elevations[0];
   
   for (let i = 1; i < elevations.length; i++) {
@@ -267,13 +285,23 @@ export function calculateElevationMetrics(elevationProfile) {
   const grades = [];
   
   for (let i = 1; i < elevationProfile.length; i++) {
-    const elevDiff = elevations[i] - elevations[i - 1];
-    const distDiff = distances[i] - distances[i - 1];
+    const elevDiff = elevations[i] - elevations[i - 1]; // in meters
+    // distances are cumulative, so we need the difference between consecutive points
+    let distDiff = distances[i] - distances[i - 1]; // in miles or km
     
+    // Convert distance to meters for grade calculation (elevation is in meters)
     if (distDiff > 0) {
-      const grade = (elevDiff / distDiff) * 100;
-      grades.push(grade);
-      maxGrade = Math.max(maxGrade, Math.abs(grade));
+      // Convert distance from miles/km to meters
+      const distDiffMeters = isImperial ? distDiff * 1609.34 : distDiff * 1000;
+      
+      // Only calculate grade if we have a meaningful distance difference (min 10 meters)
+      if (distDiffMeters > 10) {
+        const grade = (elevDiff / distDiffMeters) * 100;
+        // Cap grade at reasonable maximum (25% is very steep for cycling)
+        const cappedGrade = Math.max(-25, Math.min(25, grade));
+        grades.push(cappedGrade);
+        maxGrade = Math.max(maxGrade, Math.abs(cappedGrade));
+      }
     }
   }
   
