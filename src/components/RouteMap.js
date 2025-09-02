@@ -46,8 +46,8 @@ const RouteMap = ({ trackPoints, mapHeight = 400 }) => {
     return (
       <Center style={{ height: mapHeight }}>
         <Stack align="center">
-          <Loader size="sm" />
-          <Text size="sm" c="dimmed">Loading route...</Text>
+          <Text size="sm" c="dimmed">No GPS data available for this route</Text>
+          <Text size="xs" c="dimmed">This route was imported from Strava without detailed GPS coordinates</Text>
         </Stack>
       </Center>
     );

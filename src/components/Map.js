@@ -70,7 +70,10 @@ const MapComponent = () => {
         const { data, error } = await supabase
           .from('routes')
           .select('*')
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .order('recorded_at', { ascending: false, nullsLast: true })
+          .order('created_at', { ascending: false })
+          .limit(10);
 
         if (error) throw error;
         setRoutes(data);

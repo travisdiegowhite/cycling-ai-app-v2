@@ -136,28 +136,47 @@ const StravaIntegration = () => {
 
     try {
       setImporting(true);
-      setImportProgress(0);
+      setImportProgress(10);
 
       console.log('🚴 Starting Strava activity import...', { importType, customLimit });
       
+      // First, get existing Strava IDs from our database to avoid duplicates
+      const existingStravaIds = await getExistingStravaIds();
+      console.log(`📋 Found ${existingStravaIds.size} existing activities in database`);
+      
       let allActivities = [];
+      let afterDate = null;
       
       if (importType === 'all') {
-        // Import ALL activities with pagination
+        // Import ALL activities with pagination (skip duplicates during fetch)
         console.log('🔄 Importing ALL historical activities...');
-        allActivities = await importAllActivities();
+        allActivities = await importAllActivitiesOptimized(existingStravaIds);
       } else {
-        // Get recent activities from Strava (default behavior)
+        // For recent imports, use the latest activity date as starting point
+        afterDate = await getLatestActivityDate();
+        if (afterDate) {
+          console.log(`📅 Fetching activities after: ${afterDate.toISOString()}`);
+        } else {
+          // Fallback to last 6 months if no existing activities
+          afterDate = new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000);
+          console.log(`📅 No existing activities found, fetching from: ${afterDate.toISOString()}`);
+        }
+        
         const limit = customLimit || 50;
         allActivities = await stravaService.getActivities({
           perPage: limit,
-          // Only import cycling activities from the last 6 months for recent import
-          after: importType === 'recent' ? new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000) : null
+          after: Math.floor(afterDate.getTime() / 1000) // Strava expects Unix timestamp
         });
+        
+        // Filter out existing activities
+        allActivities = allActivities.filter(activity => !existingStravaIds.has(activity.id.toString()));
+        console.log(`📊 After filtering duplicates: ${allActivities.length} new activities to process`);
       }
 
+      setImportProgress(30);
+
       // Process all the fetched activities  
-      const { imported, skipped } = await processActivities(allActivities, importType);
+      const { imported, skipped } = await processActivities(allActivities, importType, existingStravaIds);
       
       // Record the import
       const { error: importRecordError } = await supabase
@@ -174,11 +193,16 @@ const StravaIntegration = () => {
       }
 
       setImportProgress(100);
-      const message = importType === 'all' 
-        ? `Successfully imported ${imported} activities from your entire Strava history! (${skipped} skipped as duplicates)`
-        : `Successfully imported ${imported} activities! (${skipped} skipped as duplicates)`;
       
-      toast.success(message);
+      if (imported === 0 && skipped === 0) {
+        toast.info('No new activities found to import');
+      } else {
+        const message = importType === 'all' 
+          ? `Successfully imported ${imported} new activities from your entire Strava history! (${skipped} skipped as duplicates)`
+          : `Successfully imported ${imported} new activities! (${skipped} skipped as duplicates)`;
+        
+        toast.success(message);
+      }
       
       await checkLastImport();
 
@@ -191,10 +215,54 @@ const StravaIntegration = () => {
     }
   };
   
-  // Import ALL activities with pagination
-  const importAllActivities = async () => {
-    console.log('🔄 Starting complete historical import...');
-    let allActivities = [];
+  // Get existing Strava IDs from database
+  const getExistingStravaIds = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('routes')
+        .select('strava_id')
+        .eq('user_id', user.id)
+        .not('strava_id', 'is', null);
+
+      if (error) {
+        console.error('Error fetching existing Strava IDs:', error);
+        return new Set();
+      }
+
+      return new Set(data.map(route => route.strava_id.toString()));
+    } catch (error) {
+      console.error('Error getting existing Strava IDs:', error);
+      return new Set();
+    }
+  };
+
+  // Get the date of the latest activity in our database
+  const getLatestActivityDate = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('routes')
+        .select('recorded_at')
+        .eq('user_id', user.id)
+        .not('strava_id', 'is', null)
+        .order('recorded_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Error fetching latest activity date:', error);
+        return null;
+      }
+
+      return data.length > 0 ? new Date(data[0].recorded_at) : null;
+    } catch (error) {
+      console.error('Error getting latest activity date:', error);
+      return null;
+    }
+  };
+
+  // Optimized import for all activities that skips known duplicates
+  const importAllActivitiesOptimized = async (existingStravaIds) => {
+    console.log('🔄 Starting optimized complete historical import...');
+    let allNewActivities = [];
     let page = 1;
     const perPage = 200; // Max allowed by Strava API
     let hasMoreData = true;
@@ -212,15 +280,28 @@ const StravaIntegration = () => {
           hasMoreData = false;
           console.log('✅ No more activities found - import complete!');
         } else {
-          allActivities = allActivities.concat(pageActivities);
-          console.log(`📈 Fetched ${pageActivities.length} activities (total: ${allActivities.length})`);
+          // Filter out activities we already have
+          const newActivities = pageActivities.filter(activity => 
+            !existingStravaIds.has(activity.id.toString())
+          );
+          
+          allNewActivities = allNewActivities.concat(newActivities);
+          console.log(`📈 Fetched ${pageActivities.length} activities, ${newActivities.length} new (total new: ${allNewActivities.length})`);
+          
           page++;
           
           // Update progress during fetch
-          setImportProgress(Math.min((allActivities.length / 500) * 30, 30)); // Reserve 30% for fetching
+          setImportProgress(Math.min(10 + (page / 50) * 20, 30)); // 10-30% for fetching
           
           // Rate limiting - pause between requests to avoid hitting API limits
           await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+          
+          // If we haven't found any new activities in this page and we have some existing data,
+          // we might have reached activities we already imported
+          if (newActivities.length === 0 && existingStravaIds.size > 0) {
+            console.log('🔍 No new activities found in this batch, likely reached existing data');
+            // Continue for a few more pages to be sure, but if next few are also empty, stop
+          }
         }
         
         // Safety check to prevent infinite loops
@@ -231,17 +312,23 @@ const StravaIntegration = () => {
         }
       }
       
-      console.log(`🎯 Total activities fetched: ${allActivities.length}`);
-      return allActivities;
+      console.log(`🎯 Total NEW activities fetched: ${allNewActivities.length}`);
+      return allNewActivities;
       
     } catch (error) {
-      console.error('Error during historical import:', error);
+      console.error('Error during optimized historical import:', error);
       throw error;
     }
   };
+
+  // Import ALL activities with pagination (legacy function - kept for compatibility)
+  const importAllActivities = async () => {
+    const existingStravaIds = await getExistingStravaIds();
+    return await importAllActivitiesOptimized(existingStravaIds);
+  };
   
   // Extract activity processing logic for reuse
-  const processActivities = async (activities, importType = 'import') => {
+  const processActivities = async (activities, importType = 'import', existingStravaIds = new Set()) => {
     const cyclingActivities = activities.filter(activity => 
       activity.type === 'Ride' || activity.type === 'VirtualRide'
     );
@@ -254,7 +341,7 @@ const StravaIntegration = () => {
 
     let imported = 0;
     let skipped = 0;
-    const baseProgress = importType === 'all' ? 30 : 0; // Account for fetching progress in full import
+    const baseProgress = importType === 'all' ? 30 : 30; // Account for fetching progress
 
     for (let i = 0; i < cyclingActivities.length; i++) {
       const activity = cyclingActivities[i];
@@ -262,19 +349,9 @@ const StravaIntegration = () => {
       setImportProgress(progress);
 
       try {
-        // Check if activity already exists
-        const { data: existing, error: checkError } = await supabase
-          .from('routes')
-          .select('id')
-          .eq('strava_id', activity.id)
-          .eq('user_id', user.id)
-          .maybeSingle(); // Use maybeSingle() instead of single() to handle no results gracefully
-          
-        if (checkError) {
-          console.warn(`Error checking for existing activity ${activity.id}:`, checkError);
-        }
-
-        if (existing) {
+        // Check if activity already exists using the pre-fetched set (much faster than DB query)
+        if (existingStravaIds.has(activity.id.toString())) {
+          console.log(`⏭️ Skipping existing activity: ${activity.name} (${activity.id})`);
           skipped++;
           continue;
         }
@@ -513,9 +590,9 @@ const StravaIntegration = () => {
             <Card withBorder p="md">
               <Group justify="space-between" mb="md">
                 <div>
-                  <Text size="md" fw={600}>Import Activities</Text>
+                  <Text size="md" fw={600}>Import New Activities</Text>
                   <Text size="sm" c="dimmed">
-                    Import your cycling activities for route analysis
+                    Only imports activities that haven't been downloaded yet
                   </Text>
                 </div>
                 
@@ -527,7 +604,7 @@ const StravaIntegration = () => {
                     disabled={importing}
                     variant="filled"
                   >
-                    {importing ? 'Importing...' : 'Import Recent (50)'}
+                    {importing ? 'Importing...' : 'Import New Activities'}
                   </Button>
                   
                   <Button 
@@ -538,7 +615,7 @@ const StravaIntegration = () => {
                     variant="outline"
                     color="orange"
                   >
-                    {importing ? 'Importing...' : 'Import All History'}
+                    {importing ? 'Importing...' : 'Import All Missing'}
                   </Button>
                 </Group>
               </Group>

@@ -52,11 +52,12 @@ const RideAnalysis = () => {
       try {
         console.log('Fetching routes for user:', user.id);
         
-        // Get routes from fresh schema
+        // Get routes from fresh schema, ordered by actual ride date
         const { data: routesData, error: routesError } = await supabase
           .from('routes')
           .select('*')
           .eq('user_id', user.id)
+          .order('recorded_at', { ascending: false, nullsLast: true })
           .order('created_at', { ascending: false });
 
         if (routesError) {
@@ -107,6 +108,12 @@ const RideAnalysis = () => {
         
       if (countError) throw countError;
       console.log('Total track points for route:', count);
+
+      if (count === 0) {
+        console.log('No track points found for this route (likely imported from Strava without GPS data)');
+        setRouteTrackPoints([]);
+        return [];
+      }
 
       // Try to load all track points in batches if needed
       let allTrackPoints = [];
@@ -168,7 +175,8 @@ const RideAnalysis = () => {
   const filteredRoutes = routes.filter(route => {
     if (timeFilter === 'all') return true;
     
-    const routeDate = new Date(route.created_at);
+    // Use recorded_at (actual ride date) instead of created_at (import date)
+    const routeDate = new Date(route.recorded_at || route.created_at);
     const now = new Date();
     
     switch (timeFilter) {
@@ -383,7 +391,7 @@ const RideAnalysis = () => {
                   <div>
                     <Text fw={500} size="sm">{route.name || 'Unnamed Route'}</Text>
                     <Text size="xs" c="dimmed">
-                      {dayjs(route.created_at).format('MMM D, YYYY')}
+                      {dayjs(route.recorded_at || route.created_at).format('MMM D, YYYY')}
                     </Text>
                   </div>
                   <Group gap="md">
@@ -429,7 +437,7 @@ const RideAnalysis = () => {
             <div>
               <Text fw={500}>{selectedRoute?.name || 'Route Map'}</Text>
               <Text size="xs" c="dimmed">
-                {selectedRoute && new Date(selectedRoute.created_at).toLocaleDateString()}
+                {selectedRoute && new Date(selectedRoute.recorded_at || selectedRoute.created_at).toLocaleDateString()}
               </Text>
             </div>
           </Group>

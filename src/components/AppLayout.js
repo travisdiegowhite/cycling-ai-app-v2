@@ -13,7 +13,7 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, BarChart3, Activity, Sparkles } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, BarChart3, Activity, Sparkles, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -105,6 +105,16 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           </Button>
 
           <Button
+            variant={activePage === 'route-builder' ? 'filled' : 'subtle'}
+            leftSection={<Plus size={18} />}
+            onClick={() => handleNavigation('route-builder', '/route-builder')}
+            justify="flex-start"
+            fullWidth
+          >
+            Route Builder
+          </Button>
+
+          <Button
             variant={activePage === 'upload' ? 'filled' : 'subtle'}
             leftSection={<Upload size={18} />}
             onClick={() => handleNavigation('upload', '/upload')}
@@ -121,7 +131,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             justify="flex-start"
             fullWidth
           >
-            Route Builder
+            View Routes
           </Button>
 
           <Button
