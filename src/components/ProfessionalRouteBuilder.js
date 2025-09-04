@@ -77,11 +77,11 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildLineString, polylineDistance } from '../utils/geo';
-import { getElevationData, calculateElevationMetrics } from '../utils/elevation';
 import { pointsToGPX, parseGPX } from '../utils/gpx';
 import { supabase } from '../supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnits } from '../utils/units';
+import { useRouteManipulation } from '../hooks/useRouteManipulation';
 
 /**
  * Simple SVG Elevation Chart Component
@@ -330,6 +330,41 @@ const ProfessionalRouteBuilder = forwardRef(({
     { value: 'terrain', label: 'Terrain', url: 'mapbox://styles/mapbox/outdoors-v12' },
   ];
   
+  // === Route Manipulation Functions ===
+  const {
+    addWaypoint,
+    snapToRoads,
+    fetchElevation,
+    clearRoute,
+    undo,
+    redo,
+    reverseRoute,
+    removeWaypoint,
+  } = useRouteManipulation({
+    waypoints,
+    setWaypoints,
+    history,
+    setHistory,
+    historyIndex,
+    setHistoryIndex,
+    selectedWaypoint,
+    setSelectedWaypoint,
+    snappedRoute,
+    setSnappedRoute,
+    elevationProfile,
+    setElevationProfile,
+    elevationStats,
+    setElevationStats,
+    routingProfile,
+    snapping,
+    setSnapping,
+    snapProgress,
+    setSnapProgress,
+    error,
+    setError,
+    useImperial,
+  });
+  
   // === Keyboard Shortcuts ===
   useHotkeys([
     ['mod+Z', () => undo()],
@@ -409,147 +444,6 @@ const ProfessionalRouteBuilder = forwardRef(({
     fetchSavedRoutes();
   }, [fetchSavedRoutes]);
   
-  // === Add Waypoint ===
-  const addWaypoint = useCallback((lngLat) => {
-    const newWaypoint = {
-      id: `wp_${Date.now()}`,
-      position: [lngLat.lng, lngLat.lat],
-      type: waypoints.length === 0 ? 'start' : 'end',
-      name: waypoints.length === 0 ? 'Start' : `Waypoint ${waypoints.length}`,
-    };
-    
-    const updatedWaypoints = [...waypoints];
-    if (updatedWaypoints.length > 0) {
-      updatedWaypoints[updatedWaypoints.length - 1].type = 'waypoint';
-    }
-    updatedWaypoints.push(newWaypoint);
-    
-    setWaypoints(updatedWaypoints);
-    setHistory([...history.slice(0, historyIndex + 1), waypoints]);
-    setHistoryIndex(historyIndex + 1);
-  }, [waypoints, history, historyIndex]);
-  
-  // === Snap to Roads using Mapbox Directions API ===
-  const snapToRoads = useCallback(async () => {
-    if (waypoints.length < 2) {
-      toast.error('Need at least 2 waypoints');
-      return;
-    }
-    
-    setSnapping(true);
-    setSnapProgress(0);
-    setError(null);
-    
-    try {
-      const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
-      if (!mapboxToken) {
-        throw new Error('Mapbox token not configured');
-      }
-
-      // Use Mapbox Directions API for proper road snapping
-      const coordinates = waypoints.map(wp => `${wp.position[0]},${wp.position[1]}`).join(';');
-      const profile = routingProfile === 'cycling' ? 'cycling' : 
-                      routingProfile === 'walking' ? 'walking' : 'driving';
-      
-      const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinates}?` +
-        `geometries=geojson&` +
-        `overview=full&` +
-        `steps=false&` +
-        `annotations=distance,duration&` +
-        `access_token=${mapboxToken}`;
-      
-      setSnapProgress(0.3);
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Directions API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setSnapProgress(0.6);
-      
-      if (!data.routes || !data.routes.length) {
-        throw new Error('No routes found');
-      }
-      
-      const route = data.routes[0];
-      const snappedCoordinates = route.geometry.coordinates;
-      
-      setSnappedRoute({
-        coordinates: snappedCoordinates,
-        distance: route.distance || 0,
-        duration: route.duration || 0,
-        confidence: 1.0,
-      });
-      
-      setSnapProgress(0.8);
-      
-      // Fetch elevation data
-      await fetchElevation(snappedCoordinates);
-      
-      setSnapProgress(1.0);
-      toast.success('Route snapped to roads successfully!');
-      
-    } catch (err) {
-      console.error('Route snapping failed:', err);
-      toast.error(`Failed to snap route: ${err.message}`);
-      setError(err.message);
-    } finally {
-      setSnapping(false);
-      setSnapProgress(0);
-    }
-  }, [waypoints, routingProfile]);
-  
-  // === Fetch Elevation Profile ===
-  const fetchElevation = useCallback(async (coordinates) => {
-    try {
-      if (!coordinates || coordinates.length < 2) return;
-      
-      const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
-      
-      // Use the new elevation data fetching with real terrain data
-      const elevationData = await getElevationData(coordinates, mapboxToken);
-      
-      // Get starting elevation to calculate relative changes
-      const startingElevation = elevationData[0]?.elevation || 0;
-      
-      // Calculate cumulative distance for each point
-      let cumulativeDistance = 0;
-      const elevationProfile = elevationData.map((point, index) => {
-        if (index > 0) {
-          const [prevLon, prevLat] = coordinates[index - 1];
-          const [currLon, currLat] = coordinates[index];
-          const segmentDistance = polylineDistance([[prevLon, prevLat], [currLon, currLat]]) * 1000; // Convert to meters
-          cumulativeDistance += segmentDistance;
-        }
-        
-        // Calculate relative elevation from starting point (keep in meters for calculations)
-        const relativeElevationMeters = point.elevation - startingElevation;
-        
-        // Convert distance to current units for chart display (meters to miles/km)
-        const convertedDistance = useImperial ? cumulativeDistance * 0.000621371 : cumulativeDistance / 1000;
-        
-        return {
-          coordinate: [point.lon, point.lat],
-          elevation: relativeElevationMeters, // Keep in meters for calculations
-          distance: convertedDistance, // Converted for display
-          absoluteElevation: point.elevation // Keep absolute elevation in meters
-        };
-      });
-      
-      console.log('Setting elevation profile with', elevationProfile.length, 'points');
-      setElevationProfile(elevationProfile);
-      
-      // Calculate elevation stats using new metrics function
-      const stats = calculateElevationMetrics(elevationProfile, useImperial);
-      console.log('Elevation stats calculated:', stats);
-      setElevationStats(stats);
-      
-    } catch (err) {
-      console.error('Failed to fetch elevation:', err);
-    }
-  }, [useImperial]);
-  
   // === Re-fetch elevation when units change ===
   useEffect(() => {
     if (snappedRoute && snappedRoute.coordinates && snappedRoute.coordinates.length > 0) {
@@ -565,60 +459,7 @@ const ProfessionalRouteBuilder = forwardRef(({
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [waypoints.length, autoRoute]); // Intentionally limited deps
-  
-  // === Clear Route ===
-  const clearRoute = useCallback(() => {
-    setWaypoints([]);
-    setSnappedRoute(null);
-    setElevationProfile([]);
-    setElevationStats(null);
-    setError(null);
-    setHistory([]);
-    setHistoryIndex(-1);
-    setSelectedWaypoint(null);
-  }, []);
-  
-  // === Undo/Redo ===
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      setHistoryIndex(historyIndex - 1);
-      setWaypoints(history[historyIndex - 1]);
-    }
-  }, [historyIndex, history]);
-  
-  const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1);
-      setWaypoints(history[historyIndex + 1]);
-    }
-  }, [historyIndex, history]);
-  
-  // === Reverse Route ===
-  const reverseRoute = useCallback(() => {
-    const reversed = [...waypoints].reverse();
-    if (reversed.length > 0) {
-      reversed[0].type = 'start';
-      reversed[reversed.length - 1].type = 'end';
-      reversed.slice(1, -1).forEach(wp => wp.type = 'waypoint');
-    }
-    setWaypoints(reversed);
-    toast.success('Route reversed');
-  }, [waypoints]);
-  
-  // === Remove Waypoint ===
-  const removeWaypoint = useCallback((waypointId) => {
-    const filtered = waypoints.filter(wp => wp.id !== waypointId);
-    if (filtered.length > 0) {
-      filtered[0].type = 'start';
-      if (filtered.length > 1) {
-        filtered[filtered.length - 1].type = 'end';
-        filtered.slice(1, -1).forEach(wp => wp.type = 'waypoint');
-      }
-    }
-    setWaypoints(filtered);
-    setSelectedWaypoint(null);
-  }, [waypoints]);
+  }, [waypoints.length, autoRoute, snapToRoads]);
   
   // === Export GPX ===
   const exportGPX = useCallback(() => {
