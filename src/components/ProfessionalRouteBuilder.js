@@ -309,6 +309,93 @@ const ProfessionalRouteBuilder = forwardRef(({
   const [hoveredWaypoint, setHoveredWaypoint] = useState(null);
   const [mapStyle, setMapStyle] = useState('streets');
   const [showGrid, setShowGrid] = useState(false);
+  const [showCyclingOverlay, setShowCyclingOverlay] = useState(false);
+  const [cyclingData, setCyclingData] = useState(null);
+  const [fetchTimeout, setFetchTimeout] = useState(null);
+  const [loadingCyclingData, setLoadingCyclingData] = useState(false);
+
+  // Fetch cycling infrastructure data from OpenStreetMap (optimized)
+  const fetchCyclingData = useCallback(async (bounds, zoom) => {
+    if (!bounds || zoom < 12) return; // Only fetch at zoom 12+
+    
+    setLoadingCyclingData(true);
+    
+    const { north, south, east, west } = bounds;
+    
+    // Calculate area to limit query size
+    const area = (north - south) * (east - west);
+    if (area > 0.01) { // Limit to small areas only
+      console.log('Area too large for cycling data fetch');
+      return;
+    }
+    
+    // Simplified query focusing on major cycling infrastructure only
+    const overpassQuery = `
+      [out:json][timeout:10];
+      (
+        way["highway"="cycleway"](${south},${west},${north},${east});
+        way["highway"~"^(primary|secondary|tertiary)$"]["cycleway"~"^(lane|track)$"](${south},${west},${north},${east});
+        way["bicycle"="designated"]["highway"!~"^(footway|path|service)$"](${south},${west},${north},${east});
+      );
+      out geom;
+    `;
+    
+    try {
+      const response = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: overpassQuery
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch cycling data');
+      
+      const data = await response.json();
+      
+      // Limit number of features to prevent performance issues
+      const limitedElements = data.elements.slice(0, 500);
+      
+      // Convert OSM data to GeoJSON
+      const features = limitedElements
+        .filter(element => element.type === 'way' && element.geometry && element.geometry.length > 1)
+        .map(way => ({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: way.geometry.map(node => [node.lon, node.lat])
+          },
+          properties: {
+            highway: way.tags?.highway,
+            cycleway: way.tags?.cycleway,
+            bicycle: way.tags?.bicycle,
+            surface: way.tags?.surface
+          }
+        }));
+      
+      console.log(`Loaded ${features.length} cycling features`);
+      
+      setCyclingData({
+        type: 'FeatureCollection',
+        features
+      });
+      
+    } catch (error) {
+      console.error('Error fetching cycling data:', error);
+      toast.error('Failed to load cycling infrastructure data');
+    } finally {
+      setLoadingCyclingData(false);
+    }
+  }, []);
+
+  // Debounced cycling data fetch to prevent excessive API calls
+  const debouncedFetchCyclingData = useCallback((bounds, zoom) => {
+    if (fetchTimeout) {
+      clearTimeout(fetchTimeout);
+    }
+    const newTimeout = setTimeout(() => {
+      fetchCyclingData(bounds, zoom);
+    }, 500); // Wait 500ms after user stops moving
+    setFetchTimeout(newTimeout);
+  }, [fetchCyclingData, fetchTimeout]);
   const [showWeather, setShowWeather] = useState(false);
   const [showElevation, setShowElevation] = useState(true);
   const [showElevationChart, setShowElevationChart] = useState(false);
@@ -635,6 +722,25 @@ const ProfessionalRouteBuilder = forwardRef(({
       }
     }
   }, [mapStyle, mapRef, inline]);
+
+  // === Fetch cycling data when overlay is enabled ===
+  useEffect(() => {
+    if (showCyclingOverlay && mapRef?.current) {
+      const map = mapRef.current.getMap();
+      const bounds = map.getBounds();
+      const zoom = map.getZoom();
+      if (bounds) {
+        fetchCyclingData({
+          north: bounds.getNorth(),
+          south: bounds.getSouth(),
+          east: bounds.getEast(),
+          west: bounds.getWest()
+        }, zoom);
+      }
+    } else if (!showCyclingOverlay) {
+      setCyclingData(null);
+    }
+  }, [showCyclingOverlay, fetchCyclingData]);
   
   // === Inline mode - return just map elements ===
   if (inline) {
@@ -657,6 +763,45 @@ const ProfessionalRouteBuilder = forwardRef(({
                 'line-width': 0.5,
                 'line-opacity': 0.1,
               }}
+            />
+          </Source>
+        )}
+        
+        {/* Cycling Infrastructure Overlay */}
+        {showCyclingOverlay && cyclingData && (
+          <Source
+            id="cycling-data-inline"
+            type="geojson"
+            data={cyclingData}
+          >
+            {/* Black border layer */}
+            <Layer
+              id="cycling-border-inline"
+              type="line"
+              paint={{
+                'line-color': '#000000',
+                'line-width': 3,
+                'line-opacity': 0.5,
+                'line-dasharray': [3, 2]
+              }}
+              beforeId="route-builder-line"
+            />
+            {/* Colored cycling lanes on top */}
+            <Layer
+              id="cycling-lanes-inline"
+              type="line"
+              paint={{
+                'line-color': [
+                  'case',
+                  ['==', ['get', 'highway'], 'cycleway'], '#ff8c00',
+                  ['==', ['get', 'bicycle'], 'designated'], '#3b82f6', 
+                  '#fb7185'
+                ],
+                'line-width': 2,
+                'line-opacity': 0.9,
+                'line-dasharray': [3, 2]
+              }}
+              beforeId="route-builder-line"
             />
           </Source>
         )}
@@ -1189,6 +1334,53 @@ const ProfessionalRouteBuilder = forwardRef(({
                         />
                         
                         <Switch
+                          label={`Show cycling infrastructure ${loadingCyclingData ? '(loading...)' : ''}`}
+                          checked={showCyclingOverlay}
+                          onChange={(e) => setShowCyclingOverlay(e.currentTarget.checked)}
+                          size="sm"
+                          disabled={loadingCyclingData}
+                        />
+                        
+                        {/* Cycling Infrastructure Legend */}
+                        {showCyclingOverlay && (
+                          <Card p="xs" style={{ marginTop: '8px', backgroundColor: 'rgba(255,255,255,0.95)' }}>
+                            <Text size="xs" fw={600} mb="xs">Cycling Infrastructure</Text>
+                            <Stack gap={4}>
+                              <Group gap="xs" align="center">
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '3px', 
+                                  backgroundColor: '#ff8c00',
+                                  borderRadius: '2px',
+                                  background: `repeating-linear-gradient(to right, #ff8c00 0px, #ff8c00 6px, transparent 6px, transparent 10px)`
+                                }} />
+                                <Text size="xs" c="dimmed">Dedicated Cycleways</Text>
+                              </Group>
+                              <Group gap="xs" align="center">
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '3px', 
+                                  backgroundColor: '#3b82f6',
+                                  borderRadius: '2px',
+                                  background: `repeating-linear-gradient(to right, #3b82f6 0px, #3b82f6 6px, transparent 6px, transparent 10px)`
+                                }} />
+                                <Text size="xs" c="dimmed">Bicycle Designated</Text>
+                              </Group>
+                              <Group gap="xs" align="center">
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '3px', 
+                                  backgroundColor: '#fb7185',
+                                  borderRadius: '2px',
+                                  background: `repeating-linear-gradient(to right, #fb7185 0px, #fb7185 6px, transparent 6px, transparent 10px)`
+                                }} />
+                                <Text size="xs" c="dimmed">Other Cycle Routes</Text>
+                              </Group>
+                            </Stack>
+                          </Card>
+                        )}
+                        
+                        <Switch
                           label="Show weather layer"
                           checked={showWeather}
                           onChange={(e) => setShowWeather(e.currentTarget.checked)}
@@ -1301,6 +1493,7 @@ const ProfessionalRouteBuilder = forwardRef(({
       {/* Map Container (for standalone mode) */}
       <div style={{ flex: 1, position: 'relative' }}>
         <Map
+          ref={mapRef}
           mapboxAccessToken={process.env.REACT_APP_MAPBOX_TOKEN}
           initialViewState={{
             longitude: -104.9903,
@@ -1312,6 +1505,18 @@ const ProfessionalRouteBuilder = forwardRef(({
           onClick={(e) => {
             if (activeMode === 'draw') {
               addWaypoint(e.lngLat);
+            }
+          }}
+          onMoveEnd={(e) => {
+            if (showCyclingOverlay) {
+              const bounds = e.target.getBounds();
+              const zoom = e.target.getZoom();
+              debouncedFetchCyclingData({
+                north: bounds.getNorth(),
+                south: bounds.getSouth(),
+                east: bounds.getEast(),
+                west: bounds.getWest()
+              }, zoom);
             }
           }}
           cursor={activeMode === 'draw' ? 'crosshair' : activeMode === 'edit' ? 'move' : 'grab'}
@@ -1338,6 +1543,45 @@ const ProfessionalRouteBuilder = forwardRef(({
                   'line-width': 0.5,
                   'line-opacity': 0.1,
                 }}
+              />
+            </Source>
+          )}
+          
+          {/* Cycling Infrastructure Overlay */}
+          {showCyclingOverlay && cyclingData && (
+            <Source
+              id="cycling-data"
+              type="geojson"
+              data={cyclingData}
+            >
+              {/* Black border layer */}
+              <Layer
+                id="cycling-border"
+                type="line"
+                paint={{
+                  'line-color': '#000000',
+                  'line-width': 3,
+                  'line-opacity': 0.5,
+                  'line-dasharray': [3, 2]
+                }}
+                beforeId="route-builder-line"
+              />
+              {/* Colored cycling lanes on top */}
+              <Layer
+                id="cycling-lanes"
+                type="line"
+                paint={{
+                  'line-color': [
+                    'case',
+                    ['==', ['get', 'highway'], 'cycleway'], '#ff8c00',
+                    ['==', ['get', 'bicycle'], 'designated'], '#3b82f6', 
+                    '#fb7185'
+                  ],
+                  'line-width': 2,
+                  'line-opacity': 0.9,
+                  'line-dasharray': [3, 2]
+                }}
+                beforeId="route-builder-line"
               />
             </Source>
           )}

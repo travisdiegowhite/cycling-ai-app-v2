@@ -699,8 +699,8 @@ const EnhancedRideAnalysis = () => {
                   <Title order={5} mb="md">Heart Rate Zones</Title>
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={performanceZones.hrZones}>
-                      <XAxis dataKey="name" fontSize={10} />
-                      <YAxis />
+                      <XAxis dataKey="name" fontSize={14} height={50} />
+                      <YAxis fontSize={14} width={60} />
                       <ChartTooltip formatter={(value) => [`${value} rides`, 'Count']} />
                       <Bar dataKey="count" fill="#ff6b6b" />
                     </BarChart>
@@ -723,8 +723,8 @@ const EnhancedRideAnalysis = () => {
                         }))
                       }
                     >
-                      <XAxis dataKey="speed" name="Speed" unit=" km/h" />
-                      <YAxis dataKey="power" name="Power" unit=" W" />
+                      <XAxis dataKey="speed" name="Speed" unit=" km/h" fontSize={14} height={60} />
+                      <YAxis dataKey="power" name="Power" unit=" W" fontSize={14} width={80} />
                       <ChartTooltip cursor={{ strokeDasharray: '3 3' }} />
                       <Scatter dataKey="power" fill="#ffd43b" />
                     </ScatterChart>
@@ -800,8 +800,8 @@ const EnhancedRideAnalysis = () => {
                 <Title order={5} mb="md">Monthly Distance Trend</Title>
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={monthlyTrends}>
-                    <XAxis dataKey="monthName" />
-                    <YAxis />
+                    <XAxis dataKey="monthName" fontSize={14} height={50} />
+                    <YAxis fontSize={14} width={80} />
                     <ChartTooltip formatter={(value) => [formatDistance(value), 'Distance']} />
                     <Area 
                       type="monotone" 
@@ -821,8 +821,8 @@ const EnhancedRideAnalysis = () => {
                     <Title order={5} mb="md">Speed Trend</Title>
                     <ResponsiveContainer width="100%" height={200}>
                       <LineChart data={monthlyTrends}>
-                        <XAxis dataKey="monthName" fontSize={10} />
-                        <YAxis />
+                        <XAxis dataKey="monthName" fontSize={14} height={50} />
+                        <YAxis fontSize={14} width={80} />
                         <ChartTooltip formatter={(value) => [formatSpeed(value), 'Avg Speed']} />
                         <Line 
                           type="monotone" 
@@ -840,8 +840,8 @@ const EnhancedRideAnalysis = () => {
                       <Title order={5} mb="md">Heart Rate Trend</Title>
                       <ResponsiveContainer width="100%" height={200}>
                         <LineChart data={monthlyTrends}>
-                          <XAxis dataKey="monthName" fontSize={10} />
-                          <YAxis />
+                          <XAxis dataKey="monthName" fontSize={14} height={50} />
+                          <YAxis fontSize={14} width={80} />
                           <ChartTooltip formatter={(value) => [`${Math.round(value)} bpm`, 'Avg HR']} />
                           <Line 
                             type="monotone" 

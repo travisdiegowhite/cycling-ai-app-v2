@@ -197,7 +197,7 @@ const ElevationProfileBar = ({
               <text 
                 x={padding} 
                 y={padding + 12} 
-                fontSize="11" 
+                fontSize="14" 
                 fill="#374151"
                 fontWeight="500"
               >
@@ -206,7 +206,7 @@ const ElevationProfileBar = ({
               <text 
                 x={padding} 
                 y={chartHeight - padding - 2} 
-                fontSize="11" 
+                fontSize="14" 
                 fill="#374151"
                 fontWeight="500"
               >
@@ -229,7 +229,7 @@ const ElevationProfileBar = ({
                   <text 
                     x={padding} 
                     y={chartHeight / 2 - 2} 
-                    fontSize="10" 
+                    fontSize="14" 
                     fill="#6b7280"
                   >
                     {formatElevation((minElevation + maxElevation) / 2)}

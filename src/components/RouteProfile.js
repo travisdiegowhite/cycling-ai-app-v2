@@ -263,14 +263,16 @@ const RouteProfile = ({ route, selectedRouteIndex = 0, routes = [] }) => {
                     dataKey="distance" 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: '#868e96', fontSize: 12 }}
+                    tick={{ fill: '#868e96', fontSize: 14 }}
                     tickFormatter={(value) => formatDistance(value, 1)}
+                    height={60}
                   />
                   <YAxis 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: '#868e96', fontSize: 12 }}
+                    tick={{ fill: '#868e96', fontSize: 14 }}
                     tickFormatter={(value) => formatElevation(value, 0)}
+                    width={80}
                   />
                   <Tooltip 
                     contentStyle={{

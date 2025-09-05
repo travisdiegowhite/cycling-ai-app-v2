@@ -97,7 +97,7 @@ const RouteElevationChart = ({ data, width = 800, height = 280, useImperial = tr
               x={-10}
               y={tick.y + 4}
               textAnchor="end"
-              fontSize="10"
+              fontSize="14"
               fill="#666"
             >
               {tick.elevation}{elevationUnit}
@@ -121,7 +121,7 @@ const RouteElevationChart = ({ data, width = 800, height = 280, useImperial = tr
               x={tick.x}
               y={chartHeight + 20}
               textAnchor="middle"
-              fontSize="10"
+              fontSize="14"
               fill="#666"
             >
               {tick.distance}{distanceUnit}
@@ -169,7 +169,7 @@ const RouteElevationChart = ({ data, width = 800, height = 280, useImperial = tr
         x={margin.left + chartWidth / 2}
         y={height - 5}
         textAnchor="middle"
-        fontSize="12"
+        fontSize="14"
         fill="#333"
         fontWeight="600"
       >
@@ -179,7 +179,7 @@ const RouteElevationChart = ({ data, width = 800, height = 280, useImperial = tr
         x={15}
         y={margin.top + chartHeight / 2}
         textAnchor="middle"
-        fontSize="12"
+        fontSize="14"
         fill="#333"
         fontWeight="600"
         transform={`rotate(-90 15 ${margin.top + chartHeight / 2})`}

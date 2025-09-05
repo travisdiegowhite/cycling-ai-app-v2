@@ -13,7 +13,7 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, BarChart3, Activity, Sparkles, Plus } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -132,16 +132,6 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             fullWidth
           >
             View Routes
-          </Button>
-
-          <Button
-            variant={activePage === 'analysis' ? 'filled' : 'subtle'}
-            leftSection={<BarChart3 size={18} />}
-            onClick={() => handleNavigation('analysis', '/analysis')}
-            justify="flex-start"
-            fullWidth
-          >
-            Ride Analysis
           </Button>
 
           <Button

@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 // import dayjs from 'dayjs'; // Unused import removed
 import { useAuth } from '../contexts/AuthContext';
-import { useUnits, convertDistance, convertSpeed } from '../utils/units';
+import { useUnits } from '../utils/units';
 import { supabase } from '../supabase';
 import { 
   LineChart, 
@@ -53,8 +53,6 @@ import {
   BarChart, 
   Bar, 
   Tooltip as ChartTooltip,
-  ScatterChart,
-  Scatter,
   Area,
   AreaChart
 } from 'recharts';
@@ -66,7 +64,7 @@ import ActivityHeatmap from './ActivityHeatmap';
 
 const SmartRideAnalysis = () => {
   const { user } = useAuth();
-  const { formatDistance, formatElevation, formatSpeed, speedUnit, distanceUnit, useImperial } = useUnits();
+  const { formatDistance, formatElevation, formatSpeed } = useUnits();
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState('all');
@@ -183,9 +181,9 @@ const SmartRideAnalysis = () => {
       
       const { data, error } = await supabase
         .from('track_points')
-        .select('lat, lng, elevation, sequence_num')
+        .select('latitude, longitude, elevation, point_index')
         .eq('route_id', routeId)
-        .order('sequence_num');
+        .order('point_index');
 
       if (error) throw error;
       console.log('Track points loaded:', data?.length);
@@ -250,33 +248,73 @@ const SmartRideAnalysis = () => {
     const routesWithPower = stravaRoutes.filter(r => r.average_watts && r.average_watts > 0);
     const routesWithEnergy = stravaRoutes.filter(r => r.kilojoules && r.kilojoules > 0);
 
-    // Smart analysis metrics
-    const weeklyDistance = base.totalDistance / Math.max(1, Math.ceil((new Date() - new Date(Math.min(...filteredRoutes.map(r => new Date(r.created_at).getTime())))) / (7 * 24 * 60 * 60 * 1000)));
+    // Smart analysis metrics with better error handling
+    let weeklyDistance = 0;
+    if (filteredRoutes.length > 0 && base.totalDistance > 0) {
+      try {
+        const dates = filteredRoutes.map(r => new Date(r.created_at).getTime()).filter(d => !isNaN(d));
+        if (dates.length > 0) {
+          const daysSinceFirst = Math.max(1, (new Date().getTime() - Math.min(...dates)) / (24 * 60 * 60 * 1000));
+          const weeks = Math.max(1, daysSinceFirst / 7);
+          weeklyDistance = base.totalDistance / weeks;
+        }
+      } catch (e) {
+        console.warn('Error calculating weekly distance:', e);
+        weeklyDistance = 0;
+      }
+    }
+    
     const consistencyScore = calculateConsistencyScore(filteredRoutes);
     const improvementTrend = calculateImprovementTrend(stravaRoutes);
     const diversityScore = calculateRouteDiversity(filteredRoutes);
     
+    // Advanced performance metrics
+    const weeklyTrainingStress = calculateWeeklyTrainingStress(stravaRoutes);
+    const intensityDistribution = calculateIntensityDistribution(stravaRoutes);
+    const efficiencyFactor = calculateEfficiencyFactor(stravaRoutes);
+    
     return {
       ...base,
       avgDistance: base.totalRoutes > 0 ? base.totalDistance / base.totalRoutes : 0,
-      weeklyDistance: isFinite(weeklyDistance) ? weeklyDistance : 0,
+      weeklyDistance: weeklyDistance,
       avgSpeed: routesWithSpeed.length > 0 
-        ? routesWithSpeed.reduce((sum, r) => sum + (r.average_speed * 3.6), 0) / routesWithSpeed.length // Convert m/s to km/h
+        ? routesWithSpeed.reduce((sum, r) => {
+            // Handle both cases: speed already in km/h or in m/s (needs conversion)
+            const speed = r.average_speed > 100 ? r.average_speed : r.average_speed * 3.6;
+            return sum + speed;
+          }, 0) / routesWithSpeed.length
         : null,
-      maxSpeed: Math.max(...stravaRoutes.map(r => (r.max_speed || 0) * 3.6), 0) || null, // Convert m/s to km/h
+      maxSpeed: (() => {
+        const maxSpeedValue = Math.max(...stravaRoutes.map(r => r.max_speed || 0), 0);
+        // Handle both cases: speed already in km/h or in m/s (needs conversion)
+        return maxSpeedValue > 0 ? (maxSpeedValue > 100 ? maxSpeedValue : maxSpeedValue * 3.6) : null;
+      })(),
       avgHeartRate: routesWithHR.length > 0
-        ? routesWithHR.reduce((sum, r) => sum + r.average_heartrate, 0) / routesWithHR.length
+        ? routesWithHR
+            .filter(r => r.average_heartrate >= 50 && r.average_heartrate <= 220) // Reasonable HR bounds
+            .reduce((sum, r, _, arr) => sum + r.average_heartrate / arr.length, 0) || null
         : null,
-      maxHeartRate: Math.max(...stravaRoutes.map(r => r.max_heartrate || 0), 0) || null,
+      maxHeartRate: (() => {
+        const maxHR = Math.max(...stravaRoutes.map(r => r.max_heartrate || 0), 0);
+        return (maxHR >= 50 && maxHR <= 220) ? maxHR : null; // Reasonable HR bounds
+      })(),
       avgPower: routesWithPower.length > 0
-        ? routesWithPower.reduce((sum, r) => sum + r.average_watts, 0) / routesWithPower.length
+        ? routesWithPower
+            .filter(r => r.average_watts >= 50 && r.average_watts <= 2000) // Reasonable power bounds
+            .reduce((sum, r, _, arr) => sum + r.average_watts / arr.length, 0) || null
         : null,
-      maxPower: Math.max(...stravaRoutes.map(r => r.max_watts || 0), 0) || null,
+      maxPower: (() => {
+        const maxPower = Math.max(...stravaRoutes.map(r => r.max_watts || 0), 0);
+        return (maxPower >= 50 && maxPower <= 2000) ? maxPower : null; // Reasonable power bounds
+      })(),
       totalEnergy: routesWithEnergy.reduce((sum, r) => sum + (r.kilojoules || 0), 0),
       // Smart metrics
       consistencyScore,
       improvementTrend,
       diversityScore,
+      weeklyTrainingStress,
+      intensityDistribution,
+      efficiencyFactor,
       dataQuality: {
         withSpeed: routesWithSpeed.length,
         withHR: routesWithHR.length,
@@ -854,26 +892,46 @@ const SmartRideAnalysis = () => {
             </Card>
           ) : (
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-              {/* Speed vs Distance Scatter */}
+              {/* Training Load Analysis */}
               <Card withBorder p="md">
-                <Title order={5} mb="md">Speed vs Distance</Title>
-                <ResponsiveContainer width="100%" height={250}>
-                  <ScatterChart
-                    data={stravaRoutes
-                      .filter(r => r.average_speed && r.distance_km)
-                      .map(r => ({
-                        speed: useImperial ? convertSpeed.kmhToMph(r.average_speed) : r.average_speed,
-                        distance: useImperial ? convertDistance.kmToMiles(r.distance_km) : r.distance_km,
-                        name: r.name
-                      }))
-                    }
-                  >
-                    <XAxis dataKey="distance" name="Distance" unit={` ${distanceUnit}`} />
-                    <YAxis dataKey="speed" name="Speed" unit={` ${speedUnit}`} />
-                    <ChartTooltip cursor={{ strokeDasharray: '3 3' }} />
-                    <Scatter dataKey="speed" fill="#228be6" />
-                  </ScatterChart>
-                </ResponsiveContainer>
+                <Title order={5} mb="md">Training Load Analysis</Title>
+                <Stack gap="md">
+                  <Group justify="space-between">
+                    <Text size="sm">Weekly Training Stress</Text>
+                    <Text fw={700} c={stats.weeklyTrainingStress > 500 ? 'red' : stats.weeklyTrainingStress > 300 ? 'orange' : 'green'}>
+                      {Math.round(stats.weeklyTrainingStress || 0)} TSS
+                    </Text>
+                  </Group>
+                  <Group justify="space-between">
+                    <Text size="sm">Intensity Distribution</Text>
+                    <Text fw={700}>
+                      {Math.round(stats.intensityDistribution?.low || 0)}% / {Math.round(stats.intensityDistribution?.moderate || 0)}% / {Math.round(stats.intensityDistribution?.high || 0)}%
+                    </Text>
+                  </Group>
+                  <Group justify="space-between">
+                    <Text size="sm">Consistency Score</Text>
+                    <Badge 
+                      color={stats.consistencyScore > 0.8 ? 'green' : stats.consistencyScore > 0.6 ? 'yellow' : 'red'}
+                      variant="filled"
+                    >
+                      {Math.round((stats.consistencyScore || 0) * 100)}%
+                    </Badge>
+                  </Group>
+                  <Group justify="space-between">
+                    <Text size="sm">Training Efficiency</Text>
+                    <Text fw={700} c={stats.efficiencyFactor > 1.0 ? 'green' : 'orange'}>
+                      {(stats.efficiencyFactor || 0).toFixed(2)}
+                    </Text>
+                  </Group>
+                  {stats.avgPower && stats.avgHeartRate && (
+                    <Group justify="space-between">
+                      <Text size="sm">Power/HR Ratio</Text>
+                      <Text fw={700}>
+                        {(stats.avgPower / stats.avgHeartRate).toFixed(1)} W/bpm
+                      </Text>
+                    </Group>
+                  )}
+                </Stack>
               </Card>
 
               {/* Heart Rate Distribution */}
@@ -884,8 +942,8 @@ const SmartRideAnalysis = () => {
                     <BarChart
                       data={createHRDistribution(stravaRoutes.filter(r => r.average_heartrate))}
                     >
-                      <XAxis dataKey="zone" />
-                      <YAxis />
+                      <XAxis dataKey="zone" fontSize={14} height={50} />
+                      <YAxis fontSize={14} width={60} />
                       <ChartTooltip />
                       <Bar dataKey="count" fill="#ff6b6b" />
                     </BarChart>
@@ -967,8 +1025,8 @@ const SmartRideAnalysis = () => {
                 <Title order={5} mb="md">Monthly Distance Progress</Title>
                 <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 200 : 300}>
                   <AreaChart data={monthlyTrends}>
-                    <XAxis dataKey="monthName" />
-                    <YAxis />
+                    <XAxis dataKey="monthName" fontSize={14} height={50} />
+                    <YAxis fontSize={14} width={80} />
                     <ChartTooltip formatter={(value) => [formatDistance(value), 'Distance']} />
                     <Area 
                       type="monotone" 
@@ -988,8 +1046,8 @@ const SmartRideAnalysis = () => {
                     <Title order={5} mb="md">Speed Progression</Title>
                     <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 150 : 200}>
                       <LineChart data={monthlyTrends}>
-                        <XAxis dataKey="monthName" fontSize={10} />
-                        <YAxis />
+                        <XAxis dataKey="monthName" fontSize={14} height={50} />
+                        <YAxis fontSize={14} width={80} />
                         <ChartTooltip formatter={(value) => [formatSpeed(value), 'Avg Speed']} />
                         <Line 
                           type="monotone" 
@@ -1015,8 +1073,8 @@ const SmartRideAnalysis = () => {
                       <Title order={5} mb="md">Heart Rate Trends</Title>
                       <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 150 : 200}>
                         <LineChart data={monthlyTrends}>
-                          <XAxis dataKey="monthName" fontSize={10} />
-                          <YAxis />
+                          <XAxis dataKey="monthName" fontSize={14} height={50} />
+                          <YAxis fontSize={14} width={80} />
                           <ChartTooltip formatter={(value) => [`${Math.round(value)} bpm`, 'Avg HR']} />
                           <Line 
                             type="monotone" 
@@ -1217,6 +1275,98 @@ function createHRDistribution(routesWithHR) {
   });
   
   return zones;
+}
+
+// Advanced performance calculation functions
+function calculateWeeklyTrainingStress(stravaRoutes) {
+  if (stravaRoutes.length === 0) return 0;
+  
+  // Calculate Training Stress Score (TSS) equivalent based on available data
+  // TSS = (duration in hours × intensity factor^2 × 100)
+  // For routes without power, estimate based on HR and duration
+  
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  
+  const recentRoutes = stravaRoutes.filter(r => 
+    new Date(r.recorded_at || r.created_at) >= oneWeekAgo
+  );
+  
+  let totalTSS = 0;
+  
+  recentRoutes.forEach(route => {
+    const duration = (route.duration_seconds || 0) / 3600; // Convert to hours
+    let intensityFactor = 0.7; // Default moderate intensity
+    
+    if (route.average_watts && route.max_watts) {
+      // Power-based TSS calculation
+      const normalizedPower = route.normalized_power || route.average_watts;
+      intensityFactor = normalizedPower / (route.max_watts * 0.95); // Estimate FTP as 95% of max
+    } else if (route.average_heartrate) {
+      // HR-based estimation
+      const maxHR = route.max_heartrate || 190; // Default max HR
+      const hrRatio = route.average_heartrate / maxHR;
+      intensityFactor = Math.min(hrRatio, 1.0);
+    }
+    
+    const routeTSS = duration * Math.pow(intensityFactor, 2) * 100;
+    totalTSS += Math.min(routeTSS, 300); // Cap individual ride TSS at 300
+  });
+  
+  return totalTSS;
+}
+
+function calculateIntensityDistribution(stravaRoutes) {
+  if (stravaRoutes.length === 0) return { low: 0, moderate: 0, high: 0 };
+  
+  let low = 0, moderate = 0, high = 0;
+  
+  stravaRoutes.forEach(route => {
+    let intensity = 'moderate'; // Default
+    
+    if (route.average_heartrate) {
+      const maxHR = route.max_heartrate || 190;
+      const hrRatio = route.average_heartrate / maxHR;
+      
+      if (hrRatio < 0.7) intensity = 'low';
+      else if (hrRatio > 0.85) intensity = 'high';
+      else intensity = 'moderate';
+    } else if (route.average_speed) {
+      // Speed-based intensity estimation
+      const speed = route.average_speed > 100 ? route.average_speed : route.average_speed * 3.6;
+      if (speed < 20) intensity = 'low';
+      else if (speed > 30) intensity = 'high';
+      else intensity = 'moderate';
+    }
+    
+    if (intensity === 'low') low++;
+    else if (intensity === 'moderate') moderate++;
+    else high++;
+  });
+  
+  const total = stravaRoutes.length;
+  return {
+    low: (low / total) * 100,
+    moderate: (moderate / total) * 100,
+    high: (high / total) * 100
+  };
+}
+
+function calculateEfficiencyFactor(stravaRoutes) {
+  const routesWithBothMetrics = stravaRoutes.filter(r => 
+    r.average_watts && r.average_heartrate && 
+    r.average_watts > 0 && r.average_heartrate > 0
+  );
+  
+  if (routesWithBothMetrics.length === 0) return 0;
+  
+  // Efficiency Factor = Normalized Power / Average Heart Rate
+  const efficiencySum = routesWithBothMetrics.reduce((sum, route) => {
+    const power = route.normalized_power || route.average_watts;
+    return sum + (power / route.average_heartrate);
+  }, 0);
+  
+  return efficiencySum / routesWithBothMetrics.length;
 }
 
 export default SmartRideAnalysis;
