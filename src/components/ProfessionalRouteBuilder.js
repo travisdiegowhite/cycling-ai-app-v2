@@ -64,7 +64,6 @@ import {
   Grid3x3,
   Cloud,
   Sun,
-  CloudRain,
   Wind,
   Eye,
   EyeOff,
@@ -439,7 +438,10 @@ const ProfessionalRouteBuilder = forwardRef(({
 
   // Fetch cycling infrastructure data from OpenStreetMap (optimized)
   const fetchCyclingData = useCallback(async (bounds, zoom) => {
-    if (!bounds || zoom < 12) return; // Only fetch at zoom 12+
+    if (!bounds || zoom < 12) {
+      console.log(`Cycling data fetch skipped - zoom level ${zoom} is below minimum of 12`);
+      return; // Only fetch at zoom 12+
+    }
     
     setLoadingCyclingData(true);
     
@@ -447,8 +449,10 @@ const ProfessionalRouteBuilder = forwardRef(({
     
     // Calculate area to limit query size
     const area = (north - south) * (east - west);
+    console.log(`Cycling data fetch - zoom: ${zoom}, area: ${area.toFixed(6)}`);
     if (area > 0.01) { // Limit to small areas only
-      console.log('Area too large for cycling data fetch');
+      console.log('Area too large for cycling data fetch - zoom in more');
+      setLoadingCyclingData(false);
       return;
     }
     
@@ -496,6 +500,10 @@ const ProfessionalRouteBuilder = forwardRef(({
       
       console.log(`Loaded ${features.length} cycling features`);
       
+      if (features.length === 0) {
+        console.log('No cycling infrastructure found in this area');
+      }
+      
       setCyclingData({
         type: 'FeatureCollection',
         features
@@ -503,7 +511,7 @@ const ProfessionalRouteBuilder = forwardRef(({
       
     } catch (error) {
       console.error('Error fetching cycling data:', error);
-      toast.error('Failed to load cycling infrastructure data');
+      toast.error(`Failed to load cycling infrastructure data: ${error.message}`);
     } finally {
       setLoadingCyclingData(false);
     }
@@ -519,8 +527,6 @@ const ProfessionalRouteBuilder = forwardRef(({
     }, 500); // Wait 500ms after user stops moving
     setFetchTimeout(newTimeout);
   }, [fetchCyclingData, fetchTimeout]);
-  const [showWeather, setShowWeather] = useState(false);
-  const [showElevation, setShowElevation] = useState(true);
   const [showElevationChart, setShowElevationChart] = useState(false);
   const [showSavedRoutes, setShowSavedRoutes] = useState(true);
   const [colorRouteByGrade, setColorRouteByGrade] = useState(false);
@@ -1092,7 +1098,6 @@ const ProfessionalRouteBuilder = forwardRef(({
                 'line-opacity': 0.5,
                 'line-dasharray': [3, 2]
               }}
-              beforeId="route-builder-line"
             />
             {/* Colored cycling lanes on top */}
             <Layer
@@ -1109,7 +1114,6 @@ const ProfessionalRouteBuilder = forwardRef(({
                 'line-opacity': 0.9,
                 'line-dasharray': [3, 2]
               }}
-              beforeId="route-builder-line"
             />
           </Source>
         )}
@@ -1135,7 +1139,6 @@ const ProfessionalRouteBuilder = forwardRef(({
                 'line-width': snappedRoute ? 7 : 5,
                 'line-opacity': 0.4,
               }}
-              beforeId="route-builder-line"
             />
           </Source>
         )}
@@ -1682,144 +1685,6 @@ const ProfessionalRouteBuilder = forwardRef(({
                       </Stack>
                     </Card>
                     
-                    <Card withBorder>
-                      <Text fw={500} size="sm" mb="sm">Display Options</Text>
-                      <Stack gap="xs">
-                        <Switch
-                          label="Show elevation profile"
-                          checked={showElevation}
-                          onChange={(e) => setShowElevation(e.currentTarget.checked)}
-                          size="sm"
-                        />
-                        
-                        <Switch
-                          label="Show grid overlay"
-                          checked={showGrid}
-                          onChange={(e) => setShowGrid(e.currentTarget.checked)}
-                          size="sm"
-                        />
-                        
-                        <Switch
-                          label={`Show cycling infrastructure ${loadingCyclingData ? '(loading...)' : ''}`}
-                          checked={showCyclingOverlay}
-                          onChange={(e) => setShowCyclingOverlay(e.currentTarget.checked)}
-                          size="sm"
-                          disabled={loadingCyclingData}
-                        />
-                        
-                        {/* Cycling Infrastructure Legend */}
-                        {showCyclingOverlay && (
-                          <Card p="xs" style={{ marginTop: '8px', backgroundColor: 'rgba(255,255,255,0.95)' }}>
-                            <Text size="xs" fw={600} mb="xs">Cycling Infrastructure</Text>
-                            <Stack gap={4}>
-                              <Group gap="xs" align="center">
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '3px', 
-                                  backgroundColor: '#ff8c00',
-                                  borderRadius: '2px',
-                                  background: `repeating-linear-gradient(to right, #ff8c00 0px, #ff8c00 6px, transparent 6px, transparent 10px)`
-                                }} />
-                                <Text size="xs" c="dimmed">Dedicated Cycleways</Text>
-                              </Group>
-                              <Group gap="xs" align="center">
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '3px', 
-                                  backgroundColor: '#3b82f6',
-                                  borderRadius: '2px',
-                                  background: `repeating-linear-gradient(to right, #3b82f6 0px, #3b82f6 6px, transparent 6px, transparent 10px)`
-                                }} />
-                                <Text size="xs" c="dimmed">Bicycle Designated</Text>
-                              </Group>
-                              <Group gap="xs" align="center">
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '3px', 
-                                  backgroundColor: '#fb7185',
-                                  borderRadius: '2px',
-                                  background: `repeating-linear-gradient(to right, #fb7185 0px, #fb7185 6px, transparent 6px, transparent 10px)`
-                                }} />
-                                <Text size="xs" c="dimmed">Other Cycle Routes</Text>
-                              </Group>
-                            </Stack>
-                          </Card>
-                        )}
-                        
-                        <Switch
-                          label="Show weather layer"
-                          checked={showWeather}
-                          onChange={(e) => setShowWeather(e.currentTarget.checked)}
-                          size="sm"
-                        />
-                        
-                        <Switch
-                          label="Color route by elevation grade"
-                          description="Visual gradient showing steep vs flat sections"
-                          checked={colorRouteByGrade}
-                          onChange={(e) => setColorRouteByGrade(e.currentTarget.checked)}
-                          size="sm"
-                          disabled={!elevationProfile || elevationProfile.length < 2}
-                        />
-                        
-                        {/* Grade Color Legend */}
-                        {colorRouteByGrade && elevationProfile && elevationProfile.length > 1 && (
-                          <Card p="xs" style={{ marginTop: '8px', backgroundColor: 'rgba(255,255,255,0.95)' }}>
-                            <Text size="xs" fw={600} mb="xs">Elevation Grade</Text>
-                            <Stack gap={2}>
-                              <Group gap="xs" align="center">
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '3px', 
-                                  backgroundColor: '#00ff00',
-                                  borderRadius: '2px'
-                                }} />
-                                <Text size="xs" c="dimmed">Flat (0-3%)</Text>
-                              </Group>
-                              <Group gap="xs" align="center">
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '3px', 
-                                  backgroundColor: '#7fff00',
-                                  borderRadius: '2px'
-                                }} />
-                                <Text size="xs" c="dimmed">Gentle (3-6%)</Text>
-                              </Group>
-                              <Group gap="xs" align="center">
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '3px', 
-                                  backgroundColor: '#ffff00',
-                                  borderRadius: '2px'
-                                }} />
-                                <Text size="xs" c="dimmed">Moderate (6-10%)</Text>
-                              </Group>
-                              <Group gap="xs" align="center">
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '3px', 
-                                  backgroundColor: '#ff7f00',
-                                  borderRadius: '2px'
-                                }} />
-                                <Text size="xs" c="dimmed">Steep (10-15%)</Text>
-                              </Group>
-                              <Group gap="xs" align="center">
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '3px', 
-                                  backgroundColor: '#ff0000',
-                                  borderRadius: '2px'
-                                }} />
-                                <Text size="xs" c="dimmed">Very Steep (&gt;15%)</Text>
-                              </Group>
-                              <Text size="xs" c="dimmed" mt="xs" style={{ fontStyle: 'italic' }}>
-                                Red = uphill, Blue = downhill
-                              </Text>
-                            </Stack>
-                          </Card>
-                        )}
-                      </Stack>
-                    </Card>
                   </Stack>
                 </ScrollArea>
               </Tabs.Panel>
@@ -1996,8 +1861,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                   'line-opacity': 0.5,
                   'line-dasharray': [3, 2]
                 }}
-                beforeId="route-builder-line"
-              />
+                />
               {/* Colored cycling lanes on top */}
               <Layer
                 id="cycling-lanes"
@@ -2013,8 +1877,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                   'line-opacity': 0.9,
                   'line-dasharray': [3, 2]
                 }}
-                beforeId="route-builder-line"
-              />
+                />
             </Source>
           )}
           
@@ -2039,8 +1902,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                   'line-width': snappedRoute ? 7 : 5,
                   'line-opacity': 0.4,
                 }}
-                beforeId="route-builder-line"
-              />
+                />
             </Source>
           )}
 
@@ -2148,7 +2010,7 @@ const ProfessionalRouteBuilder = forwardRef(({
             top: 20,
             left: '50%',
             transform: 'translateX(-50%)',
-            zIndex: 5,
+            zIndex: 1000,
             display: 'flex',
             justifyContent: 'center',
           }}
@@ -2164,13 +2026,13 @@ const ProfessionalRouteBuilder = forwardRef(({
               borderRadius: '8px',
             }}
           >
-            <Tooltip label="Undo (Ctrl+Z)">
+            <Tooltip label="Undo - Undo last action (Ctrl+Z)" position="bottom" zIndex={9999}>
               <ActionIcon onClick={undo} disabled={historyIndex <= 0} variant="default">
                 <Undo2 size={18} />
               </ActionIcon>
             </Tooltip>
             
-            <Tooltip label="Redo (Ctrl+Y)">
+            <Tooltip label="Redo - Redo last undone action (Ctrl+Y)" position="bottom" zIndex={9999}>
               <ActionIcon onClick={redo} disabled={historyIndex >= history.length - 1} variant="default">
                 <Redo2 size={18} />
               </ActionIcon>
@@ -2178,13 +2040,13 @@ const ProfessionalRouteBuilder = forwardRef(({
             
             <Divider orientation="vertical" />
             
-            <Tooltip label="Clear all">
+            <Tooltip label="Clear Route - Remove all waypoints and clear the current route" position="bottom" zIndex={9999}>
               <ActionIcon onClick={clearRoute} disabled={waypoints.length === 0} variant="default">
                 <Trash2 size={18} />
               </ActionIcon>
             </Tooltip>
             
-            <Tooltip label="Snap to roads">
+            <Tooltip label="Snap to Roads - Connect waypoints using actual roads and paths for realistic routing" position="bottom" zIndex={9999}>
               <ActionIcon 
                 onClick={snapToRoads} 
                 disabled={waypoints.length < 2 || snapping} 
@@ -2237,7 +2099,7 @@ const ProfessionalRouteBuilder = forwardRef(({
             
             <Divider orientation="vertical" />
             
-            <Tooltip label="Color route by elevation grade">
+            <Tooltip label="Route Grade Coloring - Color the route by elevation steepness (red for climbs, blue for descents)" position="bottom" zIndex={9999}>
               <ActionIcon 
                 onClick={() => setColorRouteByGrade(!colorRouteByGrade)}
                 variant={colorRouteByGrade ? "filled" : "light"}
@@ -2248,7 +2110,7 @@ const ProfessionalRouteBuilder = forwardRef(({
               </ActionIcon>
             </Tooltip>
             
-            <Tooltip label={locationLoading ? "Getting your location..." : "Center map on your location"}>
+            <Tooltip label={locationLoading ? "Getting your current location..." : "My Location - Center the map on your current location"} position="bottom" zIndex={9999}>
               <ActionIcon 
                 onClick={getUserLocation}
                 loading={locationLoading}
@@ -2261,7 +2123,7 @@ const ProfessionalRouteBuilder = forwardRef(({
             
             <Divider orientation="vertical" />
             
-            <Tooltip label={`Switch to ${useImperial ? 'metric' : 'imperial'} units`}>
+            <Tooltip label={`${useImperial ? 'Imperial' : 'Metric'} Units - Switch to ${useImperial ? 'metric (km, m)' : 'imperial (mi, ft)'} measurements`} position="bottom" zIndex={9999}>
               <ActionIcon 
                 onClick={() => setUseImperial(!useImperial)}
                 variant={useImperial ? "filled" : "light"}
@@ -2272,6 +2134,33 @@ const ProfessionalRouteBuilder = forwardRef(({
                 </div>
               </ActionIcon>
             </Tooltip>
+            
+            <Divider orientation="vertical" />
+            
+            {/* Display Options */}
+            <Tooltip label="Grid Overlay" position="bottom" zIndex={9999}>
+              <ActionIcon 
+                onClick={() => setShowGrid(!showGrid)}
+                variant={showGrid ? "filled" : "light"}
+                color={showGrid ? "blue" : "gray"}
+                size="md"
+              >
+                <Grid3x3 size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Tooltip label="Cycling Infrastructure - Highlight dedicated bike lanes, paths, and cycling routes" position="bottom" zIndex={9999}>
+              <ActionIcon 
+                onClick={() => setShowCyclingOverlay(!showCyclingOverlay)}
+                variant={showCyclingOverlay ? "filled" : "light"}
+                color={showCyclingOverlay ? "blue" : "gray"}
+                loading={loadingCyclingData}
+                disabled={loadingCyclingData}
+              >
+                <Bike size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
             
             <Divider orientation="vertical" />
             
@@ -2343,6 +2232,105 @@ const ProfessionalRouteBuilder = forwardRef(({
           {activeMode.toUpperCase()} MODE
         </Badge>
 
+        {/* Floating Legends */}
+        <div style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 5 }}>
+          {/* Cycling Infrastructure Legend */}
+          {showCyclingOverlay && (
+            <Paper shadow="md" p="sm" style={{ marginBottom: '8px', maxWidth: '200px' }}>
+              <Text size="xs" fw={600} mb="xs">Cycling Infrastructure</Text>
+              <Stack gap={4}>
+                <Group gap="xs" align="center">
+                  <div style={{ 
+                    width: '20px', 
+                    height: '3px', 
+                    backgroundColor: '#ff8c00',
+                    borderRadius: '2px',
+                    background: `repeating-linear-gradient(to right, #ff8c00 0px, #ff8c00 6px, transparent 6px, transparent 10px)`
+                  }} />
+                  <Text size="xs" c="dimmed">Dedicated Cycleways</Text>
+                </Group>
+                <Group gap="xs" align="center">
+                  <div style={{ 
+                    width: '20px', 
+                    height: '3px', 
+                    backgroundColor: '#3b82f6',
+                    borderRadius: '2px',
+                    background: `repeating-linear-gradient(to right, #3b82f6 0px, #3b82f6 6px, transparent 6px, transparent 10px)`
+                  }} />
+                  <Text size="xs" c="dimmed">Bicycle Designated</Text>
+                </Group>
+                <Group gap="xs" align="center">
+                  <div style={{ 
+                    width: '20px', 
+                    height: '3px', 
+                    backgroundColor: '#fb7185',
+                    borderRadius: '2px',
+                    background: `repeating-linear-gradient(to right, #fb7185 0px, #fb7185 6px, transparent 6px, transparent 10px)`
+                  }} />
+                  <Text size="xs" c="dimmed">Other Cycle Routes</Text>
+                </Group>
+              </Stack>
+            </Paper>
+          )}
+
+          {/* Grade Color Legend */}
+          {colorRouteByGrade && elevationProfile && elevationProfile.length > 1 && (
+            <Paper shadow="md" p="sm" style={{ maxWidth: '200px' }}>
+              <Text size="xs" fw={600} mb="xs">Elevation Grade</Text>
+              <Stack gap={2}>
+                <Group gap="xs" align="center">
+                  <div style={{ 
+                    width: '20px', 
+                    height: '3px', 
+                    backgroundColor: '#00ff00',
+                    borderRadius: '2px'
+                  }} />
+                  <Text size="xs" c="dimmed">Flat (0-3%)</Text>
+                </Group>
+                <Group gap="xs" align="center">
+                  <div style={{ 
+                    width: '20px', 
+                    height: '3px', 
+                    backgroundColor: '#7fff00',
+                    borderRadius: '2px'
+                  }} />
+                  <Text size="xs" c="dimmed">Gentle (3-6%)</Text>
+                </Group>
+                <Group gap="xs" align="center">
+                  <div style={{ 
+                    width: '20px', 
+                    height: '3px', 
+                    backgroundColor: '#ffff00',
+                    borderRadius: '2px'
+                  }} />
+                  <Text size="xs" c="dimmed">Moderate (6-10%)</Text>
+                </Group>
+                <Group gap="xs" align="center">
+                  <div style={{ 
+                    width: '20px', 
+                    height: '3px', 
+                    backgroundColor: '#ff7f00',
+                    borderRadius: '2px'
+                  }} />
+                  <Text size="xs" c="dimmed">Steep (10-15%)</Text>
+                </Group>
+                <Group gap="xs" align="center">
+                  <div style={{ 
+                    width: '20px', 
+                    height: '3px', 
+                    backgroundColor: '#ff0000',
+                    borderRadius: '2px'
+                  }} />
+                  <Text size="xs" c="dimmed">Very Steep (&gt;15%)</Text>
+                </Group>
+                <Text size="xs" c="dimmed" mt="xs" style={{ fontStyle: 'italic' }}>
+                  Red = uphill, Blue = downhill
+                </Text>
+              </Stack>
+            </Paper>
+          )}
+        </div>
+
         {/* Instructions */}
         {waypoints.length === 0 && (
           <Center style={{
@@ -2411,7 +2399,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                 </Group>
                 
                 {/* Chart Toggle Button */}
-                {showElevation && elevationProfile.length > 0 && (
+                {elevationProfile.length > 0 && (
                   <ActionIcon
                     variant={showElevationChart ? "filled" : "light"}
                     size="sm"
@@ -2424,7 +2412,7 @@ const ProfessionalRouteBuilder = forwardRef(({
               </Group>
               
               {/* Elevation Chart */}
-              {showElevation && elevationProfile.length > 0 && showElevationChart && (
+              {elevationProfile.length > 0 && showElevationChart && (
                 <div style={{ 
                   borderTop: '1px solid rgba(0, 0, 0, 0.1)', 
                   paddingTop: '12px',
@@ -2456,7 +2444,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                 </div>
               )}
               
-              {showElevation && elevationProfile.length === 0 && (
+              {elevationProfile.length === 0 && (
                 <div style={{ borderTop: '1px solid #eee', paddingTop: '12px', textAlign: 'center' }}>
                   <Text size="xs" c="dimmed">No elevation data yet - snap route to roads to get elevation</Text>
                 </div>
