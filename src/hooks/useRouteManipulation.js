@@ -3,6 +3,28 @@ import { toast } from 'react-hot-toast';
 import { polylineDistance } from '../utils/geo';
 import { getElevationData, calculateElevationMetrics } from '../utils/elevation';
 
+// Helper function to find the closest point on a route to a given waypoint
+const findClosestPointOnRoute = (waypointPosition, routeCoordinates) => {
+  let closestPoint = routeCoordinates[0];
+  let closestDistance = Number.MAX_VALUE;
+  
+  for (let i = 0; i < routeCoordinates.length; i++) {
+    const routePoint = routeCoordinates[i];
+    // Calculate distance between waypoint and route point
+    const distance = Math.sqrt(
+      Math.pow(waypointPosition[0] - routePoint[0], 2) +
+      Math.pow(waypointPosition[1] - routePoint[1], 2)
+    );
+    
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestPoint = routePoint;
+    }
+  }
+  
+  return closestPoint;
+};
+
 /**
  * Custom hook for route manipulation functions
  * Extracted from ProfessionalRouteBuilder for better code organization
@@ -161,11 +183,28 @@ export const useRouteManipulation = ({
       
       setSnapProgress(0.8);
       
+      // Snap waypoints to the route path
+      const snappedWaypoints = waypoints.map((waypoint, index) => {
+        // Keep start and end waypoints at their original positions for clarity
+        if (index === 0 || index === waypoints.length - 1) {
+          return waypoint;
+        }
+        
+        // Find closest point on route for intermediate waypoints
+        const closestPoint = findClosestPointOnRoute(waypoint.position, snappedCoordinates);
+        return {
+          ...waypoint,
+          position: closestPoint
+        };
+      });
+      
+      setWaypoints(snappedWaypoints);
+      
       // Fetch elevation data
       await fetchElevation(snappedCoordinates);
       
       setSnapProgress(1.0);
-      toast.success('Route snapped to roads successfully!');
+      toast.success('Route snapped to roads and waypoints adjusted!');
       
     } catch (err) {
       console.error('Route snapping failed:', err);
@@ -175,7 +214,7 @@ export const useRouteManipulation = ({
       setSnapping(false);
       setSnapProgress(0);
     }
-  }, [waypoints, routingProfile, setSnapping, setSnapProgress, setError, setSnappedRoute, fetchElevation]);
+  }, [waypoints, routingProfile, setSnapping, setSnapProgress, setError, setSnappedRoute, fetchElevation, setWaypoints]);
 
   // === Clear Route ===
   const clearRoute = useCallback(() => {
