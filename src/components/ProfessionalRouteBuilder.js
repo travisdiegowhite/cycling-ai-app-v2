@@ -84,11 +84,9 @@ import { useUnits } from '../utils/units';
 import { useRouteManipulation } from '../hooks/useRouteManipulation';
 
 /**
- * Simple SVG Elevation Chart Component
+ * Interactive SVG Elevation Chart Component with route location highlighting
  */
-const ElevationChart = ({ data, width = 800, height = 280, useImperial = true, elevationUnit = 'ft', distanceUnit = 'mi' }) => {
-  console.log('ElevationChart rendering with data:', data?.length, 'points');
-  console.log('Sample elevation data:', data?.slice(0, 3));
+const ElevationChart = ({ data, width = 800, height = 280, useImperial = true, elevationUnit = 'ft', distanceUnit = 'mi', onHover, onLeave, hoveredPoint }) => {
   
   if (!data || data.length < 2) {
     console.log('ElevationChart: insufficient data');
@@ -106,6 +104,7 @@ const ElevationChart = ({ data, width = 800, height = 280, useImperial = true, e
   const chartHeight = height - margin.top - margin.bottom;
 
   // Convert elevation data from meters to display units
+  // Note: elevation data should already be in meters from the API
   const elevations = data.map(d => useImperial ? d.elevation * 3.28084 : d.elevation);
   const distances = data.map(d => d.distance || 0);
   
@@ -122,7 +121,8 @@ const ElevationChart = ({ data, width = 800, height = 280, useImperial = true, e
   const pathData = data
     .map((point, i) => {
       const x = (point.distance / maxDistance) * chartWidth;
-      const y = chartHeight - ((point.elevation - paddedMin) / (paddedMax - paddedMin)) * chartHeight;
+      const elevation = useImperial ? point.elevation * 3.28084 : point.elevation; // Convert for display
+      const y = chartHeight - ((elevation - paddedMin) / (paddedMax - paddedMin)) * chartHeight;
       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
     })
     .join(' ');
@@ -149,6 +149,46 @@ const ElevationChart = ({ data, width = 800, height = 280, useImperial = true, e
     distanceTicks.push({ distance: distance.toFixed(1), x });
   }
 
+  // Handle mouse interaction
+  const handleMouseMove = (event) => {
+    if (!onHover) return;
+    
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left - margin.left;
+    const y = event.clientY - rect.top - margin.top;
+    
+    if (x >= 0 && x <= chartWidth && y >= 0 && y <= chartHeight) {
+      // Find the closest point based on x position
+      const distanceAtX = (x / chartWidth) * maxDistance;
+      let closestIndex = 0;
+      let minDiff = Math.abs(data[0].distance - distanceAtX);
+      
+      for (let i = 1; i < data.length; i++) {
+        const diff = Math.abs(data[i].distance - distanceAtX);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIndex = i;
+        }
+      }
+      
+      const point = data[closestIndex];
+      const elevation = useImperial ? point.elevation * 3.28084 : point.elevation;
+      
+      onHover({
+        index: closestIndex,
+        distance: point.distance,
+        elevation: elevation,
+        coordinate: point.coordinate,
+        x: (point.distance / maxDistance) * chartWidth,
+        y: chartHeight - ((elevation - paddedMin) / (paddedMax - paddedMin)) * chartHeight
+      });
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (onLeave) onLeave();
+  };
+
   return (
     <svg 
       width={width === "100%" ? "100%" : width} 
@@ -158,8 +198,11 @@ const ElevationChart = ({ data, width = 800, height = 280, useImperial = true, e
         background: '#f8f9fa', 
         borderRadius: '4px',
         width: '100%',
-        height: '100%'
+        height: '100%',
+        cursor: onHover ? 'crosshair' : 'default'
       }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Background grid */}
       <g transform={`translate(${margin.left}, ${margin.top})`}>
@@ -229,9 +272,10 @@ const ElevationChart = ({ data, width = 800, height = 280, useImperial = true, e
         />
 
         {/* Data points */}
-        {data.filter((_, i) => i % Math.max(1, Math.floor(data.length / 20)) === 0).map((point, i) => {
+        {data.filter((_, i) => i % Math.max(1, Math.floor(data.length / 20)) === 0 || i === data.length - 1).map((point, i) => {
           const x = (point.distance / maxDistance) * chartWidth;
-          const y = chartHeight - ((point.elevation - paddedMin) / (paddedMax - paddedMin)) * chartHeight;
+          const elevation = useImperial ? point.elevation * 3.28084 : point.elevation; // Convert for display
+          const y = chartHeight - ((elevation - paddedMin) / (paddedMax - paddedMin)) * chartHeight;
           return (
             <circle
               key={i}
@@ -244,7 +288,79 @@ const ElevationChart = ({ data, width = 800, height = 280, useImperial = true, e
             />
           );
         })}
+
+        {/* Crosshair and highlighted point when hovering */}
+        {hoveredPoint && (
+          <g>
+            {/* Vertical crosshair line */}
+            <line
+              x1={hoveredPoint.x}
+              y1={0}
+              x2={hoveredPoint.x}
+              y2={chartHeight}
+              stroke="#ff4444"
+              strokeWidth="2"
+              strokeDasharray="4,4"
+              opacity="0.8"
+            />
+            {/* Horizontal crosshair line */}
+            <line
+              x1={0}
+              y1={hoveredPoint.y}
+              x2={chartWidth}
+              y2={hoveredPoint.y}
+              stroke="#ff4444"
+              strokeWidth="2"
+              strokeDasharray="4,4"
+              opacity="0.8"
+            />
+            {/* Highlighted point */}
+            <circle
+              cx={hoveredPoint.x}
+              cy={hoveredPoint.y}
+              r="6"
+              fill="#ff4444"
+              stroke="white"
+              strokeWidth="2"
+            />
+          </g>
+        )}
+
+        {/* Interactive overlay for mouse events */}
+        <rect
+          x={0}
+          y={0}
+          width={chartWidth}
+          height={chartHeight}
+          fill="transparent"
+          style={{ pointerEvents: 'all' }}
+        />
       </g>
+
+      {/* Tooltip */}
+      {hoveredPoint && (
+        <g>
+          <rect
+            x={hoveredPoint.x + margin.left + 10}
+            y={hoveredPoint.y + margin.top - 35}
+            width="120"
+            height="30"
+            fill="rgba(0, 0, 0, 0.8)"
+            rx="4"
+            ry="4"
+          />
+          <text
+            x={hoveredPoint.x + margin.left + 70}
+            y={hoveredPoint.y + margin.top - 20}
+            textAnchor="middle"
+            fontSize="10"
+            fill="white"
+            fontWeight="500"
+          >
+            {hoveredPoint.distance.toFixed(1)}{distanceUnit} · {Math.round(hoveredPoint.elevation)}{elevationUnit}
+          </text>
+        </g>
+      )}
 
       {/* Axis labels */}
       <text
@@ -281,10 +397,14 @@ const ProfessionalRouteBuilder = forwardRef(({
   onExit, 
   onSaved, 
   inline = false,
-  mapRef,
+  mapRef: propMapRef,
 }, ref) => {
   const { user } = useAuth();
   const { formatDistance, formatElevation, useImperial, setUseImperial, distanceUnit, elevationUnit } = useUnits();
+  
+  // Create local mapRef if not provided via props
+  const localMapRef = useRef(null);
+  const mapRef = propMapRef || localMapRef;
   
   // === Core State ===
   const [waypoints, setWaypoints] = useState([]);
@@ -308,7 +428,10 @@ const ProfessionalRouteBuilder = forwardRef(({
   const [selectedWaypoint, setSelectedWaypoint] = useState(null);
   const [hoveredWaypoint, setHoveredWaypoint] = useState(null);
   const [mapStyle, setMapStyle] = useState('streets');
+  const [elevationHoverPoint, setElevationHoverPoint] = useState(null);
   const [showGrid, setShowGrid] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(true);
   const [showCyclingOverlay, setShowCyclingOverlay] = useState(false);
   const [cyclingData, setCyclingData] = useState(null);
   const [fetchTimeout, setFetchTimeout] = useState(null);
@@ -400,6 +523,7 @@ const ProfessionalRouteBuilder = forwardRef(({
   const [showElevation, setShowElevation] = useState(true);
   const [showElevationChart, setShowElevationChart] = useState(false);
   const [showSavedRoutes, setShowSavedRoutes] = useState(true);
+  const [colorRouteByGrade, setColorRouteByGrade] = useState(false);
   
   // === History for Undo/Redo ===
   const [history, setHistory] = useState([]);
@@ -699,6 +823,91 @@ const ProfessionalRouteBuilder = forwardRef(({
     saveRoute,
   }), [addWaypoint, clearRoute, saveRoute]);
   
+  // === Elevation Chart Interaction ===
+  const handleElevationHover = useCallback((point) => {
+    setElevationHoverPoint(point);
+  }, []);
+
+  const handleElevationLeave = useCallback(() => {
+    setElevationHoverPoint(null);
+  }, []);
+
+  // === Get User's Current Location ===
+  const getUserLocation = useCallback(() => {
+    console.log('🌍 Starting geolocation request...');
+    console.log('🔒 Current location protocol:', window.location.protocol);
+    console.log('🌐 Current hostname:', window.location.hostname);
+    setLocationLoading(true);
+    
+    if (!navigator.geolocation) {
+      console.log('❌ Geolocation not supported by browser');
+      setLocationLoading(false);
+      return;
+    }
+
+    // Check for secure context (required for geolocation)
+    if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+      console.log('❌ Geolocation requires HTTPS or localhost');
+      setLocationLoading(false);
+      return;
+    }
+
+    console.log('📍 Requesting current position...');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        console.log('✅ Got user location:', { latitude, longitude, accuracy });
+        setUserLocation({
+          longitude,
+          latitude,
+          zoom: 13,
+        });
+        setLocationLoading(false);
+      },
+      (error) => {
+        console.log('❌ Geolocation error:', {
+          code: error.code,
+          message: error.message
+        });
+        console.log('Error codes: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT');
+        setLocationLoading(false);
+      },
+      {
+        enableHighAccuracy: false, // Don't need high accuracy for initial map view
+        timeout: 10000, // 10 second timeout
+        maximumAge: 300000 // Use cached location up to 5 minutes old
+      }
+    );
+  }, []);
+
+  // === Get user location on component mount ===
+  useEffect(() => {
+    getUserLocation();
+  }, [getUserLocation]);
+
+  // === Update map view when we get user location ===
+  useEffect(() => {
+    if (userLocation && mapRef?.current) {
+      console.log('🗺️ Flying to user location:', userLocation);
+      try {
+        mapRef.current.flyTo({
+          center: [userLocation.longitude, userLocation.latitude],
+          zoom: userLocation.zoom,
+          duration: 2000 // 2 second animation
+        });
+      } catch (error) {
+        console.log('❌ Error flying to location:', error);
+        // Fallback: try setting the view directly
+        try {
+          mapRef.current.setCenter([userLocation.longitude, userLocation.latitude]);
+          mapRef.current.setZoom(userLocation.zoom);
+        } catch (fallbackError) {
+          console.log('❌ Fallback also failed:', fallbackError);
+        }
+      }
+    }
+  }, [userLocation, mapRef]);
+
   // === Format helpers ===
   const formatDuration = (seconds) => {
     const hours = Math.floor(seconds / 3600);
@@ -712,6 +921,105 @@ const ProfessionalRouteBuilder = forwardRef(({
     const coords = snappedRoute?.coordinates || (waypoints.length > 1 ? waypoints.map(w => w.position) : null);
     return coords ? buildLineString(coords) : null;
   }, [snappedRoute, waypoints]);
+
+  // === Create grade-colored route segments ===
+  const gradeColoredRoute = useMemo(() => {
+    if (!colorRouteByGrade || !elevationProfile || elevationProfile.length < 2) {
+      return null;
+    }
+
+    // Smooth elevation data to reduce noise
+    const smoothedElevations = [];
+    const windowSize = Math.min(5, Math.floor(elevationProfile.length / 10)); // Adaptive window size
+    
+    for (let i = 0; i < elevationProfile.length; i++) {
+      const start = Math.max(0, i - windowSize);
+      const end = Math.min(elevationProfile.length - 1, i + windowSize);
+      let sum = 0;
+      let count = 0;
+      
+      for (let j = start; j <= end; j++) {
+        sum += elevationProfile[j].elevation;
+        count++;
+      }
+      
+      smoothedElevations.push({
+        ...elevationProfile[i],
+        elevation: sum / count,
+        originalElevation: elevationProfile[i].elevation
+      });
+    }
+
+    const segments = [];
+    let debugInfo = { extremeGrades: 0, totalSegments: 0, avgDistance: 0 };
+    
+    for (let i = 0; i < smoothedElevations.length - 1; i++) {
+      const current = smoothedElevations[i];
+      const next = smoothedElevations[i + 1];
+      
+      // Calculate grade between consecutive points
+      const elevationDiff = next.elevation - current.elevation; // in meters
+      const distanceDiff = (next.distance - current.distance) * (useImperial ? 1609.34 : 1000); // convert to meters
+      
+      debugInfo.totalSegments++;
+      debugInfo.avgDistance += distanceDiff;
+      
+      let grade = 0;
+      if (distanceDiff > 5) { // Only calculate grade if distance is meaningful (>5 meters)
+        grade = (elevationDiff / distanceDiff) * 100; // percentage
+        
+        // More aggressive smoothing for very small elevation changes
+        if (Math.abs(elevationDiff) < 1.5) { // Less than 1.5m elevation change
+          grade = grade * 0.3; // Reduce grade significantly
+        }
+        
+        grade = Math.max(-25, Math.min(25, grade)); // Cap at reasonable values
+        
+        if (Math.abs(grade) > 15) {
+          debugInfo.extremeGrades++;
+        }
+      }
+      
+      // More conservative color thresholds
+      let color;
+      if (Math.abs(grade) < 3) { // Increased from 2% to 3%
+        color = '#00ff00'; // Green for flat (0-3%)
+      } else if (Math.abs(grade) < 6) { // Increased from 5% to 6%
+        color = grade > 0 ? '#7fff00' : '#00ff7f'; // Light green for gentle (3-6%)
+      } else if (Math.abs(grade) < 10) { // Increased from 8% to 10%
+        color = grade > 0 ? '#ffff00' : '#00ffff'; // Yellow/cyan for moderate (6-10%)
+      } else if (Math.abs(grade) < 15) { // Increased from 12% to 15%
+        color = grade > 0 ? '#ff7f00' : '#7f7fff'; // Orange/light blue for steep (10-15%)
+      } else {
+        color = grade > 0 ? '#ff0000' : '#0000ff'; // Red/blue for very steep (>15%)
+      }
+      
+      segments.push({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: [current.coordinate, next.coordinate]
+        },
+        properties: {
+          grade: Math.round(grade * 10) / 10,
+          color: color,
+          direction: grade > 0 ? 'uphill' : grade < 0 ? 'downhill' : 'flat',
+          elevationDiff: Math.round(elevationDiff * 10) / 10,
+          distanceDiff: Math.round(distanceDiff)
+        }
+      });
+    }
+    
+    debugInfo.avgDistance = debugInfo.avgDistance / debugInfo.totalSegments;
+    if (debugInfo.extremeGrades > 0) {
+      console.log('Grade calculation debug:', debugInfo); // Only log if there are issues
+    }
+    
+    return {
+      type: 'FeatureCollection',
+      features: segments
+    };
+  }, [colorRouteByGrade, elevationProfile, useImperial]);
   
   // === Update map style when changed ===
   useEffect(() => {
@@ -807,7 +1115,7 @@ const ProfessionalRouteBuilder = forwardRef(({
         )}
         
         {/* Route line */}
-        {routeLine && (
+        {routeLine && !colorRouteByGrade && (
           <Source type="geojson" data={routeLine}>
             <Layer
               id="route-builder-line"
@@ -830,6 +1138,54 @@ const ProfessionalRouteBuilder = forwardRef(({
               beforeId="route-builder-line"
             />
           </Source>
+        )}
+
+        {/* Grade-colored route segments */}
+        {gradeColoredRoute && colorRouteByGrade && (
+          <Source type="geojson" data={gradeColoredRoute}>
+            {/* Outline for visibility */}
+            <Layer
+              id="route-grade-outline-inline"
+              type="line"
+              paint={{
+                'line-color': '#ffffff',
+                'line-width': 8,
+                'line-opacity': 0.4,
+              }}
+              beforeId="route-grade-segments-inline"
+            />
+            {/* Grade-colored segments */}
+            <Layer
+              id="route-grade-segments-inline"
+              type="line"
+              paint={{
+                'line-color': ['get', 'color'],
+                'line-width': 6,
+                'line-opacity': 0.9,
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Elevation hover marker for inline mode */}
+        {elevationHoverPoint && elevationHoverPoint.coordinate && (
+          <Marker
+            longitude={elevationHoverPoint.coordinate[0]}
+            latitude={elevationHoverPoint.coordinate[1]}
+          >
+            <div
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                background: '#ff4444',
+                border: '3px solid white',
+                boxShadow: '0 2px 8px rgba(255, 68, 68, 0.4)',
+                transform: 'translate(-50%, -50%)',
+                zIndex: 1000,
+              }}
+            />
+          </Marker>
         )}
 
         {/* Waypoint markers */}
@@ -884,16 +1240,26 @@ const ProfessionalRouteBuilder = forwardRef(({
   
   // === Full interface for standalone mode ===
   return (
-    <div style={{ 
-      display: 'flex', 
-      height: '100vh', 
-      width: '100vw',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      background: '#f0f2f5',
-      zIndex: 1000
-    }}>
+    <>
+      <style>
+        {`
+          @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.7; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+          }
+        `}
+      </style>
+      <div style={{ 
+        display: 'flex', 
+        height: '100vh', 
+        width: '100vw',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        background: '#f0f2f5',
+        zIndex: 1000
+      }}>
       {/* Keyboard shortcuts help */}
       <HoverCard width={320} shadow="md" position="bottom-start">
         <HoverCard.Target>
@@ -1090,7 +1456,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                                   <Text size="sm">Elevation</Text>
                                 </Group>
                                 <Text size="sm" fw={600}>
-                                  +{Math.round(routeStats.elevationGain)}m / -{Math.round(routeStats.elevationLoss)}m
+                                  +{formatElevation(routeStats.elevationGain)} / -{formatElevation(routeStats.elevationLoss)}
                                 </Text>
                               </Group>
                               
@@ -1386,6 +1752,72 @@ const ProfessionalRouteBuilder = forwardRef(({
                           onChange={(e) => setShowWeather(e.currentTarget.checked)}
                           size="sm"
                         />
+                        
+                        <Switch
+                          label="Color route by elevation grade"
+                          description="Visual gradient showing steep vs flat sections"
+                          checked={colorRouteByGrade}
+                          onChange={(e) => setColorRouteByGrade(e.currentTarget.checked)}
+                          size="sm"
+                          disabled={!elevationProfile || elevationProfile.length < 2}
+                        />
+                        
+                        {/* Grade Color Legend */}
+                        {colorRouteByGrade && elevationProfile && elevationProfile.length > 1 && (
+                          <Card p="xs" style={{ marginTop: '8px', backgroundColor: 'rgba(255,255,255,0.95)' }}>
+                            <Text size="xs" fw={600} mb="xs">Elevation Grade</Text>
+                            <Stack gap={2}>
+                              <Group gap="xs" align="center">
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '3px', 
+                                  backgroundColor: '#00ff00',
+                                  borderRadius: '2px'
+                                }} />
+                                <Text size="xs" c="dimmed">Flat (0-3%)</Text>
+                              </Group>
+                              <Group gap="xs" align="center">
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '3px', 
+                                  backgroundColor: '#7fff00',
+                                  borderRadius: '2px'
+                                }} />
+                                <Text size="xs" c="dimmed">Gentle (3-6%)</Text>
+                              </Group>
+                              <Group gap="xs" align="center">
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '3px', 
+                                  backgroundColor: '#ffff00',
+                                  borderRadius: '2px'
+                                }} />
+                                <Text size="xs" c="dimmed">Moderate (6-10%)</Text>
+                              </Group>
+                              <Group gap="xs" align="center">
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '3px', 
+                                  backgroundColor: '#ff7f00',
+                                  borderRadius: '2px'
+                                }} />
+                                <Text size="xs" c="dimmed">Steep (10-15%)</Text>
+                              </Group>
+                              <Group gap="xs" align="center">
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '3px', 
+                                  backgroundColor: '#ff0000',
+                                  borderRadius: '2px'
+                                }} />
+                                <Text size="xs" c="dimmed">Very Steep (&gt;15%)</Text>
+                              </Group>
+                              <Text size="xs" c="dimmed" mt="xs" style={{ fontStyle: 'italic' }}>
+                                Red = uphill, Blue = downhill
+                              </Text>
+                            </Stack>
+                          </Card>
+                        )}
                       </Stack>
                     </Card>
                   </Stack>
@@ -1495,7 +1927,7 @@ const ProfessionalRouteBuilder = forwardRef(({
         <Map
           ref={mapRef}
           mapboxAccessToken={process.env.REACT_APP_MAPBOX_TOKEN}
-          initialViewState={{
+          initialViewState={userLocation || {
             longitude: -104.9903,
             latitude: 39.7392,
             zoom: 13,
@@ -1587,7 +2019,7 @@ const ProfessionalRouteBuilder = forwardRef(({
           )}
           
           {/* Route line */}
-          {routeLine && (
+          {routeLine && !colorRouteByGrade && (
             <Source type="geojson" data={routeLine}>
               <Layer
                 id="route-builder-line"
@@ -1610,6 +2042,55 @@ const ProfessionalRouteBuilder = forwardRef(({
                 beforeId="route-builder-line"
               />
             </Source>
+          )}
+
+          {/* Grade-colored route segments */}
+          {gradeColoredRoute && colorRouteByGrade && (
+            <Source type="geojson" data={gradeColoredRoute}>
+              {/* Outline for visibility */}
+              <Layer
+                id="route-grade-outline"
+                type="line"
+                paint={{
+                  'line-color': '#ffffff',
+                  'line-width': 8,
+                  'line-opacity': 0.4,
+                }}
+                beforeId="route-grade-segments"
+              />
+              {/* Grade-colored segments */}
+              <Layer
+                id="route-grade-segments"
+                type="line"
+                paint={{
+                  'line-color': ['get', 'color'],
+                  'line-width': 6,
+                  'line-opacity': 0.9,
+                }}
+              />
+            </Source>
+          )}
+
+          {/* Elevation hover marker */}
+          {elevationHoverPoint && elevationHoverPoint.coordinate && (
+            <Marker
+              longitude={elevationHoverPoint.coordinate[0]}
+              latitude={elevationHoverPoint.coordinate[1]}
+            >
+              <div
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  background: '#ff4444',
+                  border: '3px solid white',
+                  boxShadow: '0 2px 8px rgba(255, 68, 68, 0.4)',
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 1000,
+                  animation: 'pulse 2s infinite'
+                }}
+              />
+            </Marker>
           )}
 
           {/* Waypoint markers */}
@@ -1751,6 +2232,30 @@ const ProfessionalRouteBuilder = forwardRef(({
                 variant="default"
               >
                 <Upload size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Divider orientation="vertical" />
+            
+            <Tooltip label="Color route by elevation grade">
+              <ActionIcon 
+                onClick={() => setColorRouteByGrade(!colorRouteByGrade)}
+                variant={colorRouteByGrade ? "filled" : "light"}
+                color={colorRouteByGrade ? "green" : "gray"}
+                disabled={!elevationProfile || elevationProfile.length < 2}
+              >
+                <Mountain size={18} />
+              </ActionIcon>
+            </Tooltip>
+            
+            <Tooltip label={locationLoading ? "Getting your location..." : "Center map on your location"}>
+              <ActionIcon 
+                onClick={getUserLocation}
+                loading={locationLoading}
+                variant={userLocation ? "filled" : "light"}
+                color={userLocation ? "blue" : "gray"}
+              >
+                <MapPin size={18} />
               </ActionIcon>
             </Tooltip>
             
@@ -1943,6 +2448,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                       useImperial={useImperial}
                       elevationUnit={elevationUnit}
                       distanceUnit={distanceUnit}
+                      onHover={handleElevationHover}
+                      onLeave={handleElevationLeave}
+                      hoveredPoint={elevationHoverPoint}
                     />
                   </div>
                 </div>
@@ -1958,7 +2466,8 @@ const ProfessionalRouteBuilder = forwardRef(({
         )}
       </div>
 
-    </div>
+      </div>
+    </>
   );
 });
 

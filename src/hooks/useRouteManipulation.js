@@ -63,9 +63,6 @@ export const useRouteManipulation = ({
       // Use the new elevation data fetching with real terrain data
       const elevationData = await getElevationData(coordinates, mapboxToken);
       
-      // Get starting elevation to calculate relative changes
-      const startingElevation = elevationData[0]?.elevation || 0;
-      
       // Calculate cumulative distance for each point
       let cumulativeDistance = 0;
       const elevationProfile = elevationData.map((point, index) => {
@@ -76,26 +73,21 @@ export const useRouteManipulation = ({
           cumulativeDistance += segmentDistance;
         }
         
-        // Calculate relative elevation from starting point (keep in meters for calculations)
-        const relativeElevationMeters = point.elevation - startingElevation;
-        
         // Convert distance to current units for chart display (meters to miles/km)
         const convertedDistance = useImperial ? cumulativeDistance * 0.000621371 : cumulativeDistance / 1000;
         
         return {
           coordinate: [point.lon, point.lat],
-          elevation: relativeElevationMeters, // Keep in meters for calculations
+          elevation: point.elevation, // Use absolute elevation in meters for calculations
           distance: convertedDistance, // Converted for display
           absoluteElevation: point.elevation // Keep absolute elevation in meters
         };
       });
       
-      console.log('Setting elevation profile with', elevationProfile.length, 'points');
       setElevationProfile(elevationProfile);
       
       // Calculate elevation stats using new metrics function
       const stats = calculateElevationMetrics(elevationProfile, useImperial);
-      console.log('Elevation stats calculated:', stats);
       setElevationStats(stats);
       
     } catch (err) {
@@ -147,7 +139,18 @@ export const useRouteManipulation = ({
       }
       
       const route = data.routes[0];
-      const snappedCoordinates = route.geometry.coordinates;
+      let snappedCoordinates = route.geometry.coordinates;
+      
+      // Ensure the route ends exactly at our final waypoint
+      const finalWaypoint = waypoints[waypoints.length - 1].position;
+      const routeEnd = snappedCoordinates[snappedCoordinates.length - 1];
+      
+      // If the route doesn't end close enough to our final waypoint, add it
+      const endDistance = Math.abs(routeEnd[0] - finalWaypoint[0]) + Math.abs(routeEnd[1] - finalWaypoint[1]);
+      if (endDistance > 0.0001) { // ~11 meters
+        console.log('Adding final waypoint to ensure complete route coverage');
+        snappedCoordinates = [...snappedCoordinates, finalWaypoint];
+      }
       
       setSnappedRoute({
         coordinates: snappedCoordinates,
