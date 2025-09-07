@@ -354,27 +354,104 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
   // Format coordinates for the API
   const coordinates = waypoints.map(([lon, lat]) => `${lon},${lat}`).join(';');
   
-  // Build exclude parameter based on preferences
+  // Enhanced traffic avoidance system based on user preferences
   let excludeParam = '';
-  if (preferences?.safetyPreferences?.bikeInfrastructure === 'required') {
-    // For required bike infrastructure, exclude motorways and ferries
-    // Consider using walking profile for strictest bike path routing
+  let routingProfile = profile;
+  let annotations = 'distance,duration';
+  
+  console.log('🔧 getCyclingDirections called with preferences:', preferences);
+  
+  if (preferences?.routingPreferences?.trafficTolerance === 'low') {
+    // Low traffic tolerance - aggressive traffic avoidance
+    excludeParam = '&exclude=motorway,trunk,toll,ferry';
+    annotations += ',congestion'; // Request congestion data when available
+    console.log('🚫 Low traffic tolerance - excluding high-traffic roads');
+    
+    // For very quiet roads, consider walking profile which often uses local streets
+    if (preferences?.scenicPreferences?.quietnessLevel === 'high') {
+      routingProfile = 'walking';
+      console.log('🤫 High quietness preference - using walking profile for local roads');
+    }
+  } else if (preferences?.routingPreferences?.trafficTolerance === 'medium') {
+    // Medium traffic tolerance - moderate avoidance
     excludeParam = '&exclude=motorway,toll,ferry';
-  } else if (preferences?.safetyPreferences?.bikeInfrastructure === 'strongly_preferred') {
-    // For strongly preferred, exclude just motorways
-    excludeParam = '&exclude=motorway';
+    annotations += ',congestion';
+    console.log('⚖️ Medium traffic tolerance - excluding major highways');
+  } else if (preferences?.routingPreferences?.trafficTolerance === 'high') {
+    // High traffic tolerance - minimal restrictions
+    excludeParam = '&exclude=ferry'; // Only exclude ferries
+    console.log('🚗 High traffic tolerance - allowing most road types');
   }
   
-  // Use walking profile for strictest bike-path-only routing when required
-  const routingProfile = (preferences?.safetyPreferences?.bikeInfrastructure === 'required') 
-    ? 'walking' // Walking profile often follows bike paths better
-    : profile;
+  // Additional exclusions based on bike infrastructure preferences
+  if (preferences?.safetyPreferences?.bikeInfrastructure === 'required') {
+    // Most restrictive - must have bike infrastructure
+    excludeParam += excludeParam.includes('exclude=') ? ',bridge,tunnel' : '&exclude=bridge,tunnel';
+    routingProfile = 'walking'; // Walking profile better for bike paths
+    console.log('🚴 Bike infrastructure required - using walking profile');
+  } else if (preferences?.safetyPreferences?.bikeInfrastructure === 'strongly_preferred') {
+    // Add bridges to exclusions for better bike path routing
+    excludeParam += excludeParam.includes('exclude=') ? ',bridge' : '&exclude=bridge';
+    console.log('🚴 Bike infrastructure strongly preferred');
+  }
   
+  // Try multiple routing strategies for quiet road preferences
+  if (preferences?.scenicPreferences?.quietnessLevel === 'high' || 
+      preferences?.routingPreferences?.trafficTolerance === 'low') {
+    
+    console.log('🔄 Attempting quiet road routing with multiple strategies');
+    
+    // Strategy 1: Try walking profile for quietest roads
+    const quietRoute = await attemptQuietRouting(coordinates, accessToken, {
+      profile: 'walking',
+      excludeParam,
+      annotations,
+      geometries,
+      overview,
+      alternatives
+    });
+    
+    if (quietRoute.success && quietRoute.route.coordinates.length > waypoints.length) {
+      console.log('✅ Quiet routing successful with walking profile');
+      return {
+        ...quietRoute.route,
+        confidence: quietRoute.route.confidence * 0.95, // Slightly lower confidence for walking profile
+        trafficScore: calculateTrafficScore(quietRoute.route, 'low'),
+        quietnessScore: 0.9
+      };
+    }
+    
+    // Strategy 2: Try cycling profile with strict exclusions
+    if (routingProfile !== 'walking') {
+      const moderateRoute = await attemptQuietRouting(coordinates, accessToken, {
+        profile: 'cycling',
+        excludeParam,
+        annotations,
+        geometries,
+        overview,
+        alternatives: true // Request alternatives to find quieter options
+      });
+      
+      if (moderateRoute.success) {
+        // If alternatives are available, pick the one that seems quietest
+        const bestRoute = selectQuietestRoute(moderateRoute.route, moderateRoute.alternatives);
+        console.log('✅ Moderate quiet routing successful with cycling profile');
+        return {
+          ...bestRoute,
+          trafficScore: calculateTrafficScore(bestRoute, 'medium'),
+          quietnessScore: 0.75
+        };
+      }
+    }
+  }
+  
+  // Fallback: Standard routing with user preferences
   const url = `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${coordinates}?` +
     `alternatives=${alternatives}&` +
     `geometries=${geometries}&` +
     `overview=${overview}&` +
-    `steps=${steps}${excludeParam}&` +
+    `steps=${steps}&` +
+    `annotations=${annotations}${excludeParam}&` +
     `access_token=${accessToken}`;
 
   try {
@@ -392,18 +469,186 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
     }
 
     const route = data.routes[0];
+    const trafficTolerance = preferences?.routingPreferences?.trafficTolerance || 'medium';
     
+    console.log(`✅ Standard routing successful with ${routingProfile} profile`);
     return {
       coordinates: route.geometry.coordinates,
       distance: route.distance || 0,
       duration: route.duration || 0,
-      confidence: 0.9, // Directions API generally has high confidence
-      profile: profile
+      confidence: 0.9,
+      profile: routingProfile,
+      trafficScore: calculateTrafficScore(route, trafficTolerance),
+      quietnessScore: calculateQuietnessScore(route, preferences),
+      congestionData: route.legs?.[0]?.annotation?.congestion || []
     };
   } catch (error) {
     console.error('Directions request failed:', error);
     return { coordinates: waypoints, distance: 0, duration: 0, confidence: 0 };
   }
+}
+
+// Helper function to attempt quiet road routing
+async function attemptQuietRouting(coordinates, accessToken, strategyOptions) {
+  const { profile, excludeParam, annotations, geometries, overview, alternatives } = strategyOptions;
+  
+  const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinates}?` +
+    `alternatives=${alternatives}&` +
+    `geometries=${geometries}&` +
+    `overview=${overview}&` +
+    `steps=false&` +
+    `annotations=${annotations}${excludeParam}&` +
+    `access_token=${accessToken}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+    
+    const data = await response.json();
+    
+    if (!data.routes || !data.routes.length) {
+      return { success: false, error: 'No routes found' };
+    }
+
+    return { 
+      success: true, 
+      route: data.routes[0],
+      alternatives: data.routes.slice(1) || []
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Helper function to select the quietest route from alternatives
+function selectQuietestRoute(mainRoute, alternatives) {
+  if (!alternatives || alternatives.length === 0) {
+    return mainRoute;
+  }
+  
+  const allRoutes = [mainRoute, ...alternatives];
+  
+  // Score routes based on distance and likely traffic (prefer longer, more winding routes for quietness)
+  const scoredRoutes = allRoutes.map(route => ({
+    route,
+    quietnessScore: calculateRouteQuietnessScore(route)
+  }));
+  
+  // Sort by quietness score (higher is better)
+  scoredRoutes.sort((a, b) => b.quietnessScore - a.quietnessScore);
+  
+  console.log(`🔍 Selected route with quietness score: ${scoredRoutes[0].quietnessScore.toFixed(2)}`);
+  return scoredRoutes[0].route;
+}
+
+// Calculate route quietness score based on characteristics
+function calculateRouteQuietnessScore(route) {
+  let score = 0.5; // Base score
+  
+  // Prefer routes that are 5-15% longer (likely using smaller roads)
+  const distanceKm = (route.distance || 0) / 1000;
+  if (distanceKm > 5) {
+    // Longer routes often use quieter roads
+    score += 0.1;
+  }
+  
+  // Check if route has many turns (indicator of local roads)
+  if (route.geometry && route.geometry.coordinates) {
+    const coordinates = route.geometry.coordinates;
+    const turnDensity = calculateTurnDensity(coordinates);
+    if (turnDensity > 0.5) {
+      score += 0.2; // More turns often means local roads
+    }
+  }
+  
+  // Check congestion data if available
+  if (route.legs && route.legs[0] && route.legs[0].annotation && route.legs[0].annotation.congestion) {
+    const congestionLevels = route.legs[0].annotation.congestion;
+    const lowCongestionRatio = congestionLevels.filter(level => level === 'low' || level === 'unknown').length / congestionLevels.length;
+    score += lowCongestionRatio * 0.3;
+  }
+  
+  return Math.min(1.0, score);
+}
+
+// Calculate turn density for a route
+function calculateTurnDensity(coordinates) {
+  if (coordinates.length < 3) return 0;
+  
+  let significantTurns = 0;
+  let totalSegments = 0;
+  
+  for (let i = 1; i < coordinates.length - 1; i++) {
+    const bearing1 = calculateBearing(coordinates[i - 1], coordinates[i]);
+    const bearing2 = calculateBearing(coordinates[i], coordinates[i + 1]);
+    
+    let bearingChange = Math.abs(bearing2 - bearing1);
+    if (bearingChange > 180) bearingChange = 360 - bearingChange;
+    
+    if (bearingChange > 30) { // Significant turn
+      significantTurns++;
+    }
+    totalSegments++;
+  }
+  
+  return totalSegments > 0 ? significantTurns / totalSegments : 0;
+}
+
+// Calculate traffic score based on route characteristics and user tolerance
+function calculateTrafficScore(route, trafficTolerance) {
+  let score = 0.7; // Default moderate traffic score
+  
+  // Adjust based on user tolerance
+  const toleranceMultipliers = {
+    'low': 0.3,    // Assume lower traffic with strict exclusions
+    'medium': 0.7, // Moderate traffic expected
+    'high': 1.0    // Accept higher traffic
+  };
+  
+  score *= toleranceMultipliers[trafficTolerance] || 0.7;
+  
+  // Adjust based on congestion data if available
+  if (route.legs && route.legs[0] && route.legs[0].annotation && route.legs[0].annotation.congestion) {
+    const congestionLevels = route.legs[0].annotation.congestion;
+    const highCongestionRatio = congestionLevels.filter(level => level === 'severe' || level === 'heavy').length / congestionLevels.length;
+    score *= (1 - highCongestionRatio * 0.5); // Reduce score for high congestion
+  }
+  
+  return Math.max(0.1, Math.min(1.0, score));
+}
+
+// Calculate quietness score based on route and preferences
+function calculateQuietnessScore(route, preferences) {
+  let score = 0.5; // Base score
+  
+  const quietnessLevel = preferences?.scenicPreferences?.quietnessLevel || 'medium';
+  const trafficTolerance = preferences?.routingPreferences?.trafficTolerance || 'medium';
+  
+  // Base scoring by user preferences
+  if (quietnessLevel === 'high' && trafficTolerance === 'low') {
+    score = 0.8; // High expectation of quiet roads
+  } else if (quietnessLevel === 'medium' || trafficTolerance === 'medium') {
+    score = 0.6; // Moderate expectation
+  } else {
+    score = 0.4; // Lower expectation for quiet roads
+  }
+  
+  return score;
+}
+
+// Calculate bearing between two points
+function calculateBearing([lon1, lat1], [lon2, lat2]) {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const lat1Rad = lat1 * Math.PI / 180;
+  const lat2Rad = lat2 * Math.PI / 180;
+  
+  const y = Math.sin(dLon) * Math.cos(lat2Rad);
+  const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+  
+  let bearing = Math.atan2(y, x) * 180 / Math.PI;
+  return (bearing + 360) % 360;
 }
 
 export async function buildSnappedRoute(waypoints, accessToken, onProgress) {

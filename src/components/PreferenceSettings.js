@@ -176,7 +176,13 @@ const PreferenceSettings = ({ opened, onClose }) => {
       
       <Stack>
         <Alert icon={<AlertCircle size={16} />} color="blue">
-          Customize your route preferences to get more personalized AI-generated routes that match your riding style and goals.
+          <Text size="sm" mb="xs">
+            <strong>Smart Traffic Avoidance:</strong> Customize your route preferences to get more personalized AI-generated routes that match your riding style and goals.
+          </Text>
+          <Text size="xs">
+            The AI Route Builder now intelligently avoids heavy traffic based on your preferences, using advanced routing algorithms 
+            to find quiet roads, bike infrastructure, and peaceful routes when you prefer them.
+          </Text>
         </Alert>
         
         <Tabs value={activeTab} onChange={setActiveTab}>
@@ -202,15 +208,19 @@ const PreferenceSettings = ({ opened, onClose }) => {
             <Stack>
               <Select
                 label="Traffic Tolerance"
-                description="How comfortable are you riding near traffic?"
+                description="How comfortable are you riding near traffic? This heavily influences route selection."
                 value={trafficTolerance}
                 onChange={setTrafficTolerance}
                 data={[
-                  { value: 'low', label: 'Low - Prefer quiet roads' },
-                  { value: 'medium', label: 'Medium - Some traffic okay' },
-                  { value: 'high', label: 'High - Comfortable with traffic' },
+                  { value: 'low', label: 'Low - Avoid busy roads, prefer quiet streets' },
+                  { value: 'medium', label: 'Medium - Some traffic okay, avoid highways' },
+                  { value: 'high', label: 'High - Comfortable with any road type' },
                 ]}
               />
+              <Text size="xs" c="dimmed" mt="-10">
+                💡 <strong>Low traffic tolerance</strong> will prioritize residential streets, bike paths, and less traveled roads. 
+                Routes may be slightly longer but significantly quieter.
+              </Text>
               
               <Select
                 label="Hill Preference"
@@ -301,16 +311,20 @@ const PreferenceSettings = ({ opened, onClose }) => {
             <Stack>
               <Select
                 label="Bike Infrastructure"
-                description="Importance of bike lanes and paths"
+                description="Preference for protected bike lanes, paths, and cycling infrastructure"
                 value={bikeInfrastructure}
                 onChange={setBikeInfrastructure}
                 data={[
-                  { value: 'required', label: 'Required - Must have bike infrastructure' },
-                  { value: 'strongly_preferred', label: 'Strongly Preferred' },
-                  { value: 'preferred', label: 'Preferred but flexible' },
+                  { value: 'required', label: 'Required - Must have separated bike infrastructure' },
+                  { value: 'strongly_preferred', label: 'Strongly Preferred - Prioritize bike lanes' },
+                  { value: 'preferred', label: 'Preferred - Nice to have bike infrastructure' },
                   { value: 'flexible', label: 'Flexible - Any road is fine' },
                 ]}
               />
+              <Text size="xs" c="dimmed" mt="-10">
+                🚴 <strong>Required infrastructure</strong> will find routes using bike paths, protected lanes, and cycling-friendly streets. 
+                This provides the safest separation from vehicle traffic.
+              </Text>
               
               <div>
                 <Text size="sm" fw={500} mb={5}>
@@ -385,15 +399,19 @@ const PreferenceSettings = ({ opened, onClose }) => {
               
               <Select
                 label="Quietness Level"
-                description="Preference for peaceful routes"
+                description="How important is it to avoid noise and find peaceful routes?"
                 value={quietnessLevel}
                 onChange={setQuietnessLevel}
                 data={[
-                  { value: 'high', label: 'High - Very quiet roads' },
-                  { value: 'medium', label: 'Medium - Some noise okay' },
+                  { value: 'high', label: 'High - Prioritize peaceful, quiet roads' },
+                  { value: 'medium', label: 'Medium - Balance quiet with efficiency' },
                   { value: 'low', label: 'Low - Noise not a concern' },
                 ]}
               />
+              <Text size="xs" c="dimmed" mt="-10">
+                🤫 <strong>High quietness</strong> works with traffic tolerance settings to find the most peaceful routes possible. 
+                This may use walking paths or residential streets when appropriate.
+              </Text>
             </Stack>
           </Tabs.Panel>
 

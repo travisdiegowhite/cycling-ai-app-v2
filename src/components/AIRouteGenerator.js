@@ -35,6 +35,7 @@ import { useUnits } from '../utils/units';
 import { getWeatherData, getMockWeatherData } from '../utils/weather';
 import { generateAIRoutes } from '../utils/aiRouteGenerator';
 import PreferenceSettings from './PreferenceSettings';
+import { EnhancedContextCollector } from '../utils/enhancedContext';
 
 const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, externalStartLocation }) => {
   const { user } = useAuth();
@@ -56,6 +57,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   const [error, setError] = useState(null);
   const [geocoding, setGeocoding] = useState(false);
   const [preferencesOpened, setPreferencesOpened] = useState(false);
+  const [userPreferences, setUserPreferences] = useState(null);
 
   // Training goal options
   const trainingGoals = [
@@ -256,6 +258,36 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     }
   }, [externalStartLocation]);
 
+  // Load user preferences for traffic avoidance
+  useEffect(() => {
+    const loadUserPreferences = async () => {
+      if (!user?.id) return;
+      
+      try {
+        console.log('🔧 Loading user preferences for traffic avoidance...');
+        const preferences = await EnhancedContextCollector.getCompletePreferences(user.id);
+        if (preferences) {
+          setUserPreferences(preferences);
+          console.log('✅ Loaded user preferences:', preferences);
+          
+          // Log key traffic avoidance settings
+          if (preferences.routingPreferences?.trafficTolerance) {
+            console.log(`🚫 Traffic tolerance: ${preferences.routingPreferences.trafficTolerance}`);
+          }
+          if (preferences.scenicPreferences?.quietnessLevel) {
+            console.log(`🤫 Quietness level: ${preferences.scenicPreferences.quietnessLevel}`);
+          }
+        } else {
+          console.log('⚠️ No user preferences found - using defaults');
+        }
+      } catch (error) {
+        console.error('❌ Failed to load user preferences:', error);
+      }
+    };
+    
+    loadUserPreferences();
+  }, [user?.id]);
+
   // Generate intelligent routes
   const generateRoutes = async () => {
     if (!startLocation) {
@@ -271,6 +303,16 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       console.log('🚀 Starting route generation...');
       console.log('Parameters:', { startLocation, timeAvailable, trainingGoal, routeType });
       console.log('Weather data:', weatherData);
+      console.log('🎛️ User preferences for traffic avoidance:', userPreferences);
+      
+      // Show traffic avoidance status
+      if (userPreferences?.routingPreferences?.trafficTolerance === 'low') {
+        console.log('🚫 TRAFFIC AVOIDANCE ACTIVE - Will prioritize quiet roads');
+      } else if (userPreferences?.routingPreferences?.trafficTolerance === 'medium') {
+        console.log('⚖️ MODERATE TRAFFIC TOLERANCE - Will avoid major highways');
+      } else {
+        console.log('🚗 HIGH TRAFFIC TOLERANCE - Will use any road type');
+      }
       
       
       const routes = await generateAIRoutes({
@@ -280,6 +322,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         routeType,
         weatherData,
         userId: user?.id,
+        userPreferences: userPreferences,
       });
       
       console.log('🎯 Generated routes:', routes);
@@ -324,7 +367,16 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     <>
       <PreferenceSettings 
         opened={preferencesOpened} 
-        onClose={() => setPreferencesOpened(false)} 
+        onClose={() => {
+          setPreferencesOpened(false);
+          // Refresh preferences after saving
+          if (user?.id) {
+            EnhancedContextCollector.getCompletePreferences(user.id).then(prefs => {
+              setUserPreferences(prefs);
+              console.log('🔄 Refreshed user preferences after saving');
+            });
+          }
+        }} 
       />
       
       <Paper shadow="sm" p="xl" radius="md">

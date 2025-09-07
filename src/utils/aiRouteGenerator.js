@@ -217,7 +217,8 @@ export async function generateAIRoutes(params) {
     trainingGoal,
     weatherData,
     timeAvailable,
-    ridingPatterns
+    ridingPatterns,
+    userPreferences
   });
 
   console.log(`Generated ${scoredRoutes.length} valid routes from ${routes.length} attempts`);
@@ -301,15 +302,15 @@ async function generateMapboxBasedRoutes(params) {
   try {
     // Generate different route types using Mapbox
     if (routeType === 'loop') {
-      const loopRoutes = await generateMapboxLoops(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions);
+      const loopRoutes = await generateMapboxLoops(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions, userPreferences);
       routes.push(...loopRoutes);
     } else if (routeType === 'out_back') {
-      const outBackRoutes = await generateMapboxOutAndBack(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions);
+      const outBackRoutes = await generateMapboxOutAndBack(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions, userPreferences);
       routes.push(...outBackRoutes);
     } else {
       // Generate both types
-      const loopRoutes = await generateMapboxLoops(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions);
-      const outBackRoutes = await generateMapboxOutAndBack(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions);
+      const loopRoutes = await generateMapboxLoops(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions, userPreferences);
+      const outBackRoutes = await generateMapboxOutAndBack(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions, userPreferences);
       routes.push(...loopRoutes.slice(0, 2), ...outBackRoutes.slice(0, 1));
     }
     
@@ -396,7 +397,7 @@ async function generateSmartDestinations(startLocation, targetDistance, isochron
 }
 
 // Generate Mapbox-based loop routes
-async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions) {
+async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions, userPreferences = null) {
   const routes = [];
   const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
   
@@ -422,7 +423,7 @@ async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, 
     const pattern = loopPatterns[i];
     
     try {
-      const route = await generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken);
+      const route = await generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken, userPreferences);
       if (route && route.coordinates && route.coordinates.length > 20) {
         routes.push(route);
         console.log(`Successfully generated ${pattern.name} with ${route.coordinates.length} points`);
@@ -436,7 +437,7 @@ async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, 
 }
 
 // Generate Mapbox-based out-and-back routes
-async function generateMapboxOutAndBack(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions) {
+async function generateMapboxOutAndBack(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions, userPreferences = null) {
   const routes = [];
   const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
   
@@ -462,7 +463,7 @@ async function generateMapboxOutAndBack(startLocation, targetDistance, trainingG
     const direction = directions[i];
     
     try {
-      const route = await generateMapboxOutBack(startLocation, targetDistance, direction, trainingGoal, mapboxToken, patternBasedSuggestions);
+      const route = await generateMapboxOutBack(startLocation, targetDistance, direction, trainingGoal, mapboxToken, patternBasedSuggestions, userPreferences);
       if (route && route.coordinates && route.coordinates.length > 10) {
         routes.push(route);
         console.log(`Successfully generated ${direction.name} with ${route.coordinates.length} points`);
@@ -476,7 +477,7 @@ async function generateMapboxOutAndBack(startLocation, targetDistance, trainingG
 }
 
 // Generate single Mapbox loop with strategic waypoints
-async function generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken) {
+async function generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken, userPreferences = null) {
   const [startLon, startLat] = startLocation;
   
   // Calculate strategic waypoints for a realistic loop
@@ -504,9 +505,10 @@ async function generateMapboxLoop(startLocation, targetDistance, pattern, traini
   try {
     console.log(`Generating ${pattern.name} with ${waypoints.length} waypoints`);
     
-    // Use Mapbox Directions API for realistic cycling routes
+    // Use Mapbox Directions API for realistic cycling routes with user preferences
     const route = await getCyclingDirections(waypoints, mapboxToken, {
-      profile: getMapboxProfile(trainingGoal)
+      profile: getMapboxProfile(trainingGoal),
+      preferences: userPreferences
     });
     
     // Validate the route
@@ -549,7 +551,7 @@ async function generateMapboxLoop(startLocation, targetDistance, pattern, traini
 }
 
 // Generate single Mapbox out-and-back route
-async function generateMapboxOutBack(startLocation, targetDistance, direction, trainingGoal, mapboxToken, patternBasedSuggestions) {
+async function generateMapboxOutBack(startLocation, targetDistance, direction, trainingGoal, mapboxToken, patternBasedSuggestions, userPreferences = null) {
   const [startLon, startLat] = startLocation;
   const halfDistance = targetDistance / 2;
   
@@ -591,7 +593,8 @@ async function generateMapboxOutBack(startLocation, targetDistance, direction, t
   try {
     // Use Mapbox cycling directions to get realistic route
     const outboundRoute = await getCyclingDirections([startLocation, targetPoint], mapboxToken, {
-      profile: getMapboxProfile(trainingGoal)
+      profile: getMapboxProfile(trainingGoal),
+      preferences: userPreferences
     });
     
     if (!outboundRoute.coordinates || outboundRoute.coordinates.length < 5) {
@@ -1146,7 +1149,7 @@ async function generateRouteVariations(params) {
 }
 
 // Generate loop routes using real ride data
-async function generateLoopRoutes(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions) {
+async function generateLoopRoutes(startLocation, targetDistance, trainingGoal, weatherData, patternBasedSuggestions, userPreferences = null) {
   const routes = [];
   
   // Priority 1: Try to build loops from actual route segments
@@ -1176,7 +1179,7 @@ async function generateLoopRoutes(startLocation, targetDistance, trainingGoal, w
     const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
     if (mapboxToken) {
       const mapboxRoute = await generateMapboxLoop(startLocation, targetDistance, 
-        { name: 'Fallback Loop', bearing: 45, radius: 0.8 }, trainingGoal, mapboxToken);
+        { name: 'Fallback Loop', bearing: 45, radius: 0.8 }, trainingGoal, mapboxToken, userPreferences);
       
       if (mapboxRoute) {
         routes.push(mapboxRoute);
@@ -1663,7 +1666,7 @@ function generateRouteDescription(trainingGoal, pattern, elevationStats) {
 
 // Score and rank routes
 async function scoreRoutes(routes, criteria) {
-  const { trainingGoal, weatherData, timeAvailable, ridingPatterns } = criteria;
+  const { trainingGoal, weatherData, timeAvailable, ridingPatterns, userPreferences } = criteria;
   
   const scoredRoutes = routes.map(route => {
     let score = 0.5; // Base score
@@ -1685,6 +1688,12 @@ async function scoreRoutes(routes, criteria) {
     // Historical pattern matching
     if (ridingPatterns) {
       score += getHistoricalPatternScore(route, ridingPatterns);
+    }
+    
+    // NEW: Traffic and quietness scoring based on user preferences
+    if (userPreferences) {
+      score += getTrafficAvoidanceScore(route, userPreferences);
+      score += getQuietnessPreferenceScore(route, userPreferences);
     }
     
     return {
@@ -1846,6 +1855,128 @@ function calculatePatternConfidence(patterns) {
   }
 
   return factors > 0 ? score / factors : 0.5; // Default to 50% confidence
+}
+
+// NEW: Score route based on traffic avoidance preferences
+function getTrafficAvoidanceScore(route, preferences) {
+  const trafficTolerance = preferences?.routingPreferences?.trafficTolerance;
+  
+  if (!trafficTolerance) return 0;
+  
+  let score = 0;
+  
+  // High reward for routes that match user's traffic preferences
+  if (route.trafficScore) {
+    const expectedTrafficLevels = {
+      'low': 0.3,      // Expect very low traffic
+      'medium': 0.7,   // Accept moderate traffic  
+      'high': 1.0      // Accept any traffic level
+    };
+    
+    const expectedLevel = expectedTrafficLevels[trafficTolerance] || 0.7;
+    
+    // Reward routes that meet or exceed expectations
+    if (trafficTolerance === 'low' && route.trafficScore <= 0.4) {
+      score += 0.3; // Big bonus for actually quiet routes when low traffic is preferred
+      console.log(`🏆 Route gets traffic avoidance bonus: ${route.trafficScore.toFixed(2)} traffic score`);
+    } else if (trafficTolerance === 'medium' && route.trafficScore <= 0.8) {
+      score += 0.15; // Moderate bonus for reasonable traffic
+    }
+    
+    // Penalize routes that don't match preferences  
+    if (trafficTolerance === 'low' && route.trafficScore > 0.6) {
+      score -= 0.2; // Penalty for high traffic when quiet roads preferred
+      console.log(`⚠️ Route gets traffic penalty: ${route.trafficScore.toFixed(2)} traffic score`);
+    }
+  }
+  
+  // Additional scoring based on route characteristics that indicate quiet roads
+  if (trafficTolerance === 'low') {
+    // Prefer routes with more turns (local roads)
+    if (route.coordinates && route.coordinates.length > 0) {
+      const turnDensity = calculateTurnDensity(route.coordinates);
+      score += turnDensity * 0.1; // Up to 0.1 bonus for winding routes
+    }
+    
+    // Prefer slightly longer routes (likely avoiding main roads)
+    if (route.distance && route.source !== 'mock') {
+      // Small bonus for routes that are 5-15% longer than direct routes
+      score += 0.05; // Assume quiet routing adds reasonable distance
+    }
+  }
+  
+  return Math.max(-0.3, Math.min(0.4, score)); // Cap the bonus/penalty
+}
+
+// NEW: Score route based on quietness preferences  
+function getQuietnessPreferenceScore(route, preferences) {
+  const quietnessLevel = preferences?.scenicPreferences?.quietnessLevel;
+  
+  if (!quietnessLevel) return 0;
+  
+  let score = 0;
+  
+  // Use the quietness score from routing if available
+  if (route.quietnessScore) {
+    const expectedQuietnessLevels = {
+      'high': 0.8,    // Expect very quiet routes
+      'medium': 0.6,  // Accept moderate quietness
+      'low': 0.4      // Quietness not important
+    };
+    
+    const expectedLevel = expectedQuietnessLevels[quietnessLevel] || 0.6;
+    
+    // Reward routes that meet quietness expectations
+    if (route.quietnessScore >= expectedLevel) {
+      const bonus = (route.quietnessScore - expectedLevel) * 0.5;
+      score += bonus;
+      console.log(`🤫 Route gets quietness bonus: ${route.quietnessScore.toFixed(2)} quietness score`);
+    } else {
+      // Penalize routes that don't meet quietness expectations
+      const penalty = (expectedLevel - route.quietnessScore) * 0.3;
+      score -= penalty;
+    }
+  }
+  
+  // Additional factors for high quietness preference
+  if (quietnessLevel === 'high') {
+    // Prefer routes generated with walking profile (often quieter)
+    if (route.profile === 'walking') {
+      score += 0.15;
+      console.log('🚶 Route gets walking profile quietness bonus');
+    }
+    
+    // Prefer routes with bike infrastructure (separated from cars)
+    const bikeInfrastructure = preferences?.safetyPreferences?.bikeInfrastructure;
+    if (bikeInfrastructure === 'required' || bikeInfrastructure === 'strongly_preferred') {
+      score += 0.1;
+    }
+  }
+  
+  return Math.max(-0.2, Math.min(0.3, score)); // Cap the bonus/penalty
+}
+
+// Helper function to calculate turn density for traffic avoidance scoring
+function calculateTurnDensity(coordinates) {
+  if (coordinates.length < 3) return 0;
+  
+  let significantTurns = 0;
+  let totalSegments = 0;
+  
+  for (let i = 1; i < coordinates.length - 1; i++) {
+    const bearing1 = calculateBearing(coordinates[i - 1], coordinates[i]);
+    const bearing2 = calculateBearing(coordinates[i], coordinates[i + 1]);
+    
+    let bearingChange = Math.abs(bearing2 - bearing1);
+    if (bearingChange > 180) bearingChange = 360 - bearingChange;
+    
+    if (bearingChange > 30) { // Significant turn
+      significantTurns++;
+    }
+    totalSegments++;
+  }
+  
+  return totalSegments > 0 ? significantTurns / totalSegments : 0;
 }
 
 // Create mock route for fallback
