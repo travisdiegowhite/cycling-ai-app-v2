@@ -633,8 +633,8 @@ const ProfessionalRouteBuilder = forwardRef(({
     setLoadingSavedRoutes(true);
     try {
       const { data, error } = await supabase
-        .from('routes')
-        .select('id, metadata, summary')
+        .from('user_routes')
+        .select('id, name, distance_km, elevation_gain_m, duration_seconds, snapped, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -643,11 +643,11 @@ const ProfessionalRouteBuilder = forwardRef(({
       
       setSavedRoutes(data.map(route => ({
         id: route.id,
-        name: route.metadata?.name || `Route ${route.id}`,
-        distance: route.summary?.distance || 0,
-        elevation: route.summary?.elevation_gain || 0,
-        duration: route.metadata?.duration || 0,
-        snapped: route.summary?.snapped || false,
+        name: route.name || `Route ${route.id}`,
+        distance: route.distance_km || 0,
+        elevation: route.elevation_gain_m || 0,
+        duration: route.duration_seconds || 0,
+        snapped: route.snapped || false,
       })));
     } catch (err) {
       console.error('Error fetching saved routes:', err);
@@ -655,6 +655,46 @@ const ProfessionalRouteBuilder = forwardRef(({
       setLoadingSavedRoutes(false);
     }
   }, [user?.id]);
+  
+  // === Load saved route ===
+  const loadSavedRoute = useCallback(async (routeId) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_routes')
+        .select('*')
+        .eq('id', routeId)
+        .single();
+
+      if (error) throw error;
+
+      // Load the route data
+      setRouteName(data.name);
+      setRouteDescription(data.description || '');
+      setRoutingProfile(data.routing_profile || 'cycling');
+      setAutoRoute(data.auto_routed || false);
+      
+      // Load waypoints
+      if (data.waypoints && Array.isArray(data.waypoints)) {
+        setWaypoints(data.waypoints);
+      }
+      
+      // If route was snapped, reconstruct the route
+      if (data.snapped && data.track_points && Array.isArray(data.track_points)) {
+        const coordinates = data.track_points.map(point => [point.longitude, point.latitude]);
+        setSnappedRoute({
+          coordinates,
+          distance: (data.distance_km || 0) * 1000, // Convert km to meters
+          duration: data.duration_seconds || 0,
+          confidence: data.confidence || 0,
+        });
+      }
+
+      toast.success(`Loaded route "${data.name}"`);
+    } catch (err) {
+      console.error('Failed to load route:', err);
+      toast.error('Failed to load route');
+    }
+  }, [setWaypoints, setSnappedRoute]);
   
   // === Load saved routes on mount ===
   useEffect(() => {
@@ -763,33 +803,25 @@ const ProfessionalRouteBuilder = forwardRef(({
         cumulative_distance: elevationProfile[index]?.distance || 0,
       }));
 
-      const metadata = {
-        name: routeName,
-        description: routeDescription,
-        created_at: new Date().toISOString(),
-        routing_profile: routingProfile,
-        auto_routed: autoRoute,
-        confidence: routeStats.confidence,
-        duration: routeStats.duration,
-      };
-
-      const summary = {
-        distance: distanceKm,
-        snapped: !!snappedRoute,
-        elevation_gain: elevationStats?.gain || 0,
-        elevation_loss: elevationStats?.loss || 0,
-        elevation_min: elevationStats?.min || null,
-        elevation_max: elevationStats?.max || null,
-      };
-      
       const routeData = {
         user_id: user.id,
-        metadata,
+        name: routeName,
+        description: routeDescription,
         track_points,
-        summary
+        waypoints: waypoints,
+        routing_profile: routingProfile,
+        auto_routed: autoRoute,
+        snapped: !!snappedRoute,
+        confidence: routeStats.confidence,
+        distance_km: distanceKm,
+        duration_seconds: Math.round(routeStats.duration || 0),
+        elevation_gain_m: elevationStats?.gain || 0,
+        elevation_loss_m: elevationStats?.loss || 0,
+        elevation_min_m: elevationStats?.min || null,
+        elevation_max_m: elevationStats?.max || null,
       };
       
-      const { data, error } = await supabase.from('routes').insert([routeData]).select();
+      const { data, error } = await supabase.from('user_routes').insert([routeData]).select();
       
       if (error) throw error;
       
@@ -799,12 +831,11 @@ const ProfessionalRouteBuilder = forwardRef(({
       fetchSavedRoutes();
       
       // Clear form
-      clearRoute();
       setRouteName('');
       setRouteDescription('');
       
-      // Call parent callback
-      if (onSaved) onSaved(data[0]);
+      // Don't clear the route - keep it visible after saving
+      // Don't call parent callback to prevent redirect
       
     } catch (err) {
       console.error(err);
@@ -813,7 +844,7 @@ const ProfessionalRouteBuilder = forwardRef(({
     } finally {
       setSaving(false);
     }
-  }, [routeName, routeDescription, waypoints, snappedRoute, routeStats, elevationProfile, elevationStats, routingProfile, autoRoute, user.id, onSaved, clearRoute, fetchSavedRoutes]);
+  }, [routeName, routeDescription, waypoints, snappedRoute, routeStats, elevationProfile, elevationStats, routingProfile, autoRoute, user.id, fetchSavedRoutes]);
   
   // === Share Route ===
   const shareRoute = useCallback(() => {
@@ -986,18 +1017,18 @@ const ProfessionalRouteBuilder = forwardRef(({
         }
       }
       
-      // More conservative color thresholds
+      // Sophisticated color thresholds for dark theme
       let color;
-      if (Math.abs(grade) < 3) { // Increased from 2% to 3%
-        color = '#00ff00'; // Green for flat (0-3%)
-      } else if (Math.abs(grade) < 6) { // Increased from 5% to 6%
-        color = grade > 0 ? '#7fff00' : '#00ff7f'; // Light green for gentle (3-6%)
-      } else if (Math.abs(grade) < 10) { // Increased from 8% to 10%
-        color = grade > 0 ? '#ffff00' : '#00ffff'; // Yellow/cyan for moderate (6-10%)
-      } else if (Math.abs(grade) < 15) { // Increased from 12% to 15%
-        color = grade > 0 ? '#ff7f00' : '#7f7fff'; // Orange/light blue for steep (10-15%)
-      } else {
-        color = grade > 0 ? '#ff0000' : '#0000ff'; // Red/blue for very steep (>15%)
+      if (Math.abs(grade) < 3) { // Flat terrain
+        color = '#4a7c7e'; // Muted teal for flat (0-3%)
+      } else if (Math.abs(grade) < 6) { // Gentle grade
+        color = grade > 0 ? '#6b9a6e' : '#5a8fa5'; // Muted green/blue for gentle (3-6%)
+      } else if (Math.abs(grade) < 10) { // Moderate grade
+        color = grade > 0 ? '#b8915c' : '#7a9cc9'; // Muted gold/periwinkle for moderate (6-10%)
+      } else if (Math.abs(grade) < 15) { // Steep grade
+        color = grade > 0 ? '#d4824a' : '#9484c7'; // Burnt orange/lavender for steep (10-15%)
+      } else { // Very steep
+        color = grade > 0 ? '#e85c3f' : '#8a7ca8'; // Deep coral/muted purple for very steep (>15%)
       }
       
       segments.push({
@@ -1106,9 +1137,9 @@ const ProfessionalRouteBuilder = forwardRef(({
               paint={{
                 'line-color': [
                   'case',
-                  ['==', ['get', 'highway'], 'cycleway'], '#ff8c00',
-                  ['==', ['get', 'bicycle'], 'designated'], '#3b82f6', 
-                  '#fb7185'
+                  ['==', ['get', 'highway'], 'cycleway'], '#ff6b35',
+                  ['==', ['get', 'bicycle'], 'designated'], '#4a7c7e', 
+                  '#6b5b95'
                 ],
                 'line-width': 2,
                 'line-opacity': 0.9,
@@ -1125,9 +1156,9 @@ const ProfessionalRouteBuilder = forwardRef(({
               id="route-builder-line"
               type="line"
               paint={{
-                'line-color': snappedRoute ? '#2563eb' : '#64748b',
+                'line-color': snappedRoute ? '#4a7c7e' : 'rgba(255, 255, 255, 0.5)',
                 'line-width': snappedRoute ? 5 : 3,
-                'line-opacity': 0.8,
+                'line-opacity': 0.9,
               }}
             />
             {/* Route outline for better visibility */}
@@ -1135,9 +1166,9 @@ const ProfessionalRouteBuilder = forwardRef(({
               id="route-builder-line-outline"
               type="line"
               paint={{
-                'line-color': '#ffffff',
+                'line-color': 'rgba(0, 0, 0, 0.6)',
                 'line-width': snappedRoute ? 7 : 5,
-                'line-opacity': 0.4,
+                'line-opacity': 0.8,
               }}
             />
           </Source>
@@ -1151,9 +1182,9 @@ const ProfessionalRouteBuilder = forwardRef(({
               id="route-grade-outline-inline"
               type="line"
               paint={{
-                'line-color': '#ffffff',
+                'line-color': 'rgba(0, 0, 0, 0.6)',
                 'line-width': 8,
-                'line-opacity': 0.4,
+                'line-opacity': 0.8,
               }}
               beforeId="route-grade-segments-inline"
             />
@@ -1213,9 +1244,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                 width: 28,
                 height: 28,
                 borderRadius: '50%',
-                background: waypoint.type === 'start' ? '#10b981' : 
-                            waypoint.type === 'end' ? '#ef4444' : '#3b82f6',
-                border: selectedWaypoint === waypoint.id ? '3px solid #ffd43b' : '3px solid white',
+                background: waypoint.type === 'start' ? '#4a7c7e' : 
+                            waypoint.type === 'end' ? '#ff6b35' : '#6b5b95',
+                border: selectedWaypoint === waypoint.id ? '3px solid #ff6b35' : '3px solid rgba(255, 255, 255, 0.8)',
                 cursor: activeMode === 'edit' ? 'move' : 'pointer',
                 boxShadow: hoveredWaypoint === waypoint.id ? 
                   '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
@@ -1616,6 +1647,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                         {savedRoutes.map(route => (
                           <UnstyledButton
                             key={route.id}
+                            onClick={() => loadSavedRoute(route.id)}
                             style={{
                               padding: '12px',
                               borderRadius: '8px',
@@ -1869,9 +1901,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                 paint={{
                   'line-color': [
                     'case',
-                    ['==', ['get', 'highway'], 'cycleway'], '#ff8c00',
-                    ['==', ['get', 'bicycle'], 'designated'], '#3b82f6', 
-                    '#fb7185'
+                    ['==', ['get', 'highway'], 'cycleway'], '#ff6b35',
+                    ['==', ['get', 'bicycle'], 'designated'], '#4a7c7e', 
+                    '#6b5b95'
                   ],
                   'line-width': 2,
                   'line-opacity': 0.9,
@@ -1888,9 +1920,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                 id="route-builder-line"
                 type="line"
                 paint={{
-                  'line-color': snappedRoute ? '#2563eb' : '#64748b',
+                  'line-color': snappedRoute ? '#4a7c7e' : 'rgba(255, 255, 255, 0.5)',
                   'line-width': snappedRoute ? 5 : 3,
-                  'line-opacity': 0.8,
+                  'line-opacity': 0.9,
                 }}
               />
               {/* Route outline for better visibility */}
@@ -1898,9 +1930,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                 id="route-builder-line-outline"
                 type="line"
                 paint={{
-                  'line-color': '#ffffff',
+                  'line-color': 'rgba(0, 0, 0, 0.6)',
                   'line-width': snappedRoute ? 7 : 5,
-                  'line-opacity': 0.4,
+                  'line-opacity': 0.8,
                 }}
                 />
             </Source>
@@ -1914,9 +1946,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                 id="route-grade-outline"
                 type="line"
                 paint={{
-                  'line-color': '#ffffff',
+                  'line-color': 'rgba(0, 0, 0, 0.6)',
                   'line-width': 8,
-                  'line-opacity': 0.4,
+                  'line-opacity': 0.8,
                 }}
                 beforeId="route-grade-segments"
               />
@@ -1977,9 +2009,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
-                  background: waypoint.type === 'start' ? '#10b981' : 
-                              waypoint.type === 'end' ? '#ef4444' : '#3b82f6',
-                  border: selectedWaypoint === waypoint.id ? '3px solid #ffd43b' : '3px solid white',
+                  background: waypoint.type === 'start' ? '#4a7c7e' : 
+                              waypoint.type === 'end' ? '#ff6b35' : '#6b5b95',
+                  border: selectedWaypoint === waypoint.id ? '3px solid #ff6b35' : '3px solid rgba(255, 255, 255, 0.8)',
                   cursor: activeMode === 'edit' ? 'move' : 'pointer',
                   boxShadow: hoveredWaypoint === waypoint.id ? 
                     '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
@@ -2243,9 +2275,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                   <div style={{ 
                     width: '20px', 
                     height: '3px', 
-                    backgroundColor: '#ff8c00',
+                    backgroundColor: '#ff6b35',
                     borderRadius: '2px',
-                    background: `repeating-linear-gradient(to right, #ff8c00 0px, #ff8c00 6px, transparent 6px, transparent 10px)`
+                    background: `repeating-linear-gradient(to right, #ff6b35 0px, #ff6b35 6px, transparent 6px, transparent 10px)`
                   }} />
                   <Text size="xs" c="dimmed">Dedicated Cycleways</Text>
                 </Group>
@@ -2253,9 +2285,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                   <div style={{ 
                     width: '20px', 
                     height: '3px', 
-                    backgroundColor: '#3b82f6',
+                    backgroundColor: '#4a7c7e',
                     borderRadius: '2px',
-                    background: `repeating-linear-gradient(to right, #3b82f6 0px, #3b82f6 6px, transparent 6px, transparent 10px)`
+                    background: `repeating-linear-gradient(to right, #4a7c7e 0px, #4a7c7e 6px, transparent 6px, transparent 10px)`
                   }} />
                   <Text size="xs" c="dimmed">Bicycle Designated</Text>
                 </Group>
@@ -2263,9 +2295,9 @@ const ProfessionalRouteBuilder = forwardRef(({
                   <div style={{ 
                     width: '20px', 
                     height: '3px', 
-                    backgroundColor: '#fb7185',
+                    backgroundColor: '#6b5b95',
                     borderRadius: '2px',
-                    background: `repeating-linear-gradient(to right, #fb7185 0px, #fb7185 6px, transparent 6px, transparent 10px)`
+                    background: `repeating-linear-gradient(to right, #6b5b95 0px, #6b5b95 6px, transparent 6px, transparent 10px)`
                   }} />
                   <Text size="xs" c="dimmed">Other Cycle Routes</Text>
                 </Group>
@@ -2282,7 +2314,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                   <div style={{ 
                     width: '20px', 
                     height: '3px', 
-                    backgroundColor: '#00ff00',
+                    backgroundColor: '#4a7c7e',
                     borderRadius: '2px'
                   }} />
                   <Text size="xs" c="dimmed">Flat (0-3%)</Text>
@@ -2291,7 +2323,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                   <div style={{ 
                     width: '20px', 
                     height: '3px', 
-                    backgroundColor: '#7fff00',
+                    backgroundColor: '#6b9a6e',
                     borderRadius: '2px'
                   }} />
                   <Text size="xs" c="dimmed">Gentle (3-6%)</Text>
@@ -2300,7 +2332,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                   <div style={{ 
                     width: '20px', 
                     height: '3px', 
-                    backgroundColor: '#ffff00',
+                    backgroundColor: '#b8915c',
                     borderRadius: '2px'
                   }} />
                   <Text size="xs" c="dimmed">Moderate (6-10%)</Text>
@@ -2309,7 +2341,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                   <div style={{ 
                     width: '20px', 
                     height: '3px', 
-                    backgroundColor: '#ff7f00',
+                    backgroundColor: '#d4824a',
                     borderRadius: '2px'
                   }} />
                   <Text size="xs" c="dimmed">Steep (10-15%)</Text>
@@ -2318,7 +2350,7 @@ const ProfessionalRouteBuilder = forwardRef(({
                   <div style={{ 
                     width: '20px', 
                     height: '3px', 
-                    backgroundColor: '#ff0000',
+                    backgroundColor: '#e85c3f',
                     borderRadius: '2px'
                   }} />
                   <Text size="xs" c="dimmed">Very Steep (&gt;15%)</Text>

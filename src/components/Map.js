@@ -13,6 +13,7 @@ import {
   Loader,
   Center,
   ActionIcon,
+  Tabs,
 } from '@mantine/core';
 import { Route, Plus, MapPin, Square } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,8 +29,11 @@ const MapComponent = () => {
   const { user } = useAuth();
   const { formatDistance, formatElevation } = useUnits();
   const [routes, setRoutes] = useState([]);
+  const [userRoutes, setUserRoutes] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [userRoutesLoading, setUserRoutesLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('user-routes');
   const [viewState, setViewState] = useState({
     longitude: -104.9903,  // Denver, Colorado
     latitude: 39.7392,     // Denver, Colorado
@@ -63,24 +67,48 @@ const MapComponent = () => {
     );
   }, [routes]);
 
-  // Fetch user's routes from Supabase
+  // Fetch past rides from Supabase
   useEffect(() => {
     const fetchRoutes = async () => {
       try {
         const { data, error } = await supabase
           .from('routes')
-          .select('*')
+          .select(`
+            *,
+            track_points(
+              latitude,
+              longitude,
+              elevation,
+              time_seconds,
+              distance_m,
+              point_index
+            )
+          `)
           .eq('user_id', user.id)
           .order('recorded_at', { ascending: false, nullsLast: true })
           .order('created_at', { ascending: false })
           .limit(10);
 
         if (error) throw error;
-        setRoutes(data);
+        
+        // Process the data to match expected format
+        const processedRoutes = data?.map(route => ({
+          ...route,
+          // Convert separate track_points table data to expected format
+          track_points: route.track_points?.sort((a, b) => a.point_index - b.point_index).map(point => ({
+            longitude: point.longitude,
+            latitude: point.latitude,
+            elevation: point.elevation,
+            time: point.time_seconds,
+            distance: point.distance_m
+          })) || []
+        })) || [];
+        
+        setRoutes(processedRoutes);
 
         // If routes exist, center map on the first route
-        if (data.length > 0 && data[0].track_points?.length > 0) {
-          const firstPoint = data[0].track_points[0];
+        if (processedRoutes.length > 0 && processedRoutes[0].track_points?.length > 0) {
+          const firstPoint = processedRoutes[0].track_points[0];
           setViewState(state => ({
             ...state,
             longitude: firstPoint.longitude,
@@ -97,6 +125,31 @@ const MapComponent = () => {
 
     if (user) {
       fetchRoutes();
+    }
+  }, [user, refreshFlag]);
+
+  // Fetch user-created routes from user_routes table
+  useEffect(() => {
+    const fetchUserRoutes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_routes')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (error) throw error;
+        setUserRoutes(data || []);
+      } catch (error) {
+        console.error('Error fetching user routes:', error);
+      } finally {
+        setUserRoutesLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchUserRoutes();
     }
   }, [user, refreshFlag]);
 
@@ -153,68 +206,185 @@ const MapComponent = () => {
 
           {/* Route Builder in inline mode */}
 
-          <ScrollArea style={{ height: builderActive ? 'calc(100vh - 600px)' : 'calc(100vh - 300px)' }}>
-            {isLoading ? (
-              <Center py="xl">
-                <Loader size="sm" />
-              </Center>
-            ) : routes.length === 0 ? (
-              <Center py="xl">
-                <Text c="dimmed" size="sm" ta="center">
-                  No routes yet. Start by building your first route!
-                </Text>
-              </Center>
-            ) : (
-              <Stack gap="xs">
-                {routes.map((route, index) => (
-                  <Card
-                    key={route.id}
-                    padding="sm"
-                    shadow="xs"
-                    style={{
-                      cursor: 'pointer',
-                      borderLeft: `4px solid ${getRouteColor(index)}`,
-                      backgroundColor: selectedRoute === route.id ? 'var(--mantine-color-blue-0)' : undefined,
-                    }}
-                    onClick={() => {
-                      setSelectedRoute(route.id);
-                      setSelectedRouteData(route);
-                      if (route.track_points?.length > 0) {
-                        setViewState({
-                          ...viewState,
-                          longitude: route.track_points[0].longitude,
-                          latitude: route.track_points[0].latitude,
-                          zoom: 13
-                        });
-                      }
-                    }}
-                  >
-                    <Stack gap="xs">
-                      <Group justify="space-between" align="flex-start">
-                        <Text fw={500} size="sm">
-                          {route.metadata?.name || `Route ${index + 1}`}
-                        </Text>
-                        <ActionIcon size="xs" variant="subtle">
-                          <MapPin size={12} />
-                        </ActionIcon>
-                      </Group>
-                      
-                      <Group gap="xs">
-                        <Badge size="xs" variant="light">
-                          {formatDistance(route.summary?.distance || 0)}
-                        </Badge>
-                        {route.summary?.snapped && (
-                          <Badge size="xs" color="blue" variant="light">
-                            Snapped
-                          </Badge>
-                        )}
-                      </Group>
-                    </Stack>
-                  </Card>
-                ))}
-              </Stack>
-            )}
-          </ScrollArea>
+          <Tabs value={activeTab} onChange={setActiveTab}>
+            <Tabs.List grow>
+              <Tabs.Tab value="user-routes">
+                My Routes ({userRoutes.length})
+              </Tabs.Tab>
+              <Tabs.Tab value="past-rides">
+                Past Rides ({routes.length})
+              </Tabs.Tab>
+            </Tabs.List>
+
+            <Tabs.Panel value="user-routes">
+              <ScrollArea style={{ height: builderActive ? 'calc(100vh - 650px)' : 'calc(100vh - 350px)' }}>
+                {userRoutesLoading ? (
+                  <Center py="xl">
+                    <Loader size="sm" />
+                  </Center>
+                ) : userRoutes.length === 0 ? (
+                  <Center py="xl">
+                    <Text c="dimmed" size="sm" ta="center">
+                      No routes created yet. Start by building your first route!
+                    </Text>
+                  </Center>
+                ) : (
+                  <Stack gap="xs" mt="sm">
+                    {userRoutes.map((route, index) => (
+                      <Card
+                        key={route.id}
+                        padding="sm"
+                        shadow="xs"
+                        style={{
+                          cursor: 'pointer',
+                          borderLeft: `4px solid ${getRouteColor(index)}`,
+                          backgroundColor: selectedRoute === `user-${route.id}` ? 'var(--mantine-color-blue-0)' : undefined,
+                        }}
+                        onClick={() => {
+                          setSelectedRoute(`user-${route.id}`);
+                          // Convert user route format to display format
+                          const convertedRoute = {
+                            id: `user-${route.id}`,
+                            track_points: route.coordinates?.map(coord => ({
+                              longitude: coord[0],
+                              latitude: coord[1]
+                            })) || [],
+                            summary: {
+                              distance: route.distance_km * 1000,
+                              elevation_gain: route.elevation_gain_m,
+                              elevation_loss: route.elevation_loss_m,
+                              elevation_min: route.elevation_min_m,
+                              elevation_max: route.elevation_max_m,
+                              snapped: route.snapped
+                            },
+                            elevation_profile: route.elevation_profile,
+                            metadata: { name: route.name }
+                          };
+                          setSelectedRouteData(convertedRoute);
+                          if (route.coordinates?.length > 0) {
+                            setViewState({
+                              ...viewState,
+                              longitude: route.coordinates[0][0],
+                              latitude: route.coordinates[0][1],
+                              zoom: 13
+                            });
+                          }
+                        }}
+                      >
+                        <Stack gap="xs">
+                          <Group justify="space-between" align="flex-start">
+                            <Text fw={500} size="sm">
+                              {route.name || `My Route ${index + 1}`}
+                            </Text>
+                            <ActionIcon size="xs" variant="subtle">
+                              <MapPin size={12} />
+                            </ActionIcon>
+                          </Group>
+                          
+                          <Group gap="xs">
+                            <Badge size="xs" variant="light">
+                              {formatDistance(route.distance_km * 1000)}
+                            </Badge>
+                            {route.elevation_gain_m > 0 && (
+                              <Badge size="xs" color="green" variant="light">
+                                +{formatElevation(route.elevation_gain_m)}
+                              </Badge>
+                            )}
+                            {route.snapped && (
+                              <Badge size="xs" color="blue" variant="light">
+                                Snapped
+                              </Badge>
+                            )}
+                          </Group>
+                        </Stack>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </ScrollArea>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="past-rides">
+              <ScrollArea style={{ height: builderActive ? 'calc(100vh - 650px)' : 'calc(100vh - 350px)' }}>
+                {isLoading ? (
+                  <Center py="xl">
+                    <Loader size="sm" />
+                  </Center>
+                ) : routes.length === 0 ? (
+                  <Center py="xl">
+                    <Text c="dimmed" size="sm" ta="center">
+                      No past rides found. Import from Strava or upload GPX files!
+                    </Text>
+                  </Center>
+                ) : (
+                  <Stack gap="xs" mt="sm">
+                    {routes.map((route, index) => (
+                      <Card
+                        key={route.id}
+                        padding="sm"
+                        shadow="xs"
+                        style={{
+                          cursor: 'pointer',
+                          borderLeft: `4px solid ${getRouteColor(index)}`,
+                          backgroundColor: selectedRoute === route.id ? 'var(--mantine-color-blue-0)' : undefined,
+                        }}
+                        onClick={() => {
+                          setSelectedRoute(route.id);
+                          // Convert route data to expected format for RouteProfile
+                          const convertedRoute = {
+                            ...route,
+                            summary: {
+                              distance: route.distance_km * 1000, // Convert km to meters
+                              elevation_gain: route.elevation_gain_m,
+                              elevation_loss: route.elevation_loss_m,
+                              snapped: false // Past rides are not snapped routes
+                            },
+                            metadata: { name: route.name }
+                          };
+                          setSelectedRouteData(convertedRoute);
+                          if (route.track_points?.length > 0) {
+                            setViewState({
+                              ...viewState,
+                              longitude: route.track_points[0].longitude,
+                              latitude: route.track_points[0].latitude,
+                              zoom: 13
+                            });
+                          }
+                        }}
+                      >
+                        <Stack gap="xs">
+                          <Group justify="space-between" align="flex-start">
+                            <Text fw={500} size="sm">
+                              {route.metadata?.name || route.activity_name || `Past Ride ${index + 1}`}
+                            </Text>
+                            <ActionIcon size="xs" variant="subtle">
+                              <MapPin size={12} />
+                            </ActionIcon>
+                          </Group>
+                          
+                          <Group gap="xs">
+                            <Badge size="xs" variant="light">
+                              {formatDistance(route.distance_km * 1000 || 0)}
+                            </Badge>
+                            {route.elevation_gain_m > 0 && (
+                              <Badge size="xs" color="green" variant="light">
+                                +{formatElevation(route.elevation_gain_m)}
+                              </Badge>
+                            )}
+                            {route.imported_from && route.imported_from !== 'manual' && (
+                              <Badge size="xs" color="orange" variant="light">
+                                {route.imported_from}
+                              </Badge>
+                            )}
+                          </Group>
+                        </Stack>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </ScrollArea>
+            </Tabs.Panel>
+          </Tabs>
         </Stack>
       </Paper>
 
@@ -236,6 +406,7 @@ const MapComponent = () => {
         
         {/* Route builder map elements are now handled by the overlay component */}
         
+          {/* Render past rides */}
           {routes.map((route, index) => {
             if (!route.track_points?.length) return null;
             
@@ -262,24 +433,67 @@ const MapComponent = () => {
             );
           })}
 
-          {selectedRoute && routes.find(r => r.id === selectedRoute)?.track_points?.length > 0 && (
-            <>
-              {[
-                { point: routes.find(r => r.id === selectedRoute).track_points[0], label: 'Start' },
-                { point: routes.find(r => r.id === selectedRoute).track_points.slice(-1)[0], label: 'End' }
-              ].map((marker, i) => (
-                <Marker
-                  key={i}
-                  longitude={marker.point.longitude}
-                  latitude={marker.point.latitude}
-                  onClick={e => {
-                    e.originalEvent.stopPropagation();
-                    setPopupInfo(marker);
+          {/* Render user-created routes */}
+          {userRoutes.map((route, index) => {
+            if (!route.coordinates?.length) return null;
+            
+            const geojson = {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: route.coordinates
+              }
+            };
+
+            return (
+              <Source key={`user-${route.id}`} type="geojson" data={geojson}>
+                <Layer
+                  type="line"
+                  paint={{
+                    'line-color': getRouteColor(index + routes.length),
+                    'line-width': selectedRoute === `user-${route.id}` ? 6 : 3,
+                    'line-opacity': selectedRoute === `user-${route.id}` ? 1 : 0.7
                   }}
                 />
-              ))}
-            </>
-          )}
+              </Source>
+            );
+          })}
+
+          {selectedRoute && (() => {
+            // Find selected route from either past rides or user routes
+            const route = selectedRoute.startsWith('user-') 
+              ? userRoutes.find(r => `user-${r.id}` === selectedRoute)
+              : routes.find(r => r.id === selectedRoute);
+            
+            if (!route) return null;
+            
+            // Get track points based on route type
+            const trackPoints = selectedRoute.startsWith('user-') 
+              ? route.coordinates?.map(coord => ({ longitude: coord[0], latitude: coord[1] })) || []
+              : route.track_points || [];
+            
+            if (trackPoints.length === 0) return null;
+            
+            return (
+              <>
+                {[
+                  { point: trackPoints[0], label: 'Start' },
+                  { point: trackPoints[trackPoints.length - 1], label: 'End' }
+                ].map((marker, i) => (
+                  <Marker
+                    key={i}
+                    longitude={marker.point.longitude}
+                    latitude={marker.point.latitude}
+                    onClick={e => {
+                      e.originalEvent.stopPropagation();
+                      setPopupInfo(marker);
+                    }}
+                  />
+                ))}
+              </>
+            );
+          })()}
 
           {popupInfo && (
             <Popup
