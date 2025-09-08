@@ -13,10 +13,12 @@ import StravaIntegration from './components/StravaIntegration';
 import StravaCallback from './components/StravaCallback';
 import AppLayout from './components/AppLayout';
 import RouteBuilder from './components/RouteBuilder';
+import RouteStudio from './components/RouteStudio';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UnitPreferencesProvider } from './utils/units';
 import { theme } from './theme';
 import './App.css';
+import './styles/trail-tech-theme.css';
 
 const AppContent = () => {
   const { user } = useAuth();
@@ -29,6 +31,7 @@ const AppContent = () => {
     if (path === '/') setActivePage('ai-routes');
     else if (path === '/map') setActivePage('map');
     else if (path === '/route-builder') setActivePage('route-builder');
+    else if (path === '/route-studio') setActivePage('route-studio');
     else if (path === '/smart-analysis') setActivePage('smart-analysis');
     else if (path === '/upload') setActivePage('upload');
     else if (path === '/strava') setActivePage('strava');
@@ -47,6 +50,7 @@ const AppContent = () => {
         <Route path="/" element={<AIRouteMap />} />
         <Route path="/map" element={<Map />} />
         <Route path="/route-builder" element={<RouteBuilder />} />
+        <Route path="/route-studio" element={<RouteStudio />} />
         <Route path="/smart-analysis" element={<SmartRideAnalysis />} />
         <Route path="/upload" element={<FileUpload />} />
         <Route path="/strava" element={<StravaIntegration />} />

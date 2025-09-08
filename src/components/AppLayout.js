@@ -13,7 +13,7 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -54,8 +54,19 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           <Group>
             <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" />
             <Group gap="xs" visibleFrom="xs">
-              <Route size={24} color="#2196f3" />
-              <Text size={{ base: 'lg', sm: 'xl' }} fw={700} c="blue">
+              <Route size={28} color="#10b981" style={{ filter: 'drop-shadow(0 0 6px rgba(16, 185, 129, 0.4))' }} />
+              <Text 
+                size={{ base: 'xl', sm: '2xl' }} 
+                fw={800} 
+                style={{ 
+                  background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 50%, #fbbf24 100%)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  letterSpacing: '-0.05em',
+                  textShadow: '0 0 30px rgba(16, 185, 129, 0.3)'
+                }}
+              >
                 Cycling AI
               </Text>
             </Group>
@@ -112,6 +123,22 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             fullWidth
           >
             Route Builder
+          </Button>
+
+          <Button
+            variant={activePage === 'route-studio' ? 'filled' : 'subtle'}
+            leftSection={<Zap size={18} />}
+            onClick={() => handleNavigation('route-studio', '/route-studio')}
+            justify="flex-start"
+            fullWidth
+            style={{
+              background: activePage === 'route-studio' 
+                ? 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)'
+                : undefined,
+              color: activePage === 'route-studio' ? 'white' : undefined
+            }}
+          >
+            Route Studio
           </Button>
 
           <Button
