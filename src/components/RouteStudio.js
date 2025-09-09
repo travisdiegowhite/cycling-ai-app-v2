@@ -89,6 +89,11 @@ const RouteStudio = () => {
   const [loadingAISuggestions, setLoadingAISuggestions] = useState(false);
   const [appliedSuggestions, setAppliedSuggestions] = useState(new Set());
   
+  // Route comparison state
+  const [previewingSuggestion, setPreviewingSuggestion] = useState(null);
+  const [originalRoute, setOriginalRoute] = useState(null);
+  const [suggestedRoute, setSuggestedRoute] = useState(null);
+  
   // History for Undo/Redo (including AI suggestions)
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -235,6 +240,190 @@ const RouteStudio = () => {
     toast.success(`Generated ${mockSuggestions.length} AI suggestions for your route`);
   }, [waypoints]);
 
+  // Preview suggestion - show both routes for comparison
+  const previewSuggestion = useCallback(async (suggestion) => {
+    try {
+      // Save original route state
+      const originalRouteState = {
+        waypoints: [...waypoints],
+        snappedRoute: snappedRoute ? { ...snappedRoute } : null,
+      };
+      setOriginalRoute(originalRouteState);
+      
+      // Generate suggested route waypoints based on suggestion type
+      let suggestedWaypoints = [...waypoints];
+      
+      switch (suggestion.type) {
+        case 'scenery':
+          if (waypoints.length >= 2) {
+            const midpoint = waypoints[Math.floor(waypoints.length / 2)];
+            const startPoint = waypoints[0];
+            const scenicWaypoint = {
+              id: `wp_scenic_preview_${Date.now()}`,
+              position: [
+                (startPoint.position[0] + midpoint.position[0]) / 2 + 0.01,
+                (startPoint.position[1] + midpoint.position[1]) / 2 + 0.01
+              ],
+              type: 'waypoint',
+              name: 'Scenic Point'
+            };
+            
+            suggestedWaypoints = [...waypoints];
+            suggestedWaypoints.splice(Math.ceil(waypoints.length / 2), 0, scenicWaypoint);
+            
+            if (suggestedWaypoints.length > 1) {
+              suggestedWaypoints[suggestedWaypoints.length - 1].type = 'end';
+              suggestedWaypoints[suggestedWaypoints.length - 1].name = 'End';
+            }
+          }
+          break;
+          
+        case 'safety':
+          if (waypoints.length >= 2) {
+            suggestedWaypoints = waypoints.map((wp, index) => {
+              if (index > 0 && index < waypoints.length - 1) {
+                return {
+                  ...wp,
+                  position: [
+                    wp.position[0] + (Math.random() - 0.5) * 0.005,
+                    wp.position[1] + (Math.random() - 0.5) * 0.005
+                  ]
+                };
+              }
+              return wp;
+            });
+          }
+          break;
+          
+        case 'performance':
+          if (waypoints.length >= 2) {
+            const startPoint = waypoints[0];
+            const trainingWaypoint = {
+              id: `wp_training_preview_${Date.now()}`,
+              position: [
+                startPoint.position[0] + 0.008,
+                startPoint.position[1] + 0.008
+              ],
+              type: 'waypoint',
+              name: 'Training Loop'
+            };
+            
+            suggestedWaypoints = [waypoints[0], trainingWaypoint, ...waypoints.slice(1)];
+            
+            if (suggestedWaypoints.length > 1) {
+              suggestedWaypoints[suggestedWaypoints.length - 1].type = 'end';
+              suggestedWaypoints[suggestedWaypoints.length - 1].name = 'End';
+            }
+          }
+          break;
+          
+        case 'efficiency':
+          if (waypoints.length > 2) {
+            suggestedWaypoints = [
+              waypoints[0],
+              waypoints[waypoints.length - 1]
+            ];
+            
+            if (waypoints.length > 3) {
+              const intermediateWaypoint = {
+                ...waypoints[1],
+                position: [
+                  (waypoints[0].position[0] + waypoints[waypoints.length - 1].position[0]) / 2,
+                  (waypoints[0].position[1] + waypoints[waypoints.length - 1].position[1]) / 2 - 0.003
+                ],
+                name: 'Efficiency Point'
+              };
+              suggestedWaypoints.splice(1, 0, intermediateWaypoint);
+            }
+            
+            suggestedWaypoints[0].type = 'start';
+            suggestedWaypoints[suggestedWaypoints.length - 1].type = 'end';
+            for (let i = 1; i < suggestedWaypoints.length - 1; i++) {
+              suggestedWaypoints[i].type = 'waypoint';
+            }
+          }
+          break;
+      }
+      
+      // Generate suggested route line
+      if (suggestedWaypoints.length >= 2) {
+        try {
+          const coordinates = suggestedWaypoints.map(wp => wp.position);
+          const coordinatesString = coordinates.map(coord => coord.join(',')).join(';');
+          
+          const response = await fetch(
+            `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${coordinatesString}?geometries=geojson&access_token=${process.env.REACT_APP_MAPBOX_TOKEN}`
+          );
+          
+          const data = await response.json();
+          
+          if (data.routes && data.routes.length > 0) {
+            const route = data.routes[0];
+            setSuggestedRoute({
+              coordinates: route.geometry.coordinates,
+              distance: route.distance,
+              duration: route.duration,
+              waypoints: suggestedWaypoints
+            });
+          }
+        } catch (error) {
+          console.error('Error generating suggested route:', error);
+          setSuggestedRoute({
+            coordinates: suggestedWaypoints.map(wp => wp.position),
+            waypoints: suggestedWaypoints
+          });
+        }
+      }
+      
+      setPreviewingSuggestion(suggestion);
+      toast.success('Comparing routes - original in blue, suggested in green');
+      
+    } catch (error) {
+      console.error('Error previewing suggestion:', error);
+      toast.error('Failed to preview suggestion');
+    }
+  }, [waypoints, snappedRoute, routingProfile]);
+
+  // Accept the previewed suggestion
+  const acceptSuggestion = useCallback(async () => {
+    if (!previewingSuggestion || !suggestedRoute) return;
+    
+    try {
+      // Save current state before applying suggestion
+      saveStateBeforeAISuggestion();
+      
+      setAppliedSuggestions(prev => new Set([...prev, previewingSuggestion.id]));
+      
+      // Apply the suggested route
+      setWaypoints(suggestedRoute.waypoints);
+      setSnappedRoute({
+        coordinates: suggestedRoute.coordinates,
+        distance: suggestedRoute.distance || 0,
+        duration: suggestedRoute.duration || 0,
+        confidence: 0.9
+      });
+      
+      // Clear preview state
+      setPreviewingSuggestion(null);
+      setOriginalRoute(null);
+      setSuggestedRoute(null);
+      
+      toast.success(`Applied: ${previewingSuggestion.title}`);
+      
+    } catch (error) {
+      console.error('Error accepting suggestion:', error);
+      toast.error('Failed to apply suggestion');
+    }
+  }, [previewingSuggestion, suggestedRoute, saveStateBeforeAISuggestion]);
+
+  // Cancel the preview
+  const cancelPreview = useCallback(() => {
+    setPreviewingSuggestion(null);
+    setOriginalRoute(null);
+    setSuggestedRoute(null);
+    toast('Preview cancelled');
+  }, []);
+
   const applySuggestion = useCallback(async (suggestion) => {
     try {
       // Save current state before applying suggestion
@@ -371,42 +560,11 @@ const RouteStudio = () => {
       }
       
       // Auto-snap to roads after applying suggestion
-      setTimeout(async () => {
+      setTimeout(() => {
         if (waypoints.length >= 2) {
-          setSnapping(true);
-          try {
-            const currentWaypoints = waypoints.length >= 2 ? waypoints : 
-              (await new Promise(resolve => {
-                setTimeout(() => resolve(waypoints), 100);
-              }));
-            
-            if (currentWaypoints.length >= 2) {
-              const coordinates = currentWaypoints.map(wp => wp.position);
-              const coordinatesString = coordinates.map(coord => coord.join(',')).join(';');
-              
-              const response = await fetch(
-                `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${coordinatesString}?geometries=geojson&access_token=${process.env.REACT_APP_MAPBOX_TOKEN}`
-              );
-              
-              const data = await response.json();
-              
-              if (data.routes && data.routes.length > 0) {
-                const route = data.routes[0];
-                setSnappedRoute({
-                  coordinates: route.geometry.coordinates,
-                  distance: route.distance,
-                  duration: route.duration,
-                  confidence: 0.9
-                });
-              }
-            }
-          } catch (error) {
-            console.error('Auto-snap error:', error);
-          } finally {
-            setSnapping(false);
-          }
+          snapToRoads();
         }
-      }, 500); // Small delay to ensure waypoints are updated
+      }, 100);
       
     } catch (error) {
       console.error('Error applying suggestion:', error);
@@ -429,6 +587,8 @@ const RouteStudio = () => {
     ['mod+A', (e) => { e.preventDefault(); setShowAIPanel(!showAIPanel); }], // Toggle AI panel
     ['mod+G', (e) => { e.preventDefault(); generateAISuggestions(); }], // Generate AI suggestions
     ['mod+U', (e) => { e.preventDefault(); undoLastAISuggestion(); }], // Undo AI suggestion
+    ['Enter', (e) => { if (previewingSuggestion) { e.preventDefault(); acceptSuggestion(); } }], // Accept preview
+    ['mod+Escape', (e) => { if (previewingSuggestion) { e.preventDefault(); cancelPreview(); } }], // Cancel preview
   ]);
 
   const toggleMode = () => {
@@ -457,10 +617,10 @@ const RouteStudio = () => {
         description: routeDescription.trim() || null,
         coordinates: snappedRoute?.coordinates || waypoints.map(wp => wp.position),
         distance_km: snappedRoute?.distance ? snappedRoute.distance / 1000 : 0,
-        elevation_gain_m: elevationStats.totalElevationGain || 0,
-        elevation_loss_m: elevationStats.totalElevationLoss || 0,
-        elevation_min_m: elevationStats.minElevation || 0,
-        elevation_max_m: elevationStats.maxElevation || 0,
+        elevation_gain_m: elevationStats?.totalElevationGain || 0,
+        elevation_loss_m: elevationStats?.totalElevationLoss || 0,
+        elevation_min_m: elevationStats?.minElevation || 0,
+        elevation_max_m: elevationStats?.maxElevation || 0,
         elevation_profile: elevationProfile || [],
         snapped: !!snappedRoute,
         created_with: 'route_studio',
@@ -516,8 +676,8 @@ const RouteStudio = () => {
     if (!snappedRoute || !snappedRoute.coordinates) return null;
     
     const distance = snappedRoute.distance || polylineDistance(snappedRoute.coordinates);
-    const elevationGain = elevationStats.totalElevationGain || 0;
-    const elevationLoss = elevationStats.totalElevationLoss || 0;
+    const elevationGain = elevationStats?.totalElevationGain || 0;
+    const elevationLoss = elevationStats?.totalElevationLoss || 0;
     
     return {
       distance: formatDistance(distance),
@@ -724,8 +884,8 @@ const RouteStudio = () => {
           <NavigationControl position="top-right" />
           <ScaleControl position="bottom-left" />
           
-          {/* Route Line */}
-          {((snappedRoute && snappedRoute.coordinates && snappedRoute.coordinates.length > 0) || 
+          {/* Original Route Line */}
+          {!previewingSuggestion && ((snappedRoute && snappedRoute.coordinates && snappedRoute.coordinates.length > 0) || 
             (waypoints.length >= 2)) && (
             <Source 
               id="route-line" 
@@ -740,6 +900,45 @@ const RouteStudio = () => {
                   'line-width': 4,
                   'line-opacity': snappedRoute ? 0.8 : 0.6,
                   'line-dasharray': snappedRoute ? undefined : [2, 2]
+                }}
+              />
+            </Source>
+          )}
+
+          {/* Original Route (when previewing) */}
+          {previewingSuggestion && originalRoute && (
+            <Source 
+              id="original-route-line" 
+              type="geojson" 
+              data={buildLineString(originalRoute.snappedRoute?.coordinates || originalRoute.waypoints.map(wp => wp.position))}
+            >
+              <Layer
+                id="original-route"
+                type="line"
+                paint={{
+                  'line-color': '#228be6',
+                  'line-width': 4,
+                  'line-opacity': 0.7,
+                  'line-dasharray': [5, 5]
+                }}
+              />
+            </Source>
+          )}
+
+          {/* Suggested Route (when previewing) */}
+          {previewingSuggestion && suggestedRoute && suggestedRoute.coordinates && (
+            <Source 
+              id="suggested-route-line" 
+              type="geojson" 
+              data={buildLineString(suggestedRoute.coordinates)}
+            >
+              <Layer
+                id="suggested-route"
+                type="line"
+                paint={{
+                  'line-color': '#40c057',
+                  'line-width': 4,
+                  'line-opacity': 0.8
                 }}
               />
             </Source>
@@ -990,18 +1189,78 @@ const RouteStudio = () => {
                           <Text size="xs" c="dimmed">
                             {suggestion.impact}
                           </Text>
-                          <Button
-                            size="xs"
-                            variant={appliedSuggestions.has(suggestion.id) ? "light" : "filled"}
-                            onClick={() => applySuggestion(suggestion)}
-                            disabled={appliedSuggestions.has(suggestion.id)}
-                          >
-                            {appliedSuggestions.has(suggestion.id) ? <Check size={12} /> : 'Apply'}
-                          </Button>
+                          {appliedSuggestions.has(suggestion.id) ? (
+                            <Button size="xs" variant="light" disabled>
+                              <Check size={12} />
+                            </Button>
+                          ) : (
+                            <Group gap="xs">
+                              <Button
+                                size="xs"
+                                variant="light"
+                                onClick={() => previewSuggestion(suggestion)}
+                                disabled={previewingSuggestion?.id === suggestion.id}
+                              >
+                                {previewingSuggestion?.id === suggestion.id ? 'Previewing' : 'Preview'}
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="filled"
+                                onClick={() => applySuggestion(suggestion)}
+                              >
+                                Apply
+                              </Button>
+                            </Group>
+                          )}
                         </Group>
                       </Card>
                     ))}
                   </Stack>
+                )}
+
+                {/* Preview Controls */}
+                {previewingSuggestion && (
+                  <Card withBorder p="md" mt="md" style={{ backgroundColor: '#f8f9fa' }}>
+                    <Stack gap="sm">
+                      <Group gap="xs">
+                        <Text size="sm" fw={500}>Route Comparison</Text>
+                        <Text size="xs" c="dimmed">
+                          {previewingSuggestion.title}
+                        </Text>
+                      </Group>
+                      
+                      <Group gap="xs">
+                        <div style={{ width: 12, height: 3, backgroundColor: '#228be6', borderRadius: 2 }} />
+                        <Text size="xs">Original Route</Text>
+                      </Group>
+                      <Group gap="xs">
+                        <div style={{ width: 12, height: 3, backgroundColor: '#40c057', borderRadius: 2 }} />
+                        <Text size="xs">Suggested Route</Text>
+                      </Group>
+                      
+                      <Group gap="sm" mt="xs">
+                        <Button
+                          size="sm"
+                          variant="filled"
+                          color="green"
+                          onClick={acceptSuggestion}
+                          leftSection={<Check size={16} />}
+                          style={{ flex: 1 }}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={cancelPreview}
+                          leftSection={<X size={16} />}
+                          style={{ flex: 1 }}
+                        >
+                          Cancel
+                        </Button>
+                      </Group>
+                    </Stack>
+                  </Card>
                 )}
               </Stack>
             )}
