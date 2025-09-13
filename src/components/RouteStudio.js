@@ -394,27 +394,31 @@ const RouteStudio = () => {
       
       setAppliedSuggestions(prev => new Set([...prev, previewingSuggestion.id]));
       
-      // Apply the suggested route
-      setWaypoints(suggestedRoute.waypoints);
-      setSnappedRoute({
-        coordinates: suggestedRoute.coordinates,
-        distance: suggestedRoute.distance || 0,
-        duration: suggestedRoute.duration || 0,
-        confidence: 0.9
-      });
+      const suggestionTitle = previewingSuggestion.title;
       
-      // Clear preview state
+      // Clear preview state first
       setPreviewingSuggestion(null);
       setOriginalRoute(null);
       setSuggestedRoute(null);
       
-      toast.success(`Applied: ${previewingSuggestion.title}`);
+      // Apply the suggested waypoints and clear snapped route to force re-snapping
+      setWaypoints(suggestedRoute.waypoints);
+      setSnappedRoute(null);
+      
+      // Auto-snap to roads after applying waypoints
+      setTimeout(() => {
+        if (suggestedRoute.waypoints && suggestedRoute.waypoints.length >= 2) {
+          snapToRoads();
+        }
+      }, 100);
+      
+      toast.success(`Applied: ${suggestionTitle}`);
       
     } catch (error) {
       console.error('Error accepting suggestion:', error);
       toast.error('Failed to apply suggestion');
     }
-  }, [previewingSuggestion, suggestedRoute, saveStateBeforeAISuggestion]);
+  }, [previewingSuggestion, suggestedRoute, saveStateBeforeAISuggestion, snapToRoads]);
 
   // Cancel the preview
   const cancelPreview = useCallback(() => {
@@ -611,34 +615,43 @@ const RouteStudio = () => {
 
     setSaving(true);
     try {
+      // Convert coordinates to track_points format to match database schema
+      const coordinates = snappedRoute?.coordinates || waypoints.map(wp => wp.position);
+      const track_points = coordinates.map((coord, index) => ({
+        longitude: coord[0],
+        latitude: coord[1],
+        elevation: elevationProfile[index]?.elevation || null,
+        cumulative_distance: elevationProfile[index]?.distance || 0,
+      }));
+      
       const routeData = {
         user_id: user.id,
         name: routeName.trim(),
         description: routeDescription.trim() || null,
-        coordinates: snappedRoute?.coordinates || waypoints.map(wp => wp.position),
+        track_points: track_points,
+        waypoints: waypoints,
+        routing_profile: routingProfile,
+        auto_routed: false, // Route Studio is manual with AI assistance
+        snapped: !!snappedRoute,
+        confidence: snappedRoute?.confidence || null,
         distance_km: snappedRoute?.distance ? snappedRoute.distance / 1000 : 0,
+        duration_seconds: snappedRoute?.duration ? Math.round(snappedRoute.duration) : 0,
         elevation_gain_m: elevationStats?.totalElevationGain || 0,
         elevation_loss_m: elevationStats?.totalElevationLoss || 0,
-        elevation_min_m: elevationStats?.minElevation || 0,
-        elevation_max_m: elevationStats?.maxElevation || 0,
-        elevation_profile: elevationProfile || [],
-        snapped: !!snappedRoute,
-        created_with: 'route_studio',
-        confidence: snappedRoute?.confidence || null,
-        metadata: {
-          waypoints: waypoints,
-          elevationStats: elevationStats,
-          appliedAISuggestions: Array.from(appliedSuggestions),
-          routingProfile: routingProfile,
-          created_in_studio: true
-        }
+        elevation_min_m: elevationStats?.minElevation || null,
+        elevation_max_m: elevationStats?.maxElevation || null,
       };
+
+      console.log('Route data to save:', routeData);
 
       const { error } = await supabase
         .from('user_routes')
         .insert([routeData]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
 
       toast.success('Route saved successfully!');
       setSaveModalOpen(false);
