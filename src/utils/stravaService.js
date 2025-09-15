@@ -1,16 +1,24 @@
 // Strava API Integration Service
-// Handles OAuth authentication and activity data import
+// Now uses secure server-side API for token management
 
-const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
+import { supabase } from '../supabase';
+
 const STRAVA_OAUTH_BASE = 'https://www.strava.com/oauth';
 
+// Get the API base URL based on environment
+const getApiBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return ''; // Use relative URLs in production
+  }
+  return 'http://localhost:3000';
+};
+
 /**
- * Strava OAuth and API service
+ * Secure Strava OAuth and API service
  */
 export class StravaService {
   constructor() {
     this.clientId = process.env.REACT_APP_STRAVA_CLIENT_ID;
-    this.clientSecret = process.env.REACT_APP_STRAVA_CLIENT_SECRET;
     this.redirectUri = process.env.REACT_APP_STRAVA_REDIRECT_URI || `${window.location.origin}/strava/callback`;
   }
 
@@ -18,7 +26,15 @@ export class StravaService {
    * Check if Strava credentials are configured
    */
   isConfigured() {
-    return !!(this.clientId && this.clientSecret);
+    return !!(this.clientId);
+  }
+
+  /**
+   * Get current user ID from Supabase auth
+   */
+  async getCurrentUserId() {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id || null;
   }
 
   /**
@@ -45,43 +61,51 @@ export class StravaService {
   }
 
   /**
-   * Exchange authorization code for access token
+   * Exchange authorization code for access token (secure server-side)
    */
   async exchangeCodeForToken(code) {
     if (!this.isConfigured()) {
       throw new Error('Strava client credentials not configured');
     }
 
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
     try {
-      const response = await fetch(`${STRAVA_OAUTH_BASE}/token`, {
+      console.log('🔄 Exchanging Strava code for tokens securely...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/strava-auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
-          client_id: this.clientId,
-          client_secret: this.clientSecret,
+          action: 'exchange_code',
           code: code,
-          grant_type: 'authorization_code'
+          userId: userId
         })
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Strava token exchange failed: ${error}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Token exchange failed: ${response.status}`);
       }
 
-      const tokenData = await response.json();
-      
-      // Store tokens securely (in a real app, store refresh token server-side)
-      this.storeTokens(tokenData);
-      
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Token exchange failed');
+      }
+
+      console.log('✅ Strava tokens stored securely');
+
       return {
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        athlete: tokenData.athlete,
-        expiresAt: tokenData.expires_at
+        athlete: data.athlete
       };
+
     } catch (error) {
       console.error('Strava token exchange error:', error);
       throw error;
@@ -172,36 +196,43 @@ export class StravaService {
   }
 
   /**
-   * Get athlete activities
+   * Get athlete activities (secure server-side)
    */
   async getActivities(options = {}) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
     try {
-      const accessToken = await this.getValidAccessToken();
-      
-      const params = new URLSearchParams({
-        per_page: options.perPage || 30,
-        page: options.page || 1
-      });
+      console.log('📊 Fetching Strava activities securely...');
 
-      if (options.after) {
-        params.append('after', Math.floor(options.after.getTime() / 1000));
-      }
-
-      if (options.before) {
-        params.append('before', Math.floor(options.before.getTime() / 1000));
-      }
-
-      const response = await fetch(`${STRAVA_API_BASE}/athlete/activities?${params}`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/strava-data`, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: userId,
+          endpoint: 'activities',
+          options: options
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`Strava API error: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Activities request failed: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch activities');
+      }
+
+      return data.data;
+
     } catch (error) {
       console.error('Error fetching Strava activities:', error);
       throw error;
@@ -257,46 +288,77 @@ export class StravaService {
     }
   }
 
-  /**
-   * Store tokens securely (localStorage for demo - use secure storage in production)
-   */
-  storeTokens(tokenData) {
-    const tokens = {
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token,
-      expiresAt: tokenData.expires_at,
-      athlete: tokenData.athlete
-    };
-    
-    localStorage.setItem('strava_tokens', JSON.stringify(tokens));
-  }
+  // Token storage is now handled securely server-side
+  // No more localStorage token storage
 
   /**
-   * Get stored tokens
+   * Check if user is connected to Strava (secure server-side check)
    */
-  getStoredTokens() {
+  async isConnected() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      return false;
+    }
+
     try {
-      const stored = localStorage.getItem('strava_tokens');
-      return stored ? JSON.parse(stored) : null;
+      const response = await fetch(`${getApiBaseUrl()}/api/strava-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'get_tokens',
+          userId: userId
+        })
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const data = await response.json();
+      return data.connected && !data.isExpired;
+
     } catch (error) {
-      console.error('Error reading stored Strava tokens:', error);
-      return null;
+      console.error('Error checking Strava connection:', error);
+      return false;
     }
   }
 
   /**
-   * Check if user is connected to Strava
+   * Disconnect from Strava (revoke tokens server-side)
    */
-  isConnected() {
-    const tokens = this.getStoredTokens();
-    return !!(tokens && tokens.accessToken);
-  }
+  async disconnect() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      return;
+    }
 
-  /**
-   * Disconnect from Strava (clear tokens)
-   */
-  disconnect() {
-    localStorage.removeItem('strava_tokens');
+    try {
+      console.log('🔌 Disconnecting from Strava securely...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/strava-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'revoke_tokens',
+          userId: userId
+        })
+      });
+
+      if (!response.ok) {
+        console.warn('Failed to revoke Strava tokens');
+      }
+
+      console.log('✅ Strava disconnected securely');
+
+    } catch (error) {
+      console.error('Error disconnecting from Strava:', error);
+    }
   }
 
   /**
