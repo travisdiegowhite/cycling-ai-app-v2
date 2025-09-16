@@ -1,37 +1,20 @@
 // Claude AI Route Generation Service
-// Uses Claude AI to generate intelligent cycling route suggestions
+// Uses secure backend API for Claude AI integration
 
-import Anthropic from '@anthropic-ai/sdk';
 import { EnhancedContextCollector } from './enhancedContext';
 
-// Initialize Claude client
-const initClaude = () => {
-  const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.warn('❌ Anthropic API key not found. Claude route generation will be disabled.');
-    console.warn('Please set REACT_APP_ANTHROPIC_API_KEY in your .env file');
-    return null;
+// Get the API base URL based on environment
+const getApiBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return ''; // Use relative URLs in production (same origin)
   }
-  
-  if (apiKey === 'your_claude_api_key_here') {
-    console.warn('❌ Claude API key is still set to placeholder value. Please update .env file');
-    return null;
-  }
-  
-  console.log('✅ Claude API key found, initializing client...');
-  
-  try {
-    return new Anthropic({
-      apiKey: apiKey,
-      dangerouslyAllowBrowser: true, // Required for client-side usage
-      defaultHeaders: {
-        'anthropic-dangerous-direct-browser-access': 'true'
-      }
-    });
-  } catch (error) {
-    console.error('❌ Failed to initialize Claude client:', error);
-    return null;
-  }
+  return 'http://localhost:3000'; // Development server
+};
+
+// Check if Claude service is available
+const isClaudeAvailable = () => {
+  // Always available now since it's server-side
+  return true;
 };
 
 /**
@@ -40,8 +23,7 @@ const initClaude = () => {
  * @returns {Promise<Array>} Array of AI-generated route suggestions
  */
 export async function generateClaudeRoutes(params) {
-  const claude = initClaude();
-  if (!claude) {
+  if (!isClaudeAvailable()) {
     console.warn('Claude not available, falling back to existing route generation');
     return [];
   }
@@ -58,8 +40,8 @@ export async function generateClaudeRoutes(params) {
   } = params;
 
   try {
-    console.log('🧠 Calling Claude API for route generation...');
-    
+    console.log('🧠 Calling secure Claude API for route generation...');
+
     // Try to get enhanced context if userId is available
     let prompt;
     if (userId) {
@@ -74,32 +56,41 @@ export async function generateClaudeRoutes(params) {
     } else {
       prompt = buildRoutePrompt(params);
     }
-    
-    console.log('Claude prompt:', prompt);
-    
-    const response = await claude.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 2000,
-      temperature: 0.7,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
+
+    console.log('Sending prompt to secure API...');
+
+    // Call secure backend API instead of client-side Claude
+    const response = await fetch(`${getApiBaseUrl()}/api/claude-routes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        maxTokens: 2000,
+        temperature: 0.7
+      })
     });
 
-    console.log('Claude response:', response);
-    const suggestions = parseClaudeResponse(response.content[0].text);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `API request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Unknown API error');
+    }
+
+    console.log('Secure Claude API response received');
+    const suggestions = parseClaudeResponse(data.content);
     console.log('Parsed Claude suggestions:', suggestions);
     return suggestions;
 
   } catch (error) {
     console.error('Claude route generation failed:', error);
     console.error('Error details:', error.message);
-    if (error.status) {
-      console.error('HTTP Status:', error.status);
-    }
     return [];
   }
 }
@@ -318,46 +309,39 @@ function parseClaudeResponse(responseText) {
  * Enhance existing route with Claude-generated description and analysis
  */
 export async function enhanceRouteWithClaude(route, params) {
-  const claude = initClaude();
-  if (!claude) {
+  if (!isClaudeAvailable()) {
     return route;
   }
 
   try {
-    const prompt = `You are a cycling coach analyzing a route. Provide an enhanced description and training analysis for this cycling route:
+    console.log('🔧 Enhancing route with secure Claude API...');
 
-ROUTE DETAILS:
-- Name: ${route.name}
-- Distance: ${route.distance}km
-- Elevation gain: ${route.elevationGain}m
-- Difficulty: ${route.difficulty}
-- Training goal: ${route.trainingGoal}
-
-CURRENT DESCRIPTION: ${route.description}
-
-Please provide:
-1. An enhanced, motivating description (2-3 sentences)
-2. Specific training benefits
-3. Pacing recommendations
-4. Key challenges to expect
-
-Respond in JSON format:
-{
-  "enhancedDescription": "improved description",
-  "trainingBenefits": "specific benefits for this training goal",
-  "pacingAdvice": "how to pace this route",
-  "keyChallenges": "what to watch out for"
-}`;
-
-    const response = await claude.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 800,
-      temperature: 0.6,
-      messages: [{ role: 'user', content: prompt }]
+    // Call secure backend API
+    const response = await fetch(`${getApiBaseUrl()}/api/claude-enhance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        route,
+        params
+      })
     });
 
-    const enhancement = JSON.parse(response.content[0].text);
-    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Enhancement failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Unknown enhancement error');
+    }
+
+    // Parse the enhancement response
+    const enhancement = JSON.parse(data.enhancement);
+
     return {
       ...route,
       description: enhancement.enhancedDescription || route.description,
@@ -376,12 +360,13 @@ Respond in JSON format:
  * Get Claude's analysis of riding patterns for personalized recommendations
  */
 export async function analyzeRidingPatternsWithClaude(patterns, currentParams) {
-  const claude = initClaude();
-  if (!claude) {
+  if (!isClaudeAvailable()) {
     return null;
   }
 
   try {
+    console.log('📊 Analyzing riding patterns with secure Claude API...');
+
     const prompt = `You are a cycling coach analyzing a rider's patterns. Based on this riding history, provide personalized recommendations:
 
 RIDING PATTERNS:
@@ -400,14 +385,31 @@ Analyze their patterns and provide recommendations in JSON format:
   "progressionSuggestions": "how to progress their training"
 }`;
 
-    const response = await claude.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 600,
-      temperature: 0.5,
-      messages: [{ role: 'user', content: prompt }]
+    // Call secure backend API
+    const response = await fetch(`${getApiBaseUrl()}/api/claude-routes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        maxTokens: 600,
+        temperature: 0.5
+      })
     });
 
-    return JSON.parse(response.content[0].text);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Pattern analysis failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Unknown analysis error');
+    }
+
+    return JSON.parse(data.content);
 
   } catch (error) {
     console.warn('Failed to analyze patterns with Claude:', error);
