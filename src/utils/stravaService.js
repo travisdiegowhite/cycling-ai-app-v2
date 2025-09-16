@@ -112,83 +112,47 @@ export class StravaService {
     }
   }
 
+  // Token refresh is now handled securely server-side
+
+  // Token management is now handled securely server-side
+
   /**
-   * Refresh access token using refresh token
+   * Get athlete profile (secure server-side)
    */
-  async refreshAccessToken(refreshToken) {
-    if (!this.isConfigured()) {
-      throw new Error('Strava client credentials not configured');
+  async getAthlete() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
     }
 
     try {
-      const response = await fetch(`${STRAVA_OAUTH_BASE}/token`, {
+      console.log('👤 Fetching Strava athlete securely...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/strava-data`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
-          client_id: this.clientId,
-          client_secret: this.clientSecret,
-          refresh_token: refreshToken,
-          grant_type: 'refresh_token'
+          userId: userId,
+          endpoint: 'athlete'
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to refresh Strava token');
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Athlete request failed: ${response.status}`);
       }
 
-      const tokenData = await response.json();
-      this.storeTokens(tokenData);
-      
-      return {
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        expiresAt: tokenData.expires_at
-      };
-    } catch (error) {
-      console.error('Strava token refresh error:', error);
-      throw error;
-    }
-  }
+      const data = await response.json();
 
-  /**
-   * Get valid access token (refreshes if needed)
-   */
-  async getValidAccessToken() {
-    const tokens = this.getStoredTokens();
-    if (!tokens) {
-      throw new Error('No Strava tokens found. Please reconnect to Strava.');
-    }
-
-    // Check if token is expired (with 5 minute buffer)
-    const now = Math.floor(Date.now() / 1000);
-    if (tokens.expiresAt && tokens.expiresAt - 300 < now) {
-      console.log('Strava token expired, refreshing...');
-      const refreshed = await this.refreshAccessToken(tokens.refreshToken);
-      return refreshed.accessToken;
-    }
-
-    return tokens.accessToken;
-  }
-
-  /**
-   * Get athlete profile
-   */
-  async getAthlete() {
-    try {
-      const accessToken = await this.getValidAccessToken();
-      const response = await fetch(`${STRAVA_API_BASE}/athlete`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Strava API error: ${response.status}`);
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch athlete');
       }
 
-      return await response.json();
+      return data.data;
+
     } catch (error) {
       console.error('Error fetching Strava athlete:', error);
       throw error;
@@ -240,22 +204,43 @@ export class StravaService {
   }
 
   /**
-   * Get detailed activity data
+   * Get detailed activity data (secure server-side)
    */
   async getActivity(activityId) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
     try {
-      const accessToken = await this.getValidAccessToken();
-      const response = await fetch(`${STRAVA_API_BASE}/activities/${activityId}`, {
+      console.log('📊 Fetching Strava activity securely...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/strava-data`, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: userId,
+          endpoint: 'activity',
+          options: { activityId }
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`Strava API error: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Activity request failed: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch activity');
+      }
+
+      return data.data;
+
     } catch (error) {
       console.error('Error fetching Strava activity:', error);
       throw error;
@@ -263,25 +248,43 @@ export class StravaService {
   }
 
   /**
-   * Get activity streams (GPS data, power, heart rate, etc.)
+   * Get activity streams (GPS data, power, heart rate, etc.) - secure server-side
    */
   async getActivityStreams(activityId, types = ['latlng', 'time', 'altitude', 'heartrate', 'watts']) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
     try {
-      const accessToken = await this.getValidAccessToken();
-      const response = await fetch(
-        `${STRAVA_API_BASE}/activities/${activityId}/streams?keys=${types.join(',')}&key_by_type=true`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
-      );
+      console.log('📈 Fetching Strava activity streams securely...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/strava-data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: userId,
+          endpoint: 'streams',
+          options: { activityId, types }
+        })
+      });
 
       if (!response.ok) {
-        throw new Error(`Strava API error: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Streams request failed: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch activity streams');
+      }
+
+      return data.data;
+
     } catch (error) {
       console.error('Error fetching Strava activity streams:', error);
       throw error;
