@@ -1,5 +1,6 @@
 // Strava API Integration Service
 // Now uses secure server-side API for token management
+// Updated: All API calls moved to secure backend endpoints
 
 import { supabase } from '../supabase';
 
