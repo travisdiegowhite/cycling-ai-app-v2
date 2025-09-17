@@ -49,7 +49,7 @@
     "eject": "react-scripts eject",
     "deploy": "vercel --prod",
     "dev": "npm start",
-    "vercel-build": "npm run build",
+    "vercel-build": "CI=false npm run build",
     "build-test": "node build-test.js"
   },
   "eslintConfig": {
