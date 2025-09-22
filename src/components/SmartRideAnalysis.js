@@ -104,7 +104,7 @@ const SmartRideAnalysis = () => {
             .from('routes')
             .select('*')
             .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
+            .order('recorded_at', { ascending: false })
             .range(offset, offset + batchSize - 1);
             
           if (batchError) {
@@ -172,19 +172,31 @@ const SmartRideAnalysis = () => {
             });
         }
         
-        // Debug: Check for any NULL created_at values
-        const routesWithoutDate = routesData?.filter(r => !r.created_at) || [];
-        if (routesWithoutDate.length > 0) {
-          console.warn('Found routes without created_at:', routesWithoutDate.length);
+        // Debug: Check for any NULL date values
+        const routesWithoutRecordedAt = routesData?.filter(r => !r.recorded_at) || [];
+        const routesWithoutCreatedAt = routesData?.filter(r => !r.created_at) || [];
+        if (routesWithoutRecordedAt.length > 0) {
+          console.warn('Found routes without recorded_at:', routesWithoutRecordedAt.length);
+        }
+        if (routesWithoutCreatedAt.length > 0) {
+          console.warn('Found routes without created_at:', routesWithoutCreatedAt.length);
         }
         
         // Debug: Check date range
         if (routesData && routesData.length > 0) {
-          const dates = routesData.map(r => r.created_at).filter(d => d).sort();
-          console.log('Date range:', {
-            earliest: dates[0],
-            latest: dates[dates.length - 1],
-            count: dates.length
+          const createdDates = routesData.map(r => r.created_at).filter(d => d).sort();
+          const recordedDates = routesData.map(r => r.recorded_at).filter(d => d).sort();
+          console.log('Date ranges:', {
+            created_at: {
+              earliest: createdDates[0],
+              latest: createdDates[createdDates.length - 1],
+              count: createdDates.length
+            },
+            recorded_at: {
+              earliest: recordedDates[0],
+              latest: recordedDates[recordedDates.length - 1],
+              count: recordedDates.length
+            }
           });
         }
         
@@ -282,7 +294,7 @@ const SmartRideAnalysis = () => {
     return routes.filter(route => {
       if (timeFilter === 'all') return true;
       
-      const routeDate = new Date(route.created_at);
+      const routeDate = new Date(route.recorded_at || route.created_at);
       const now = new Date();
       
       switch (timeFilter) {
@@ -325,7 +337,7 @@ const SmartRideAnalysis = () => {
     let weeklyDistance = 0;
     if (filteredRoutes.length > 0 && base.totalDistance > 0) {
       try {
-        const dates = filteredRoutes.map(r => new Date(r.created_at).getTime()).filter(d => !isNaN(d));
+        const dates = filteredRoutes.map(r => new Date(r.recorded_at || r.created_at).getTime()).filter(d => !isNaN(d));
         if (dates.length > 0) {
           const daysSinceFirst = Math.max(1, (new Date().getTime() - Math.min(...dates)) / (24 * 60 * 60 * 1000));
           const weeks = Math.max(1, daysSinceFirst / 7);
@@ -724,7 +736,7 @@ const SmartRideAnalysis = () => {
               sampleRoute: filteredRoutes[0] ? {
                 id: filteredRoutes[0].id,
                 name: filteredRoutes[0].name,
-                created_at: filteredRoutes[0].created_at,
+                recorded_at: filteredRoutes[0].recorded_at,
                 distance_km: filteredRoutes[0].distance_km
               } : null
             });
@@ -1243,7 +1255,7 @@ function calculateConsistencyScore(routes) {
   if (routes.length < 3) return 0;
   
   // Calculate gaps between rides in days
-  const dates = routes.map(r => new Date(r.created_at)).sort((a, b) => a - b);
+  const dates = routes.map(r => new Date(r.recorded_at || r.created_at)).sort((a, b) => a - b);
   const gaps = [];
   
   for (let i = 1; i < dates.length; i++) {
@@ -1264,7 +1276,7 @@ function calculateConsistencyScore(routes) {
 function calculateImprovementTrend(routes) {
   const routesWithSpeed = routes
     .filter(r => r.average_speed && r.average_speed > 0)
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    .sort((a, b) => new Date(a.recorded_at || a.created_at) - new Date(b.recorded_at || b.created_at));
   
   if (routesWithSpeed.length < 5) return 0;
   
