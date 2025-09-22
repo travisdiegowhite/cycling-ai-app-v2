@@ -20,6 +20,9 @@ ALTER TABLE routes ADD COLUMN IF NOT EXISTS route_type TEXT CHECK (route_type IN
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS difficulty_rating INTEGER CHECK (difficulty_rating BETWEEN 1 AND 5);
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS file_size_bytes INTEGER;
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS track_points_count INTEGER;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS has_gps_data BOOLEAN DEFAULT false;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS has_heart_rate_data BOOLEAN DEFAULT false;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS has_power_data BOOLEAN DEFAULT false;
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS has_cadence_data BOOLEAN DEFAULT false;
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS recorded_at TIMESTAMPTZ;
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS uploaded_at TIMESTAMPTZ;
@@ -36,6 +39,30 @@ ALTER TABLE routes ADD COLUMN IF NOT EXISTS external_id TEXT;
 
 -- Update recorded_at for existing records where it's null
 UPDATE routes SET recorded_at = created_at WHERE recorded_at IS NULL;
+
+-- Update has_gps_data flag for existing routes based on available data
+UPDATE routes SET has_gps_data = true
+WHERE (start_latitude IS NOT NULL AND start_longitude IS NOT NULL)
+OR id IN (
+    SELECT DISTINCT route_id
+    FROM track_points
+    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+);
+
+-- Update track_points_count for existing routes
+UPDATE routes SET track_points_count = (
+    SELECT COUNT(*)
+    FROM track_points
+    WHERE track_points.route_id = routes.id
+) WHERE track_points_count IS NULL;
+
+-- Update has_heart_rate_data flag
+UPDATE routes SET has_heart_rate_data = true
+WHERE average_heartrate IS NOT NULL AND average_heartrate > 0;
+
+-- Update has_power_data flag
+UPDATE routes SET has_power_data = true
+WHERE average_watts IS NOT NULL AND average_watts > 0;
 
 -- Add new indexes for enhanced fields
 CREATE INDEX IF NOT EXISTS idx_routes_activity_type ON routes(activity_type);

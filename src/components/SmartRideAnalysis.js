@@ -61,6 +61,7 @@ import { fetchPastRides, analyzeRidingPatterns } from '../utils/rideAnalysis';
 import { getRouteDate } from '../utils/dateUtils';
 import RouteMap from './RouteMap';
 import ActivityHeatmap from './ActivityHeatmap';
+import RideDetailModal from './RideDetailModal';
 
 const SmartRideAnalysis = () => {
   const { user } = useAuth();
@@ -125,9 +126,50 @@ const SmartRideAnalysis = () => {
 
         console.log('Smart analysis routes fetched:', routesData?.length);
         console.log('Sample route data:', routesData?.[0]);
-        console.log('All routes:', routesData);
         if (routesData?.[0]) {
           console.log('Available fields:', Object.keys(routesData[0]));
+          console.log('GPS data fields:', {
+            has_gps_data: routesData[0].has_gps_data,
+            track_points_count: routesData[0].track_points_count,
+            start_latitude: routesData[0].start_latitude,
+            start_longitude: routesData[0].start_longitude
+          });
+        }
+
+        // Check how many routes have GPS data
+        const routesWithGPS = routesData?.filter(r => r.has_gps_data) || [];
+        const routesWithTrackPoints = routesData?.filter(r => r.track_points_count > 0) || [];
+        console.log(`GPS data summary: ${routesWithGPS.length} routes with GPS flag, ${routesWithTrackPoints.length} routes with track points`);
+
+        // Test track points availability
+        if (routesData && routesData.length > 0) {
+          const testRoute = routesData[0];
+          console.log('Testing track points availability for first route:', testRoute.id);
+
+          supabase
+            .from('track_points')
+            .select('count')
+            .eq('route_id', testRoute.id)
+            .then(({ data, error }) => {
+              if (error) {
+                console.error('Error checking track points:', error);
+              } else {
+                console.log('Track points count query result:', data);
+              }
+            });
+
+          // Also check if track_points table exists and has data
+          supabase
+            .from('track_points')
+            .select('latitude, longitude, route_id')
+            .limit(5)
+            .then(({ data, error }) => {
+              if (error) {
+                console.error('Error checking track_points table:', error);
+              } else {
+                console.log('Sample track points from database:', data);
+              }
+            });
         }
         
         // Debug: Check for any NULL created_at values
@@ -178,7 +220,7 @@ const SmartRideAnalysis = () => {
   const loadRouteTrackPoints = async (routeId) => {
     try {
       console.log('Loading track points for route:', routeId);
-      
+
       const { data, error } = await supabase
         .from('track_points')
         .select('latitude, longitude, elevation, point_index')
@@ -186,10 +228,26 @@ const SmartRideAnalysis = () => {
         .order('point_index');
 
       if (error) throw error;
-      console.log('Track points loaded:', data?.length);
+      console.log('Track points loaded:', data?.length, 'for route:', routeId);
       
-      setRouteTrackPoints(data || []);
-      return data || [];
+      // Convert to format expected by RouteMap (lat/lng instead of latitude/longitude)
+      const formattedTrackPoints = (data || []).map(point => ({
+        lat: point.latitude,
+        lng: point.longitude,
+        elevation: point.elevation,
+        point_index: point.point_index
+      }));
+
+      console.log('Formatted track points sample:', formattedTrackPoints.slice(0, 3));
+      console.log('Track points coordinate validation:', {
+        totalPoints: formattedTrackPoints.length,
+        validLats: formattedTrackPoints.filter(p => p.lat != null).length,
+        validLngs: formattedTrackPoints.filter(p => p.lng != null).length,
+        sampleCoordinates: formattedTrackPoints.slice(0, 3).map(p => ({ lat: p.lat, lng: p.lng }))
+      });
+
+      setRouteTrackPoints(formattedTrackPoints);
+      return formattedTrackPoints;
     } catch (error) {
       console.error('Error loading track points:', error);
       toast.error('Failed to load route details');
@@ -199,9 +257,24 @@ const SmartRideAnalysis = () => {
 
   // Open map modal for a route
   const viewRouteOnMap = async (route) => {
+    console.log('Opening route:', {
+      id: route.id,
+      name: route.name,
+      has_gps_data: route.has_gps_data,
+      track_points_count: route.track_points_count,
+      start_lat: route.start_latitude,
+      start_lng: route.start_longitude
+    });
     setSelectedRoute(route);
     setMapModalOpen(true);
-    await loadRouteTrackPoints(route.id);
+
+    // Only try to load track points if the route has GPS data
+    if (route.has_gps_data && route.track_points_count > 0) {
+      await loadRouteTrackPoints(route.id);
+    } else {
+      console.log('Route has no GPS data, skipping track points loading');
+      setRouteTrackPoints([]);
+    }
   };
 
   // Filter routes by time - fixed to work properly
@@ -1117,6 +1190,9 @@ const SmartRideAnalysis = () => {
                           {route.average_watts && (
                             <Badge size="xs" color="yellow">Power</Badge>
                           )}
+                          {route.has_gps_data && (
+                            <Badge size="xs" color="green">GPS</Badge>
+                          )}
                         </Group>
                         <Text size="xs" c="dimmed">
                           {getRouteDate(route).format('MMM D, YYYY')}
@@ -1130,7 +1206,7 @@ const SmartRideAnalysis = () => {
                           <Text size="xs">{formatDuration(route.duration_seconds)}</Text>
                         )}
                         {route.average_speed && (
-                          <Text size="xs">{formatSpeed(route.average_speed)}</Text>
+                          <Text size="xs">{formatSpeed(route.average_speed > 100 ? route.average_speed : route.average_speed * 3.6)}</Text>
                         )}
                         <ActionIcon
                           size="sm"
@@ -1151,21 +1227,13 @@ const SmartRideAnalysis = () => {
         </Tabs.Panel>
       </Tabs>
 
-      {/* Route Map Modal */}
-      <Modal 
-        opened={mapModalOpen} 
-        onClose={() => setMapModalOpen(false)} 
-        title={selectedRoute?.name || 'Route Map'}
-        size="xl"
-      >
-        {selectedRoute && routeTrackPoints.length > 0 && (
-          <RouteMap 
-            trackPoints={routeTrackPoints} 
-            mapHeight={500} 
-            showElevationProfile={true}
-          />
-        )}
-      </Modal>
+      {/* Ride Detail Modal */}
+      <RideDetailModal
+        opened={mapModalOpen}
+        onClose={() => setMapModalOpen(false)}
+        route={selectedRoute}
+        trackPoints={routeTrackPoints}
+      />
     </Stack>
   );
 };

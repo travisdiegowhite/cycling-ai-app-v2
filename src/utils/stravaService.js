@@ -46,6 +46,13 @@ export class StravaService {
       throw new Error('Strava client ID and secret must be configured');
     }
 
+    console.log('🔍 Strava OAuth Debug:', {
+      clientId: this.clientId,
+      redirectUri: this.redirectUri,
+      currentOrigin: window.location.origin,
+      environment: process.env.NODE_ENV
+    });
+
     const params = new URLSearchParams({
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
@@ -58,7 +65,10 @@ export class StravaService {
       params.append('state', state);
     }
 
-    return `${STRAVA_OAUTH_BASE}/authorize?${params.toString()}`;
+    const authUrl = `${STRAVA_OAUTH_BASE}/authorize?${params.toString()}`;
+    console.log('🔗 Generated Strava Auth URL:', authUrl);
+
+    return authUrl;
   }
 
   /**
