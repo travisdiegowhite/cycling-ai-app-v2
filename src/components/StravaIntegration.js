@@ -358,13 +358,45 @@ const StravaIntegration = () => {
 
         // Convert Strava activity to our format
         const convertedActivity = stravaService.convertStravaActivity(activity);
-        
+
         console.log('Converting activity:', {
           id: activity.id,
           name: activity.name,
           distance: activity.distance,
           start_date: activity.start_date
         });
+
+        // Fetch GPS track points if available
+        let trackPoints = [];
+        let actualHasGpsData = false;
+        try {
+          if (activity.start_latlng && activity.start_latlng.length === 2) {
+            console.log(`📍 Fetching GPS streams for activity ${activity.id}...`);
+            const streams = await stravaService.getActivityStreams(activity.id, ['latlng', 'time', 'altitude']);
+
+            if (streams && streams.latlng && streams.latlng.data && streams.latlng.data.length > 0) {
+              console.log(`✅ Got ${streams.latlng.data.length} GPS points for activity ${activity.id}`);
+
+              // Convert Strava streams to our track points format
+              trackPoints = streams.latlng.data.map((latLng, index) => ({
+                latitude: latLng[0],
+                longitude: latLng[1],
+                elevation: streams.altitude?.data?.[index] || null,
+                time_seconds: streams.time?.data?.[index] || index,
+                point_index: index
+              }));
+
+              actualHasGpsData = true;
+            } else {
+              console.log(`⚠️ No GPS data in streams for activity ${activity.id}`);
+            }
+          } else {
+            console.log(`⚠️ Activity ${activity.id} has no start coordinates, skipping GPS fetch`);
+          }
+        } catch (streamError) {
+          console.warn(`Failed to fetch GPS streams for activity ${activity.id}:`, streamError.message);
+          // Continue with import even if streams fail
+        }
 
         // Prepare data for database insertion with new schema
         const routeData = {
@@ -408,7 +440,8 @@ const StravaIntegration = () => {
           bounds_west: convertedActivity.bounds_west || null,
           
           // Data availability flags
-          has_gps_data: !!(convertedActivity.start_latitude && convertedActivity.start_longitude),
+          has_gps_data: actualHasGpsData,
+          track_points_count: trackPoints.length,
           has_heart_rate_data: !!convertedActivity.average_heartrate,
           has_power_data: !!convertedActivity.average_watts,
           
@@ -425,10 +458,12 @@ const StravaIntegration = () => {
         
         console.log('Inserting route data:', routeData);
 
-        // Save to database
-        const { error: insertError } = await supabase
+        // Save route to database and get the route ID
+        const { data: routeResult, error: insertError } = await supabase
           .from('routes')
-          .insert([routeData]);
+          .insert([routeData])
+          .select('id')
+          .single();
 
         if (insertError) {
           console.error('Error inserting activity:', {
@@ -440,6 +475,27 @@ const StravaIntegration = () => {
           console.error('Full error details:', JSON.stringify(insertError, null, 2));
         } else {
           console.log(`✅ Successfully imported activity: ${activity.name}`);
+
+          // Save track points if we have them
+          if (trackPoints.length > 0 && routeResult?.id) {
+            console.log(`📍 Saving ${trackPoints.length} track points for route ${routeResult.id}...`);
+
+            const trackPointsWithRouteId = trackPoints.map(point => ({
+              ...point,
+              route_id: routeResult.id
+            }));
+
+            const { error: trackPointsError } = await supabase
+              .from('track_points')
+              .insert(trackPointsWithRouteId);
+
+            if (trackPointsError) {
+              console.error('Error inserting track points:', trackPointsError);
+            } else {
+              console.log(`✅ Successfully saved ${trackPoints.length} track points`);
+            }
+          }
+
           imported++;
         }
 
@@ -447,8 +503,8 @@ const StravaIntegration = () => {
         console.error(`Error processing activity ${activity.id}:`, activityError);
       }
 
-      // Small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Longer delay to avoid rate limiting (streams requests are more intensive)
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     return { imported, skipped };
