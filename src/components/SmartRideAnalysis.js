@@ -233,17 +233,35 @@ const SmartRideAnalysis = () => {
     try {
       console.log('Loading track points for route:', routeId);
 
-      const { data, error } = await supabase
-        .from('track_points')
-        .select('latitude, longitude, elevation, point_index')
-        .eq('route_id', routeId)
-        .order('point_index');
+      // Fetch all track points (Supabase has 1000 record default limit, so we need to handle pagination)
+      let allTrackPoints = [];
+      let hasMore = true;
+      let offset = 0;
+      const batchSize = 1000;
 
-      if (error) throw error;
-      console.log('Track points loaded:', data?.length, 'for route:', routeId);
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('track_points')
+          .select('latitude, longitude, elevation, point_index')
+          .eq('route_id', routeId)
+          .order('point_index')
+          .range(offset, offset + batchSize - 1);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          allTrackPoints = allTrackPoints.concat(data);
+          offset += batchSize;
+          hasMore = data.length === batchSize; // If we got less than batchSize, we're done
+        } else {
+          hasMore = false;
+        }
+      }
+
+      console.log('Track points loaded:', allTrackPoints?.length, 'for route:', routeId);
       
       // Convert to format expected by RouteMap (lat/lng instead of latitude/longitude)
-      const formattedTrackPoints = (data || []).map(point => ({
+      const formattedTrackPoints = (allTrackPoints || []).map(point => ({
         lat: point.latitude,
         lng: point.longitude,
         elevation: point.elevation,

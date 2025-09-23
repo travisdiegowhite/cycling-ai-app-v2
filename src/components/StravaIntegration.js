@@ -485,15 +485,32 @@ const StravaIntegration = () => {
               route_id: routeResult.id
             }));
 
-            const { error: trackPointsError } = await supabase
-              .from('track_points')
-              .insert(trackPointsWithRouteId);
+            // Insert track points in batches to avoid Supabase limits
+            const batchSize = 1000;
+            let totalInserted = 0;
 
-            if (trackPointsError) {
-              console.error('Error inserting track points:', trackPointsError);
-            } else {
-              console.log(`✅ Successfully saved ${trackPoints.length} track points`);
+            for (let i = 0; i < trackPointsWithRouteId.length; i += batchSize) {
+              const batch = trackPointsWithRouteId.slice(i, i + batchSize);
+
+              const { error: trackPointsError } = await supabase
+                .from('track_points')
+                .insert(batch);
+
+              if (trackPointsError) {
+                console.error(`Error inserting track points batch ${i}-${i + batch.length}:`, trackPointsError);
+                // Continue with next batch even if one fails
+              } else {
+                totalInserted += batch.length;
+                console.log(`✅ Saved batch: ${batch.length} points (${totalInserted}/${trackPoints.length} total)`);
+              }
+
+              // Small delay between batches
+              if (i + batchSize < trackPointsWithRouteId.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
             }
+
+            console.log(`✅ Successfully saved ${totalInserted}/${trackPoints.length} track points`);
           }
 
           imported++;

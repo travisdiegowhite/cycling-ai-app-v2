@@ -55,7 +55,10 @@ const RouteMap = ({ trackPoints, mapHeight = 400 }) => {
     trackPoints: trackPoints?.length || 0,
     mapboxToken: !!process.env.REACT_APP_MAPBOX_TOKEN,
     bounds,
-    routeGeoJSON: !!routeGeoJSON
+    routeGeoJSON: !!routeGeoJSON,
+    firstPoint: trackPoints?.[0],
+    lastPoint: trackPoints?.[trackPoints.length - 1],
+    coordinatesCount: routeGeoJSON?.geometry?.coordinates?.length
   });
 
   if (!trackPoints?.length) {
