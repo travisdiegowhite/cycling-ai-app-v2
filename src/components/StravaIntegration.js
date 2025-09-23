@@ -147,9 +147,8 @@ const StravaIntegration = () => {
 
       if (overrideExisting) {
         console.log('🔄 Override mode: Will replace existing routes with complete GPS data');
-        // Get existing routes to delete them after successful import
-        const existingRoutes = await getExistingStravaRoutes();
-        console.log(`📋 Found ${existingRoutes.length} existing Strava routes to replace`);
+        // In override mode, we'll handle deletion during processing
+        existingStravaIds = new Set(); // Don't skip any activities
       } else {
         // Get existing Strava IDs from our database to avoid duplicates
         existingStravaIds = await getExistingStravaIds();
@@ -423,16 +422,10 @@ const StravaIntegration = () => {
 
       try {
         // Handle existing activities based on override setting
-        const activityExists = existingStravaIds.has(activity.id.toString());
+        let activityExists = false;
 
-        if (activityExists && !overrideExisting) {
-          console.log(`⏭️ Skipping existing activity: ${activity.name} (${activity.id})`);
-          skipped++;
-          continue;
-        } else if (activityExists && overrideExisting) {
-          console.log(`🔄 Replacing existing activity: ${activity.name} (${activity.id})`);
-
-          // Delete existing route and track points
+        if (overrideExisting) {
+          // Check if activity exists in real-time for override mode
           const existingRoute = await supabase
             .from('routes')
             .select('id')
@@ -441,12 +434,27 @@ const StravaIntegration = () => {
             .single();
 
           if (existingRoute.data?.id) {
+            activityExists = true;
+            console.log(`🔄 Replacing existing activity: ${activity.name} (${activity.id})`);
+
+            // Delete existing route and track points
             const deleteSuccess = await deleteRouteWithTrackPoints(existingRoute.data.id);
             if (!deleteSuccess) {
               console.error(`Failed to delete existing route for activity ${activity.id}`);
               skipped++;
               continue;
             }
+            console.log(`✅ Successfully deleted existing route for activity ${activity.id}`);
+            // Small delay to ensure database constraint is updated
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        } else {
+          // Use pre-fetched set for normal mode
+          activityExists = existingStravaIds.has(activity.id.toString());
+          if (activityExists) {
+            console.log(`⏭️ Skipping existing activity: ${activity.name} (${activity.id})`);
+            skipped++;
+            continue;
           }
         }
 
@@ -552,12 +560,43 @@ const StravaIntegration = () => {
         
         console.log('Inserting route data:', routeData);
 
-        // Save route to database and get the route ID
-        const { data: routeResult, error: insertError } = await supabase
-          .from('routes')
-          .insert([routeData])
-          .select('id')
-          .single();
+        // Save route to database and get the route ID (with retry for constraint violations)
+        let routeResult = null;
+        let insertError = null;
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        while (retryCount < maxRetries && !routeResult) {
+          const insertResult = await supabase
+            .from('routes')
+            .insert([routeData])
+            .select('id')
+            .single();
+
+          routeResult = insertResult.data;
+          insertError = insertResult.error;
+
+          if (insertError && insertError.code === '23505' && overrideExisting && retryCount < maxRetries - 1) {
+            // Constraint violation in override mode - try to delete again and retry
+            console.log(`🔄 Constraint violation for activity ${activity.id}, attempting additional cleanup (retry ${retryCount + 1})`);
+
+            const existingRoute = await supabase
+              .from('routes')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('strava_id', activity.id.toString())
+              .single();
+
+            if (existingRoute.data?.id) {
+              await deleteRouteWithTrackPoints(existingRoute.data.id);
+              await new Promise(resolve => setTimeout(resolve, 200)); // Longer delay
+            }
+
+            retryCount++;
+          } else {
+            break; // Success or non-retryable error
+          }
+        }
 
         if (insertError) {
           console.error('Error inserting activity:', {
