@@ -13,6 +13,8 @@ import {
   Center,
   Progress,
   Avatar,
+  Tooltip,
+  SimpleGrid,
 } from '@mantine/core';
 import {
   Activity,
@@ -128,7 +130,7 @@ const StravaIntegration = () => {
     toast.success('Disconnected from Strava');
   };
 
-  const importActivities = async (importType = 'recent', customLimit = null) => {
+  const importActivities = async (importType = 'recent', customLimit = null, overrideExisting = false) => {
     if (!connected) {
       toast.error('Please connect to Strava first');
       return;
@@ -138,11 +140,21 @@ const StravaIntegration = () => {
       setImporting(true);
       setImportProgress(10);
 
-      console.log('🚴 Starting Strava activity import...', { importType, customLimit });
-      
-      // First, get existing Strava IDs from our database to avoid duplicates
-      const existingStravaIds = await getExistingStravaIds();
-      console.log(`📋 Found ${existingStravaIds.size} existing activities in database`);
+      console.log('🚴 Starting Strava activity import...', { importType, customLimit, overrideExisting });
+
+      // Handle existing routes based on override setting
+      let existingStravaIds = new Set();
+
+      if (overrideExisting) {
+        console.log('🔄 Override mode: Will replace existing routes with complete GPS data');
+        // Get existing routes to delete them after successful import
+        const existingRoutes = await getExistingStravaRoutes();
+        console.log(`📋 Found ${existingRoutes.length} existing Strava routes to replace`);
+      } else {
+        // Get existing Strava IDs from our database to avoid duplicates
+        existingStravaIds = await getExistingStravaIds();
+        console.log(`📋 Found ${existingStravaIds.size} existing activities in database`);
+      }
       
       let allActivities = [];
       let afterDate = null;
@@ -175,8 +187,8 @@ const StravaIntegration = () => {
 
       setImportProgress(30);
 
-      // Process all the fetched activities  
-      const { imported, skipped } = await processActivities(allActivities, importType, existingStravaIds);
+      // Process all the fetched activities
+      const { imported, skipped, replaced } = await processActivities(allActivities, importType, existingStravaIds, overrideExisting);
       
       // Record the import
       const { error: importRecordError } = await supabase
@@ -194,13 +206,20 @@ const StravaIntegration = () => {
 
       setImportProgress(100);
       
-      if (imported === 0 && skipped === 0) {
+      if (imported === 0 && skipped === 0 && (replaced || 0) === 0) {
         toast.info('No new activities found to import');
       } else {
-        const message = importType === 'all' 
-          ? `Successfully imported ${imported} new activities from your entire Strava history! (${skipped} skipped as duplicates)`
-          : `Successfully imported ${imported} new activities! (${skipped} skipped as duplicates)`;
-        
+        let message;
+        if (overrideExisting && replaced > 0) {
+          message = `Successfully re-imported ${replaced} activities with complete GPS data!`;
+          if (imported > 0) message += ` Plus ${imported} new activities.`;
+          if (skipped > 0) message += ` (${skipped} skipped)`;
+        } else {
+          message = importType === 'all'
+            ? `Successfully imported ${imported} new activities from your entire Strava history! (${skipped} skipped as duplicates)`
+            : `Successfully imported ${imported} new activities! (${skipped} skipped as duplicates)`;
+        }
+
         toast.success(message);
       }
       
@@ -233,6 +252,59 @@ const StravaIntegration = () => {
     } catch (error) {
       console.error('Error getting existing Strava IDs:', error);
       return new Set();
+    }
+  };
+
+  // Get existing Strava routes for override mode
+  const getExistingStravaRoutes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('routes')
+        .select('id, strava_id, name')
+        .eq('user_id', user.id)
+        .not('strava_id', 'is', null);
+
+      if (error) {
+        console.error('Error fetching existing Strava routes:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error getting existing Strava routes:', error);
+      return [];
+    }
+  };
+
+  // Delete route and associated track points
+  const deleteRouteWithTrackPoints = async (routeId) => {
+    try {
+      // Delete track points first (due to foreign key constraint)
+      const { error: trackPointsError } = await supabase
+        .from('track_points')
+        .delete()
+        .eq('route_id', routeId);
+
+      if (trackPointsError) {
+        console.error('Error deleting track points:', trackPointsError);
+        return false;
+      }
+
+      // Delete the route
+      const { error: routeError } = await supabase
+        .from('routes')
+        .delete()
+        .eq('id', routeId);
+
+      if (routeError) {
+        console.error('Error deleting route:', routeError);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error deleting route with track points:', error);
+      return false;
     }
   };
 
@@ -328,7 +400,7 @@ const StravaIntegration = () => {
   };
   
   // Extract activity processing logic for reuse
-  const processActivities = async (activities, importType = 'import', existingStravaIds = new Set()) => {
+  const processActivities = async (activities, importType = 'import', existingStravaIds = new Set(), overrideExisting = false) => {
     const cyclingActivities = activities.filter(activity => 
       activity.type === 'Ride' || activity.type === 'VirtualRide'
     );
@@ -336,11 +408,12 @@ const StravaIntegration = () => {
     console.log(`📊 Found ${cyclingActivities.length} cycling activities to process`);
 
     if (cyclingActivities.length === 0) {
-      return { imported: 0, skipped: 0 };
+      return { imported: 0, skipped: 0, replaced: 0 };
     }
 
     let imported = 0;
     let skipped = 0;
+    let replaced = 0;
     const baseProgress = importType === 'all' ? 30 : 30; // Account for fetching progress
 
     for (let i = 0; i < cyclingActivities.length; i++) {
@@ -349,11 +422,32 @@ const StravaIntegration = () => {
       setImportProgress(progress);
 
       try {
-        // Check if activity already exists using the pre-fetched set (much faster than DB query)
-        if (existingStravaIds.has(activity.id.toString())) {
+        // Handle existing activities based on override setting
+        const activityExists = existingStravaIds.has(activity.id.toString());
+
+        if (activityExists && !overrideExisting) {
           console.log(`⏭️ Skipping existing activity: ${activity.name} (${activity.id})`);
           skipped++;
           continue;
+        } else if (activityExists && overrideExisting) {
+          console.log(`🔄 Replacing existing activity: ${activity.name} (${activity.id})`);
+
+          // Delete existing route and track points
+          const existingRoute = await supabase
+            .from('routes')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('strava_id', activity.id.toString())
+            .single();
+
+          if (existingRoute.data?.id) {
+            const deleteSuccess = await deleteRouteWithTrackPoints(existingRoute.data.id);
+            if (!deleteSuccess) {
+              console.error(`Failed to delete existing route for activity ${activity.id}`);
+              skipped++;
+              continue;
+            }
+          }
         }
 
         // Convert Strava activity to our format
@@ -513,7 +607,11 @@ const StravaIntegration = () => {
             console.log(`✅ Successfully saved ${totalInserted}/${trackPoints.length} track points`);
           }
 
-          imported++;
+          if (activityExists && overrideExisting) {
+            replaced++;
+          } else {
+            imported++;
+          }
         }
 
       } catch (activityError) {
@@ -524,7 +622,7 @@ const StravaIntegration = () => {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    return { imported, skipped };
+    return { imported, skipped, replaced };
   };
 
   if (loading) {
@@ -661,37 +759,55 @@ const StravaIntegration = () => {
 
             {/* Import Activities */}
             <Card withBorder p="md">
-              <Group justify="space-between" mb="md">
-                <div>
-                  <Text size="md" fw={600}>Import New Activities</Text>
-                  <Text size="sm" c="dimmed">
-                    Only imports activities that haven't been downloaded yet
-                  </Text>
-                </div>
-                
-                <Group>
-                  <Button 
-                    leftSection={importing ? <Loader size={16} /> : <Download size={16} />}
-                    onClick={() => importActivities('recent', 50)}
-                    loading={importing}
-                    disabled={importing}
-                    variant="filled"
-                  >
-                    {importing ? 'Importing...' : 'Import New Activities'}
-                  </Button>
-                  
-                  <Button 
-                    leftSection={importing ? <Loader size={16} /> : <RefreshCw size={16} />}
-                    onClick={() => importActivities('all')}
-                    loading={importing}
-                    disabled={importing}
-                    variant="outline"
-                    color="orange"
-                  >
-                    {importing ? 'Importing...' : 'Import All Missing'}
-                  </Button>
-                </Group>
-              </Group>
+              <div>
+                <Text size="md" fw={600} mb="xs">Import Activities</Text>
+                <Text size="sm" c="dimmed" mb="md">
+                  Import new activities or re-import existing ones with complete GPS data
+                </Text>
+              </div>
+
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+                  <Tooltip label="Import recent activities not yet in your database">
+                    <Button
+                      leftSection={importing ? <Loader size={16} /> : <Download size={16} />}
+                      onClick={() => importActivities('recent', 50)}
+                      loading={importing}
+                      disabled={importing}
+                      variant="filled"
+                      fullWidth
+                    >
+                      {importing ? 'Importing...' : 'Import New'}
+                    </Button>
+                  </Tooltip>
+
+                  <Tooltip label="Import all missing activities from your Strava history">
+                    <Button
+                      leftSection={importing ? <Loader size={16} /> : <RefreshCw size={16} />}
+                      onClick={() => importActivities('all')}
+                      loading={importing}
+                      disabled={importing}
+                      variant="outline"
+                      color="orange"
+                      fullWidth
+                    >
+                      {importing ? 'Importing...' : 'Import All Missing'}
+                    </Button>
+                  </Tooltip>
+
+                  <Tooltip label="Re-import all activities with complete GPS track data (replaces existing)">
+                    <Button
+                      leftSection={importing ? <Loader size={16} /> : <RefreshCw size={16} />}
+                      onClick={() => importActivities('all', null, true)}
+                      loading={importing}
+                      disabled={importing}
+                      variant="outline"
+                      color="red"
+                      fullWidth
+                    >
+                      {importing ? 'Re-importing...' : 'Re-import with GPS'}
+                    </Button>
+                  </Tooltip>
+                </SimpleGrid>
 
               {importing && (
                 <Progress value={importProgress} size="sm" mb="md" />
