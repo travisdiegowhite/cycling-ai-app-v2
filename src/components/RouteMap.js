@@ -8,15 +8,10 @@ const RouteMap = ({ trackPoints, mapHeight = 400 }) => {
   const { bounds, routeGeoJSON } = useMemo(() => {
     if (!trackPoints?.length) return { bounds: null, routeGeoJSON: null };
 
-    console.log('Processing track points:', trackPoints.slice(0, 3));
-
     const lats = trackPoints.map(p => p.lat).filter(lat => lat != null);
     const lngs = trackPoints.map(p => p.lng).filter(lng => lng != null);
 
-    console.log('Extracted coordinates:', { lats: lats.slice(0, 3), lngs: lngs.slice(0, 3) });
-
     if (lats.length === 0 || lngs.length === 0) {
-      console.warn('No valid coordinates found in track points');
       return { bounds: null, routeGeoJSON: null };
     }
     
@@ -51,18 +46,7 @@ const RouteMap = ({ trackPoints, mapHeight = 400 }) => {
     }
   };
 
-  console.log('RouteMap render:', {
-    trackPoints: trackPoints?.length || 0,
-    mapboxToken: !!process.env.REACT_APP_MAPBOX_TOKEN,
-    bounds,
-    routeGeoJSON: !!routeGeoJSON,
-    firstPoint: trackPoints?.[0],
-    lastPoint: trackPoints?.[trackPoints.length - 1],
-    coordinatesCount: routeGeoJSON?.geometry?.coordinates?.length
-  });
-
   if (!trackPoints?.length) {
-    console.log('RouteMap: No track points provided');
     return (
       <Center style={{ height: mapHeight }}>
         <Stack align="center">
@@ -74,7 +58,6 @@ const RouteMap = ({ trackPoints, mapHeight = 400 }) => {
   }
 
   if (!process.env.REACT_APP_MAPBOX_TOKEN) {
-    console.warn('RouteMap: No Mapbox token found');
     return (
       <Center style={{ height: mapHeight }}>
         <Stack align="center">

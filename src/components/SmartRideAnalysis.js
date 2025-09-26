@@ -125,52 +125,14 @@ const SmartRideAnalysis = () => {
         const routesData = allRoutes;
 
         console.log('Smart analysis routes fetched:', routesData?.length);
-        console.log('Sample route data:', routesData?.[0]);
         if (routesData?.[0]) {
           console.log('Available fields:', Object.keys(routesData[0]));
-          console.log('GPS data fields:', {
-            has_gps_data: routesData[0].has_gps_data,
-            track_points_count: routesData[0].track_points_count,
-            start_latitude: routesData[0].start_latitude,
-            start_longitude: routesData[0].start_longitude
-          });
         }
 
         // Check how many routes have GPS data
         const routesWithGPS = routesData?.filter(r => r.has_gps_data) || [];
         const routesWithTrackPoints = routesData?.filter(r => r.track_points_count > 0) || [];
         console.log(`GPS data summary: ${routesWithGPS.length} routes with GPS flag, ${routesWithTrackPoints.length} routes with track points`);
-
-        // Test track points availability
-        if (routesData && routesData.length > 0) {
-          const testRoute = routesData[0];
-          console.log('Testing track points availability for first route:', testRoute.id);
-
-          supabase
-            .from('track_points')
-            .select('count')
-            .eq('route_id', testRoute.id)
-            .then(({ data, error }) => {
-              if (error) {
-                console.error('Error checking track points:', error);
-              } else {
-                console.log('Track points count query result:', data);
-              }
-            });
-
-          // Also check if track_points table exists and has data
-          supabase
-            .from('track_points')
-            .select('latitude, longitude, route_id')
-            .limit(5)
-            .then(({ data, error }) => {
-              if (error) {
-                console.error('Error checking track_points table:', error);
-              } else {
-                console.log('Sample track points from database:', data);
-              }
-            });
-        }
         
         // Debug: Check for any NULL date values
         const routesWithoutRecordedAt = routesData?.filter(r => !r.recorded_at) || [];
@@ -268,12 +230,9 @@ const SmartRideAnalysis = () => {
         point_index: point.point_index
       }));
 
-      console.log('Formatted track points sample:', formattedTrackPoints.slice(0, 3));
       console.log('Track points coordinate validation:', {
         totalPoints: formattedTrackPoints.length,
-        validLats: formattedTrackPoints.filter(p => p.lat != null).length,
-        validLngs: formattedTrackPoints.filter(p => p.lng != null).length,
-        sampleCoordinates: formattedTrackPoints.slice(0, 3).map(p => ({ lat: p.lat, lng: p.lng }))
+        validCoordinates: formattedTrackPoints.filter(p => p.lat != null && p.lng != null).length
       });
 
       setRouteTrackPoints(formattedTrackPoints);
@@ -459,15 +418,21 @@ const SmartRideAnalysis = () => {
       data.elevation += route.elevation_gain_m || 0;
       data.energy += route.kilojoules || 0;
       
-      if (route.average_speed) data.speeds.push(route.average_speed);
+      if (route.average_speed) {
+        // Convert m/s to km/h if needed
+        const speedKmh = route.average_speed > 100 ? route.average_speed : route.average_speed * 3.6;
+        data.speeds.push(speedKmh);
+      }
       if (route.average_heartrate) data.heartRates.push(route.average_heartrate);
       if (route.average_watts) data.powers.push(route.average_watts);
     });
-    
+
     return Object.values(monthlyData)
       .map(month => ({
         ...month,
-        avgSpeed: month.speeds.length > 0 ? month.speeds.reduce((a, b) => a + b, 0) / month.speeds.length : 0,
+        avgSpeed: month.speeds.length > 0
+          ? (month.speeds.reduce((a, b) => a + b, 0) / month.speeds.length) * 0.621371 // Convert km/h to mph
+          : 0,
         avgHR: month.heartRates.length > 0 ? month.heartRates.reduce((a, b) => a + b, 0) / month.heartRates.length : 0,
         avgPower: month.powers.length > 0 ? month.powers.reduce((a, b) => a + b, 0) / month.powers.length : 0
       }))
@@ -1129,14 +1094,27 @@ const SmartRideAnalysis = () => {
                 <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 200 : 300}>
                   <AreaChart data={monthlyTrends}>
                     <XAxis dataKey="monthName" fontSize={14} height={50} />
-                    <YAxis fontSize={14} width={80} />
+                    <YAxis
+                      fontSize={14}
+                      width={80}
+                      domain={(() => {
+                        const distances = monthlyTrends.map(m => m.distance).filter(d => d > 0);
+                        if (distances.length === 0) return ['auto', 'auto'];
+                        const min = Math.min(...distances);
+                        const max = Math.max(...distances);
+                        const range = max - min;
+                        const padding = Math.max(range * 0.1, max * 0.05); // 10% of range or 5% of max
+                        return [Math.max(0, min - padding), max + padding];
+                      })()}
+                      tickFormatter={(value) => Math.round(value).toString()}
+                    />
                     <ChartTooltip formatter={(value) => [formatDistance(value), 'Distance']} />
-                    <Area 
-                      type="monotone" 
-                      dataKey="distance" 
-                      stroke="#228be6" 
-                      fill="#228be6" 
-                      fillOpacity={0.6} 
+                    <Area
+                      type="monotone"
+                      dataKey="distance"
+                      stroke="#228be6"
+                      fill="#228be6"
+                      fillOpacity={0.6}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1150,12 +1128,25 @@ const SmartRideAnalysis = () => {
                     <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 150 : 200}>
                       <LineChart data={monthlyTrends}>
                         <XAxis dataKey="monthName" fontSize={14} height={50} />
-                        <YAxis fontSize={14} width={80} />
-                        <ChartTooltip formatter={(value) => [formatSpeed(value), 'Avg Speed']} />
-                        <Line 
-                          type="monotone" 
-                          dataKey="avgSpeed" 
-                          stroke="#51cf66" 
+                        <YAxis
+                          fontSize={14}
+                          width={80}
+                          domain={(() => {
+                            const speeds = monthlyTrends.map(m => m.avgSpeed).filter(s => s > 0);
+                            if (speeds.length === 0) return ['auto', 'auto'];
+                            const min = Math.min(...speeds);
+                            const max = Math.max(...speeds);
+                            const range = max - min;
+                            const padding = Math.max(1, range * 0.1); // At least 1 mph padding
+                            return [Math.max(0, min - padding), max + padding];
+                          })()}
+                          tickFormatter={(value) => `${Math.round(value)}`}
+                        />
+                        <ChartTooltip formatter={(value) => [`${Math.round(value)} mph`, 'Avg Speed']} />
+                        <Line
+                          type="monotone"
+                          dataKey="avgSpeed"
+                          stroke="#51cf66"
                           strokeWidth={3}
                           dot={{ r: 4 }}
                         />
@@ -1177,12 +1168,25 @@ const SmartRideAnalysis = () => {
                       <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 150 : 200}>
                         <LineChart data={monthlyTrends}>
                           <XAxis dataKey="monthName" fontSize={14} height={50} />
-                          <YAxis fontSize={14} width={80} />
+                          <YAxis
+                            fontSize={14}
+                            width={80}
+                            domain={(() => {
+                              const heartRates = monthlyTrends.map(m => m.avgHR).filter(hr => hr > 0);
+                              if (heartRates.length === 0) return ['auto', 'auto'];
+                              const min = Math.min(...heartRates);
+                              const max = Math.max(...heartRates);
+                              const range = max - min;
+                              const padding = Math.max(5, range * 0.1); // At least 5 bpm padding
+                              return [Math.max(50, min - padding), max + padding]; // Never go below 50 bpm
+                            })()}
+                            tickFormatter={(value) => `${Math.round(value)}`}
+                          />
                           <ChartTooltip formatter={(value) => [`${Math.round(value)} bpm`, 'Avg HR']} />
-                          <Line 
-                            type="monotone" 
-                            dataKey="avgHR" 
-                            stroke="#ff6b6b" 
+                          <Line
+                            type="monotone"
+                            dataKey="avgHR"
+                            stroke="#ff6b6b"
                             strokeWidth={3}
                             dot={{ r: 4 }}
                           />
@@ -1295,16 +1299,25 @@ function calculateImprovementTrend(routes) {
   const routesWithSpeed = routes
     .filter(r => r.average_speed && r.average_speed > 0)
     .sort((a, b) => new Date(a.recorded_at || a.created_at) - new Date(b.recorded_at || b.created_at));
-  
+
   if (routesWithSpeed.length < 5) return 0;
-  
-  // Simple linear regression on speeds over time
+
+  // Simple linear regression on speeds over time (with proper unit conversion)
   const n = routesWithSpeed.length;
   const sumX = routesWithSpeed.reduce((sum, _, i) => sum + i, 0);
-  const sumY = routesWithSpeed.reduce((sum, r) => sum + r.average_speed, 0);
-  const sumXY = routesWithSpeed.reduce((sum, r, i) => sum + i * r.average_speed, 0);
+  const sumY = routesWithSpeed.reduce((sum, r) => {
+    // Convert m/s to km/h if needed, then to mph
+    const speedKmh = r.average_speed > 100 ? r.average_speed : r.average_speed * 3.6;
+    const speedMph = speedKmh * 0.621371;
+    return sum + speedMph;
+  }, 0);
+  const sumXY = routesWithSpeed.reduce((sum, r, i) => {
+    const speedKmh = r.average_speed > 100 ? r.average_speed : r.average_speed * 3.6;
+    const speedMph = speedKmh * 0.621371;
+    return sum + i * speedMph;
+  }, 0);
   const sumX2 = routesWithSpeed.reduce((sum, _, i) => sum + i * i, 0);
-  
+
   const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
   return slope / (sumY / n); // Normalize by average speed
 }
