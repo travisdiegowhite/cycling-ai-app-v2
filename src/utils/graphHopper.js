@@ -16,10 +16,10 @@ const getGraphHopperApiKey = () => {
   return process.env.REACT_APP_GRAPHHOPPER_API_KEY;
 };
 
-// Get cycling directions using GraphHopper
+// Get cycling directions using GraphHopper with advanced preferences
 export async function getGraphHopperCyclingDirections(coordinates, options = {}) {
   const apiKey = getGraphHopperApiKey();
-  
+
   if (!apiKey) {
     console.warn('GraphHopper API key not found. Get one free at https://www.graphhopper.com/');
     return null;
@@ -30,7 +30,8 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
     alternatives = false,
     elevation = true,
     instructions = false,
-    calcPoints = true
+    calcPoints = true,
+    preferences = null
   } = options;
 
   // Format coordinates: lat,lon|lat,lon|...
@@ -45,6 +46,57 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
     elevation: elevation,
     optimize: 'false'
   });
+
+  // Add cycling-specific preferences for GraphHopper
+  if (preferences) {
+    console.log('🚴 Applying GraphHopper cycling preferences:', preferences);
+
+    // Traffic avoidance using GraphHopper's custom model
+    if (preferences.routingPreferences?.trafficTolerance === 'low') {
+      // Use GraphHopper's "safest" route preference
+      params.append('ch.disable', 'true'); // Disable contraction hierarchies for more flexibility
+      params.append('custom_model', JSON.stringify({
+        "priority": [
+          { "if": "road_class == PRIMARY", "multiply_by": "0.1" },
+          { "if": "road_class == TRUNK", "multiply_by": "0.05" },
+          { "if": "road_class == MOTORWAY", "multiply_by": "0.01" },
+          { "if": "bike_network != MISSING", "multiply_by": "1.5" },
+          { "if": "surface == PAVED", "multiply_by": "1.2" }
+        ]
+      }));
+      console.log('🚫 GraphHopper: Applying strict traffic avoidance');
+    } else if (preferences.routingPreferences?.trafficTolerance === 'medium') {
+      params.append('ch.disable', 'true');
+      params.append('custom_model', JSON.stringify({
+        "priority": [
+          { "if": "road_class == TRUNK", "multiply_by": "0.3" },
+          { "if": "road_class == MOTORWAY", "multiply_by": "0.1" },
+          { "if": "bike_network != MISSING", "multiply_by": "1.3" }
+        ]
+      }));
+      console.log('⚖️ GraphHopper: Applying moderate traffic avoidance');
+    }
+
+    // Bike infrastructure preference
+    if (preferences.safetyPreferences?.bikeInfrastructure === 'strongly_preferred' ||
+        preferences.safetyPreferences?.bikeInfrastructure === 'required') {
+      // Boost cycling infrastructure in routing
+      const infraBoost = preferences.safetyPreferences.bikeInfrastructure === 'required' ? '2.0' : '1.5';
+
+      if (!params.has('custom_model')) {
+        params.append('ch.disable', 'true');
+        params.append('custom_model', JSON.stringify({
+          "priority": [
+            { "if": "bike_network != MISSING", "multiply_by": infraBoost },
+            { "if": "bike_network == LCN", "multiply_by": "1.8" },
+            { "if": "bike_network == RCN", "multiply_by": "1.6" },
+            { "if": "bike_network == NCN", "multiply_by": "1.4" }
+          ]
+        }));
+      }
+      console.log(`🛣️ GraphHopper: Boosting bike infrastructure (${infraBoost}x)`);
+    }
+  }
 
   const url = `${GRAPHHOPPER_BASE_URL}/route?${params}&point=${points.replace(/\|/g, '&point=')}`;
 

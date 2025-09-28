@@ -14,6 +14,7 @@ import {
 } from '@mantine/core';
 import { Route, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import LandingPage from './LandingPage';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
@@ -21,7 +22,8 @@ const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  
+  const [showAuth, setShowAuth] = useState(false);
+
   const { signIn, signUp } = useAuth();
 
   const handleSubmit = async (e) => {
@@ -44,21 +46,26 @@ const Auth = () => {
     }
   };
 
+  // Show landing page by default, auth form when requested
+  if (!showAuth) {
+    return <LandingPage onGetStarted={() => setShowAuth(true)} />;
+  }
+
   return (
     <Container size={420} my={40}>
       <Group justify="center" mb={30}>
         <Route size={32} color="#2196f3" />
         <Title order={1} c="blue">Cycling AI</Title>
       </Group>
-      
+
       <Paper withBorder shadow="md" p={30} radius="md">
         <Title order={2} ta="center" mb="md">
           {isSignUp ? 'Create Account' : 'Welcome Back'}
         </Title>
-        
+
         <Text c="dimmed" size="sm" ta="center" mb="xl">
-          {isSignUp 
-            ? 'Get started with intelligent route recommendations' 
+          {isSignUp
+            ? 'Get started with intelligent route recommendations'
             : 'Sign in to access your cycling routes'
           }
         </Text>
@@ -97,12 +104,23 @@ const Auth = () => {
 
         <Text ta="center" mt="md">
           {isSignUp ? 'Already have an account?' : 'Need an account?'}{' '}
-          <Anchor 
-            component="button" 
+          <Anchor
+            component="button"
             type="button"
             onClick={() => setIsSignUp(!isSignUp)}
           >
             {isSignUp ? 'Sign In' : 'Sign Up'}
+          </Anchor>
+        </Text>
+
+        <Text ta="center" mt="lg">
+          <Anchor
+            component="button"
+            type="button"
+            onClick={() => setShowAuth(false)}
+            size="sm"
+          >
+            ← Back to home
           </Anchor>
         </Text>
       </Paper>

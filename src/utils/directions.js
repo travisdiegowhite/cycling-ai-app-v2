@@ -363,20 +363,23 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
   
   if (preferences?.routingPreferences?.trafficTolerance === 'low') {
     // Low traffic tolerance - aggressive traffic avoidance
-    excludeParam = '&exclude=motorway,trunk,toll,ferry';
+    excludeParam = '&exclude=motorway,trunk,primary,toll,ferry';
     annotations += ',congestion'; // Request congestion data when available
-    console.log('🚫 Low traffic tolerance - excluding high-traffic roads');
-    
+    console.log('🚫 Low traffic tolerance - excluding high-traffic roads including primary roads');
+
     // For very quiet roads, consider walking profile which often uses local streets
     if (preferences?.scenicPreferences?.quietnessLevel === 'high') {
       routingProfile = 'walking';
       console.log('🤫 High quietness preference - using walking profile for local roads');
     }
+
+    // Note: Mapbox doesn't support 'avoid' parameter for cycling profile
+    // All exclusions should be in the 'exclude' parameter
   } else if (preferences?.routingPreferences?.trafficTolerance === 'medium') {
     // Medium traffic tolerance - moderate avoidance
-    excludeParam = '&exclude=motorway,toll,ferry';
+    excludeParam = '&exclude=motorway,trunk,toll,ferry';
     annotations += ',congestion';
-    console.log('⚖️ Medium traffic tolerance - excluding major highways');
+    console.log('⚖️ Medium traffic tolerance - excluding major highways and trunk roads');
   } else if (preferences?.routingPreferences?.trafficTolerance === 'high') {
     // High traffic tolerance - minimal restrictions
     excludeParam = '&exclude=ferry'; // Only exclude ferries
@@ -453,6 +456,11 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
     `steps=${steps}&` +
     `annotations=${annotations}${excludeParam}&` +
     `access_token=${accessToken}`;
+
+  // Debug traffic avoidance
+  console.log('🛣️ Mapbox URL:', url.replace(/access_token=[^&]+/, 'access_token=***'));
+  console.log('🚫 Exclude param:', excludeParam);
+  console.log('🔧 Routing profile:', routingProfile);
 
   try {
     const response = await fetch(url);

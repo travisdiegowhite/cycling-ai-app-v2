@@ -4,6 +4,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { buildLineString } from '../utils/geo';
 import AIRouteGenerator from './AIRouteGenerator';
 import RouteProfile from './RouteProfile';
+import AIRouteActions from './AIRouteActions';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 const AIRouteMap = () => {
@@ -65,16 +66,25 @@ const AIRouteMap = () => {
       flexDirection: isMobile ? 'column' : 'row'
     }}>
       {/* AI Route Generator Panel */}
-      <div style={{ 
+      <div style={{
         width: isMobile ? '100%' : '400px',
         maxHeight: isMobile ? '40vh' : '100vh',
-        overflowY: 'auto' 
+        overflowY: 'auto'
       }}>
-        <AIRouteGenerator 
+        <AIRouteGenerator
           mapRef={mapRef}
           onRouteGenerated={handleRouteGenerated}
           onStartLocationSet={handleStartLocationSet}
           externalStartLocation={startLocation}
+        />
+
+        {/* Route Actions - Save and Export */}
+        <AIRouteActions
+          route={selectedRoute}
+          onSaved={(savedRoute) => {
+            console.log('Route saved:', savedRoute);
+            // Could optionally refresh route list or show success message
+          }}
         />
       </div>
 

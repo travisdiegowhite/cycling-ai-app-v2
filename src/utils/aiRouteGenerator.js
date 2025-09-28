@@ -8,7 +8,10 @@ import { fetchPastRides, analyzeRidingPatterns, generateRouteFromPatterns, build
 import { getGraphHopperCyclingDirections, selectGraphHopperProfile, validateGraphHopperService, GRAPHHOPPER_PROFILES } from './graphHopper';
 import { generateClaudeRoutes, enhanceRouteWithClaude, analyzeRidingPatternsWithClaude } from './claudeRouteService';
 import { EnhancedContextCollector } from './enhancedContext';
+import { optimizeLoopRoute, validateLoopRoute } from './routeOptimizer';
 import { filterRoutesByInfrastructure, enhanceRouteWithInfrastructure, generateInfrastructureReport } from './infrastructureValidator';
+import { getSmartCyclingRoute, isGraphHopperAvailable, getRoutingStrategyDescription } from './smartCyclingRouter';
+import { generateSmartRouteName, generateAlternativeNames } from './routeNaming';
 
 // Main AI route generation function
 export async function generateAIRoutes(params) {
@@ -325,7 +328,38 @@ async function generateMapboxBasedRoutes(params) {
   
   // Filter valid routes
   let validRoutes = routes.filter(route => route !== null && route.coordinates && route.coordinates.length > 10);
-  
+
+  // Optimize loop routes to remove unnecessary tangents
+  validRoutes = validRoutes.map(route => {
+    if (route.pattern === 'loop' || route.routeType === 'loop') {
+      console.log(`🔧 Optimizing loop route: ${route.name}`);
+
+      // Validate the loop first
+      const validation = validateLoopRoute(route.coordinates);
+      if (!validation.valid) {
+        console.warn(`❌ Invalid loop route: ${route.name} - ${validation.reason}`);
+        return route; // Return original if validation fails
+      }
+
+      // Optimize the route with aggressive tangent removal
+      const optimizedCoordinates = optimizeLoopRoute(route.coordinates, {
+        maxDeviationPercent: 0.15, // Stricter deviation tolerance
+        minSegmentLength: 150, // Minimum 150m segments
+        aggressiveMode: true, // Enable multi-pass optimization
+      });
+
+      if (optimizedCoordinates.length !== route.coordinates.length) {
+        console.log(`✅ Optimized ${route.name}: ${route.coordinates.length} → ${optimizedCoordinates.length} points`);
+      }
+
+      return {
+        ...route,
+        coordinates: optimizedCoordinates
+      };
+    }
+    return route;
+  });
+
   // Apply infrastructure validation and filtering if preferences exist
   if (userPreferences?.safetyPreferences?.bikeInfrastructure) {
     console.log('🚴 Applying infrastructure validation...');
@@ -403,10 +437,10 @@ async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, 
   
   // Generate different loop patterns using strategic waypoints
   const loopPatterns = [
-    { name: 'Northern Loop', bearing: 0, radius: 0.7 },
-    { name: 'Eastern Loop', bearing: 90, radius: 0.8 },
-    { name: 'Southern Loop', bearing: 180, radius: 0.7 },
-    { name: 'Western Loop', bearing: 270, radius: 0.8 }
+    { name: 'Route A', bearing: 0, radius: 0.7 },
+    { name: 'Route B', bearing: 90, radius: 0.8 },
+    { name: 'Route C', bearing: 180, radius: 0.7 },
+    { name: 'Route D', bearing: 270, radius: 0.8 }
   ];
   
   // Prioritize directions based on user patterns if available
@@ -505,11 +539,18 @@ async function generateMapboxLoop(startLocation, targetDistance, pattern, traini
   try {
     console.log(`Generating ${pattern.name} with ${waypoints.length} waypoints`);
     
-    // Use Mapbox Directions API for realistic cycling routes with user preferences
-    const route = await getCyclingDirections(waypoints, mapboxToken, {
-      profile: getMapboxProfile(trainingGoal),
-      preferences: userPreferences
+    // Use smart cycling router for optimal route with cycling infrastructure awareness
+    console.log(`🧠 Using smart cycling router for ${pattern.name}`);
+    const route = await getSmartCyclingRoute(waypoints, {
+      profile: 'bike',
+      preferences: userPreferences,
+      trainingGoal: trainingGoal,
+      mapboxToken: mapboxToken
     });
+
+    if (route) {
+      console.log(`✅ Smart router selected: ${route.source} - ${getRoutingStrategyDescription(route)}`);
+    }
     
     // Validate the route
     if (!route.coordinates || route.coordinates.length < 20 || route.confidence < 0.5) {
@@ -523,23 +564,44 @@ async function generateMapboxLoop(startLocation, targetDistance, pattern, traini
       console.warn(`${pattern.name} appears too geometric (complexity: ${complexity.toFixed(2)}), skipping`);
       return null;
     }
-    
+
+    // Optimize the loop route to remove tangents early
+    console.log(`🔧 Pre-optimizing ${pattern.name} loop route`);
+    const optimizedCoordinates = optimizeLoopRoute(route.coordinates, {
+      maxDeviationPercent: 0.15, // Very strict for Mapbox generated routes
+      minSegmentLength: 100,
+      aggressiveMode: true, // Enable aggressive cleaning
+    });
+
+    // Update route with optimized coordinates
+    route.coordinates = optimizedCoordinates;
+
     // Get elevation profile
     const elevationProfile = await fetchElevationProfile(route.coordinates, mapboxToken);
     const elevationStats = calculateElevationStats(elevationProfile);
     
+    // Create a temporary route object for smart naming
+    const tempRoute = {
+      coordinates: route.coordinates,
+      distance: route.distance / 1000,
+      elevationGain: elevationStats.gain
+    };
+
+    const smartName = generateSmartRouteName(tempRoute, pattern, trainingGoal);
+
     return {
-      name: `${pattern.name} - ${getRouteNameByGoal(trainingGoal)}`,
+      name: smartName,
       distance: route.distance / 1000,
       elevationGain: elevationStats.gain,
       elevationLoss: elevationStats.loss,
       coordinates: route.coordinates,
       difficulty: calculateDifficulty(route.distance / 1000, elevationStats.gain),
-      description: `Cycling loop using Mapbox routing intelligence (${getMapboxProfile(trainingGoal)} profile)`,
+      description: `${getRoutingStrategyDescription(route)}`,
       trainingGoal,
       pattern: 'loop',
       confidence: route.confidence,
-      source: 'mapbox',
+      source: route.source,
+      routingStrategy: getRoutingStrategyDescription(route),
       elevationProfile,
       windFactor: 0.8
     };
@@ -611,14 +673,23 @@ async function generateMapboxOutBack(startLocation, targetDistance, direction, t
     const elevationProfile = await fetchElevationProfile(fullCoordinates, mapboxToken);
     const elevationStats = calculateElevationStats(elevationProfile);
     
+    // Create route object for smart naming
+    const tempRoute = {
+      coordinates: fullCoordinates,
+      distance: (outboundRoute.distance * 2) / 1000,
+      elevationGain: elevationStats.gain
+    };
+
+    const smartName = generateSmartRouteName(tempRoute, 'out_back', trainingGoal);
+
     return {
-      name: `${direction.name} - ${getRouteNameByGoal(trainingGoal)}`,
+      name: smartName,
       distance: (outboundRoute.distance * 2) / 1000,
       elevationGain: elevationStats.gain,
       elevationLoss: elevationStats.loss,
       coordinates: fullCoordinates,
       difficulty: calculateDifficulty((outboundRoute.distance * 2) / 1000, elevationStats.gain),
-      description: `Out-and-back route using Mapbox cycling intelligence (${getMapboxProfile(trainingGoal)} profile)`,
+      description: `Out-and-back route using smart cycling routing`,
       trainingGoal,
       pattern: 'out_back',
       confidence: outboundRoute.confidence,
@@ -677,11 +748,18 @@ async function convertClaudeToFullRoute(claudeRoute, startLocation, targetDistan
       claudeRoute.pastRidePatterns
     );
 
-    // Use Mapbox to create realistic route
-    const route = await getCyclingDirections(waypoints, mapboxToken, {
-      profile: getMapboxProfile(claudeRoute.trainingGoal),
-      preferences: preferences
+    // Use smart cycling router for Claude-generated routes
+    console.log(`🧠 Converting Claude route "${claudeRoute.name}" with smart routing`);
+    const route = await getSmartCyclingRoute(waypoints, {
+      profile: 'bike',
+      preferences: preferences,
+      trainingGoal: claudeRoute.trainingGoal,
+      mapboxToken: mapboxToken
     });
+
+    if (route) {
+      console.log(`✅ Claude route enhanced via: ${route.source} - ${getRoutingStrategyDescription(route)}`);
+    }
 
     if (route && route.coordinates && route.coordinates.length > 10) {
       // Get elevation profile
@@ -2102,8 +2180,17 @@ async function generateOutAndBackPattern(startLocation, halfDistance, direction,
     const elevationProfile = await fetchElevationProfile(fullCoordinates, mapboxToken);
     const elevationStats = calculateElevationStats(elevationProfile);
     
+    // Create route object for smart naming
+    const tempRoute = {
+      coordinates: fullCoordinates,
+      distance: (outboundRoute.distance * 2) / 1000,
+      elevationGain: elevationStats.gain
+    };
+
+    const smartName = generateSmartRouteName(tempRoute, 'out_back', trainingGoal);
+
     return {
-      name: `${direction.name} - ${getRouteNameByGoal(trainingGoal)}`,
+      name: smartName,
       distance: (outboundRoute.distance * 2) / 1000, // Convert to km and double for round trip
       elevationGain: elevationStats.gain,
       elevationLoss: elevationStats.loss,
@@ -2143,14 +2230,40 @@ async function generateRoutesFromTemplates(params) {
     
     // Check if template distance is reasonable for target
     const distanceRatio = Math.abs(template.distance - targetDistance) / targetDistance;
-    return distanceRatio < 0.5; // Within 50% of target distance
+
+    // Exclude very short routes (under 5km) unless specifically looking for short routes
+    if (template.distance < 5 && targetDistance > 15) {
+      console.log(`🚫 Filtering out short route: ${template.distance}km (target: ${targetDistance}km)`);
+      return false;
+    }
+
+    // Exclude routes that are too far from target distance
+    if (distanceRatio > 0.5) return false;
+
+    // For longer target distances, be more strict about minimum distance
+    if (targetDistance > 25 && template.distance < targetDistance * 0.6) {
+      console.log(`🚫 Route too short for target: ${template.distance}km vs ${targetDistance}km`);
+      return false;
+    }
+
+    return true;
   });
   
   console.log(`Found ${suitableTemplates.length} suitable route templates`);
-  
+
+  // Sort templates by quality and relevance
+  const sortedTemplates = suitableTemplates.sort((a, b) => {
+    // Calculate quality scores
+    const scoreA = calculateTemplateScore(a, targetDistance, trainingGoal);
+    const scoreB = calculateTemplateScore(b, targetDistance, trainingGoal);
+    return scoreB - scoreA; // Higher scores first
+  });
+
+  console.log('📊 Template scores:', sortedTemplates.map(t => `${t.distance}km: ${calculateTemplateScore(t, targetDistance, trainingGoal).toFixed(2)}`));
+
   // Use the best templates to create new routes
-  for (let i = 0; i < Math.min(2, suitableTemplates.length); i++) {
-    const template = suitableTemplates[i];
+  for (let i = 0; i < Math.min(2, sortedTemplates.length); i++) {
+    const template = sortedTemplates[i];
     
     try {
       // Adapt the template to the new start location
@@ -2228,9 +2341,74 @@ async function adaptTemplateToLocation(template, newStartLocation, targetDistanc
       source: 'template',
       originalTemplate: template.id
     };
-    
+
   } catch (error) {
     console.warn('Failed to adapt template:', error);
     return null;
   }
+}
+
+/**
+ * Calculate quality score for a route template based on relevance to target distance and training goal
+ */
+function calculateTemplateScore(template, targetDistance, trainingGoal) {
+  let score = 0;
+
+  // Distance match score (0-40 points)
+  const distanceDiff = Math.abs(template.distance - targetDistance);
+  const distanceRatio = distanceDiff / targetDistance;
+
+  if (distanceRatio <= 0.1) { // Within 10%
+    score += 40;
+  } else if (distanceRatio <= 0.2) { // Within 20%
+    score += 30;
+  } else if (distanceRatio <= 0.4) { // Within 40%
+    score += 20;
+  } else if (distanceRatio <= 0.6) { // Within 60%
+    score += 10;
+  }
+  // No points for distances more than 60% off
+
+  // Training goal alignment (0-20 points)
+  if (template.trainingGoal === trainingGoal) {
+    score += 20;
+  } else if (trainingGoal === 'endurance' && (template.trainingGoal === 'hills' || template.trainingGoal === 'intervals')) {
+    score += 10; // Partial match - harder routes can work for endurance
+  }
+
+  // Route quality factors (0-25 points)
+  if (template.confidence) {
+    score += template.confidence * 15; // Up to 15 points for confidence
+  }
+
+  if (template.pattern === 'loop') {
+    score += 5; // Loops are generally preferred
+  }
+
+  if (template.elevationGain && template.distance) {
+    const elevationRatio = template.elevationGain / (template.distance * 1000); // m/m
+    if (elevationRatio > 0.01 && elevationRatio < 0.05) { // Good elevation variety
+      score += 5;
+    }
+  }
+
+  // Recency bonus (0-10 points)
+  if (template.last_used) {
+    const daysSinceUsed = (Date.now() - new Date(template.last_used).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceUsed <= 30) { // Used within last 30 days
+      score += 10 * Math.max(0, (30 - daysSinceUsed) / 30);
+    }
+  }
+
+  // Penalty for very short routes when targeting longer distances
+  if (template.distance < 5 && targetDistance > 15) {
+    score *= 0.1; // Heavily penalize very short routes for longer targets
+  }
+
+  // Penalty for excessively long routes for short targets
+  if (template.distance > targetDistance * 2) {
+    score *= 0.3; // Penalize routes that are more than 2x the target
+  }
+
+  return score;
 }
