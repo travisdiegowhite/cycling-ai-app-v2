@@ -44,9 +44,9 @@ const StravaCallback = () => {
         
         setStatus('success');
         
-        // Redirect back to the main app after a short delay
+        // Redirect back to the Strava integration page after a short delay
         setTimeout(() => {
-          navigate('/', { replace: true });
+          navigate('/strava', { replace: true });
         }, 2000);
 
       } catch (err) {
@@ -106,7 +106,7 @@ const StravaCallback = () => {
               ✅ Successfully connected!
             </Text>
             <Text align="center" size="sm" c="dimmed">
-              Redirecting you back to the app...
+              Taking you to the Strava integration page...
             </Text>
           </>
         )}
