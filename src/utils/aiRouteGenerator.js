@@ -178,6 +178,12 @@ export async function generateAIRoutes(params) {
   
   // Priority 2: Try to modify existing route templates
   if (ridingPatterns?.routeTemplates?.length > 0) {
+    console.log(`🎯 Found ${ridingPatterns.routeTemplates.length} route templates from past rides`);
+    ridingPatterns.routeTemplates.forEach((template, idx) => {
+      const distanceKm = (template.baseDistance || 0) / 1000;
+      console.log(`  ${idx + 1}. "${template.name}" - ${distanceKm.toFixed(1)}km`);
+    });
+
     const templateRoutes = await generateRoutesFromTemplates({
       startLocation,
       targetDistance,
@@ -186,7 +192,15 @@ export async function generateAIRoutes(params) {
       weatherData,
       templates: ridingPatterns.routeTemplates
     });
-    routes.push(...templateRoutes);
+
+    if (templateRoutes && templateRoutes.length > 0) {
+      routes.push(...templateRoutes);
+      console.log(`✅ Generated ${templateRoutes.length} routes from past ride templates`);
+    } else {
+      console.log(`❌ No routes generated from ${ridingPatterns.routeTemplates.length} templates`);
+    }
+  } else {
+    console.log(`📭 No route templates available from past rides`);
   }
   
   // Priority 3: Use Mapbox-based routing (NO geometric patterns)
@@ -341,21 +355,10 @@ async function generateMapboxBasedRoutes(params) {
         return route; // Return original if validation fails
       }
 
-      // Optimize the route with aggressive tangent removal
-      const optimizedCoordinates = optimizeLoopRoute(route.coordinates, {
-        maxDeviationPercent: 0.15, // Stricter deviation tolerance
-        minSegmentLength: 150, // Minimum 150m segments
-        aggressiveMode: true, // Enable multi-pass optimization
-      });
+      // Skip optimization to preserve road snapping
+      console.log(`🔧 Preserving road structure for ${route.name}: ${route.coordinates.length} points`);
 
-      if (optimizedCoordinates.length !== route.coordinates.length) {
-        console.log(`✅ Optimized ${route.name}: ${route.coordinates.length} → ${optimizedCoordinates.length} points`);
-      }
-
-      return {
-        ...route,
-        coordinates: optimizedCoordinates
-      };
+      return route;
     }
     return route;
   });
@@ -565,16 +568,8 @@ async function generateMapboxLoop(startLocation, targetDistance, pattern, traini
       return null;
     }
 
-    // Optimize the loop route to remove tangents early
-    console.log(`🔧 Pre-optimizing ${pattern.name} loop route`);
-    const optimizedCoordinates = optimizeLoopRoute(route.coordinates, {
-      maxDeviationPercent: 0.15, // Very strict for Mapbox generated routes
-      minSegmentLength: 100,
-      aggressiveMode: true, // Enable aggressive cleaning
-    });
-
-    // Update route with optimized coordinates
-    route.coordinates = optimizedCoordinates;
+    // Skip optimization to preserve road snapping
+    console.log(`🔧 Preserving road structure for ${pattern.name}: ${route.coordinates.length} points`);
 
     // Get elevation profile
     const elevationProfile = await fetchElevationProfile(route.coordinates, mapboxToken);
@@ -959,9 +954,11 @@ async function generateRoutesFromPersonalHistory(params) {
       // Filter by route type if specified
       if (routeType && template.routeType !== routeType) return false;
       
-      // Filter by similar distance (within 30% of target)
-      const distanceDiff = Math.abs(template.baseDistance - targetDistance) / targetDistance;
-      if (distanceDiff > 0.3) return false;
+      // Filter by similar distance (within 50% of target)
+      const templateDistanceKm = template.baseDistance / 1000; // Convert meters to km
+      const distanceDiff = Math.abs(templateDistanceKm - targetDistance) / targetDistance;
+      console.log(`📊 Template distance filter: "${template.name}" ${templateDistanceKm.toFixed(1)}km vs target ${targetDistance.toFixed(1)}km (diff: ${(distanceDiff * 100).toFixed(1)}%)`);
+      if (distanceDiff > 0.5) return false; // Allow up to 50% difference
       
       // Filter by training goal compatibility
       if (!isTemplateCompatibleWithTrainingGoal(template, trainingGoal)) return false;
@@ -2228,21 +2225,30 @@ async function generateRoutesFromTemplates(params) {
       return false;
     }
     
+    // Get distance - templates use baseDistance (in meters), convert to km
+    const templateDistanceKm = (template.baseDistance || template.distance || 0) / 1000;
+
+    // Debug the template data
+    console.log(`📋 Evaluating template: "${template.name}" - ${templateDistanceKm.toFixed(1)}km for target ${targetDistance}km`);
+
     // Check if template distance is reasonable for target
-    const distanceRatio = Math.abs(template.distance - targetDistance) / targetDistance;
+    const distanceRatio = Math.abs(templateDistanceKm - targetDistance) / targetDistance;
 
     // Exclude very short routes (under 5km) unless specifically looking for short routes
-    if (template.distance < 5 && targetDistance > 15) {
-      console.log(`🚫 Filtering out short route: ${template.distance}km (target: ${targetDistance}km)`);
+    if (templateDistanceKm < 5 && targetDistance > 15) {
+      console.log(`🚫 Filtering out short route: ${templateDistanceKm.toFixed(1)}km (target: ${targetDistance}km)`);
       return false;
     }
 
     // Exclude routes that are too far from target distance
-    if (distanceRatio > 0.5) return false;
+    if (distanceRatio > 0.5) {
+      console.log(`🚫 Distance too far from target: ${templateDistanceKm.toFixed(1)}km vs ${targetDistance}km (ratio: ${distanceRatio.toFixed(2)})`);
+      return false;
+    }
 
     // For longer target distances, be more strict about minimum distance
-    if (targetDistance > 25 && template.distance < targetDistance * 0.6) {
-      console.log(`🚫 Route too short for target: ${template.distance}km vs ${targetDistance}km`);
+    if (targetDistance > 25 && templateDistanceKm < targetDistance * 0.6) {
+      console.log(`🚫 Route too short for long target: ${templateDistanceKm.toFixed(1)}km vs ${targetDistance}km`);
       return false;
     }
 
@@ -2251,15 +2257,43 @@ async function generateRoutesFromTemplates(params) {
   
   console.log(`Found ${suitableTemplates.length} suitable route templates`);
 
-  // Sort templates by quality and relevance
-  const sortedTemplates = suitableTemplates.sort((a, b) => {
-    // Calculate quality scores
-    const scoreA = calculateTemplateScore(a, targetDistance, trainingGoal);
-    const scoreB = calculateTemplateScore(b, targetDistance, trainingGoal);
-    return scoreB - scoreA; // Higher scores first
+  // Add diversity bonus - prefer routes not used recently
+  const templatesWithDiversity = suitableTemplates.map(template => {
+    const baseScore = calculateTemplateScore(template, targetDistance, trainingGoal);
+
+    // Diversity bonus: prefer routes not used recently
+    const daysSinceUsed = template.timestamp ?
+      (Date.now() - new Date(template.timestamp).getTime()) / (1000 * 60 * 60 * 24) : 365;
+
+    let diversityBonus = 0;
+    if (daysSinceUsed > 90) {
+      diversityBonus = 15; // Big bonus for routes not used in 3+ months
+    } else if (daysSinceUsed > 30) {
+      diversityBonus = 10; // Medium bonus for routes not used in 1+ month
+    } else if (daysSinceUsed > 7) {
+      diversityBonus = 5; // Small bonus for routes not used in 1+ week
+    }
+
+    const finalScore = baseScore + diversityBonus;
+
+    const templateDistanceKm = (template.baseDistance || template.distance || 0) / 1000;
+    console.log(`📊 "${template.name}" ${templateDistanceKm.toFixed(1)}km: base=${baseScore.toFixed(1)}, diversity=+${diversityBonus}, final=${finalScore.toFixed(1)}`);
+
+    return {
+      ...template,
+      finalScore
+    };
   });
 
-  console.log('📊 Template scores:', sortedTemplates.map(t => `${t.distance}km: ${calculateTemplateScore(t, targetDistance, trainingGoal).toFixed(2)}`));
+  // Sort templates by final score (including diversity)
+  const sortedTemplates = templatesWithDiversity.sort((a, b) => {
+    return b.finalScore - a.finalScore; // Higher scores first
+  });
+
+  console.log(`🏆 Top template choices:`, sortedTemplates.slice(0, 3).map(t => {
+    const distanceKm = (t.baseDistance || t.distance || 0) / 1000;
+    return `"${t.name}" (${distanceKm.toFixed(1)}km, score: ${t.finalScore.toFixed(1)})`;
+  }));
 
   // Use the best templates to create new routes
   for (let i = 0; i < Math.min(2, sortedTemplates.length); i++) {
@@ -2271,7 +2305,8 @@ async function generateRoutesFromTemplates(params) {
       
       if (adaptedRoute && adaptedRoute.coordinates && adaptedRoute.coordinates.length > 10) {
         routes.push(adaptedRoute);
-        console.log(`Successfully adapted template route: ${template.distance}km -> ${adaptedRoute.distance}km`);
+        const templateDistanceKm = (template.baseDistance || 0) / 1000;
+        console.log(`Successfully adapted template route: ${templateDistanceKm.toFixed(1)}km -> ${adaptedRoute.distance}km`);
       }
     } catch (error) {
       console.warn('Failed to adapt template route:', error);
@@ -2294,7 +2329,8 @@ async function adaptTemplateToLocation(template, newStartLocation, targetDistanc
   ];
   
   // Scale factor to adjust distance
-  const scaleFactor = targetDistance / template.distance;
+  const templateDistanceKm = (template.baseDistance || template.distance || 0) / 1000;
+  const scaleFactor = targetDistance / templateDistanceKm;
   
   const adaptedKeyPoints = template.keyPoints.map((point, index) => {
     if (index === 0) {
@@ -2354,8 +2390,11 @@ async function adaptTemplateToLocation(template, newStartLocation, targetDistanc
 function calculateTemplateScore(template, targetDistance, trainingGoal) {
   let score = 0;
 
+  // Get distance consistently - templates use baseDistance (in meters), convert to km
+  const templateDistanceKm = (template.baseDistance || template.distance || 0) / 1000;
+
   // Distance match score (0-40 points)
-  const distanceDiff = Math.abs(template.distance - targetDistance);
+  const distanceDiff = Math.abs(templateDistanceKm - targetDistance);
   const distanceRatio = distanceDiff / targetDistance;
 
   if (distanceRatio <= 0.1) { // Within 10%
@@ -2385,28 +2424,29 @@ function calculateTemplateScore(template, targetDistance, trainingGoal) {
     score += 5; // Loops are generally preferred
   }
 
-  if (template.elevationGain && template.distance) {
-    const elevationRatio = template.elevationGain / (template.distance * 1000); // m/m
+  if (template.baseElevation && templateDistanceKm > 0) {
+    const elevationRatio = template.baseElevation / (templateDistanceKm * 1000); // m/m
     if (elevationRatio > 0.01 && elevationRatio < 0.05) { // Good elevation variety
       score += 5;
     }
   }
 
   // Recency bonus (0-10 points)
-  if (template.last_used) {
-    const daysSinceUsed = (Date.now() - new Date(template.last_used).getTime()) / (1000 * 60 * 60 * 24);
+  if (template.timestamp) {
+    const daysSinceUsed = (Date.now() - new Date(template.timestamp).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceUsed <= 30) { // Used within last 30 days
       score += 10 * Math.max(0, (30 - daysSinceUsed) / 30);
     }
   }
 
-  // Penalty for very short routes when targeting longer distances
-  if (template.distance < 5 && targetDistance > 15) {
-    score *= 0.1; // Heavily penalize very short routes for longer targets
+  // Heavy penalty for very short routes when targeting longer distances
+  if (templateDistanceKm < 5 && targetDistance > 15) {
+    console.log(`⚠️ Heavy penalty for short route: ${templateDistanceKm.toFixed(1)}km for ${targetDistance}km target`);
+    score *= 0.05; // Heavily penalize very short routes for longer targets (95% penalty)
   }
 
   // Penalty for excessively long routes for short targets
-  if (template.distance > targetDistance * 2) {
+  if (templateDistanceKm > targetDistance * 2) {
     score *= 0.3; // Penalize routes that are more than 2x the target
   }
 

@@ -824,27 +824,45 @@ function createRouteTemplates(pastRides) {
   }
 
   console.log(`📋 Creating route templates from ${pastRides.length} past rides...`);
-  
+
   const templates = [];
-  
+  let skippedNoGPS = 0;
+  let skippedTooShort = 0;
+
   pastRides.forEach(ride => {
     if (!ride.track_points || ride.track_points.length < 10) {
+      skippedNoGPS++;
+      console.log(`⏭️ Skipping "${ride.name}" - insufficient GPS data (${ride.track_points?.length || 0} points)`);
       return;
     }
 
     // Extract key characteristics from this ride
     const keyPoints = findKeyPoints(ride.track_points);
     if (keyPoints.length < 3) {
+      skippedTooShort++;
+      console.log(`⏭️ Skipping "${ride.name}" - too few key points (${keyPoints.length})`);
       return; // Need at least start, middle, and end
+    }
+
+    // Debug ride data
+    const distanceKm = ride.summary?.distance || ride.distance_km || 0;
+    const elevationM = ride.summary?.elevation_gain || ride.elevation_gain_m || 0;
+
+    if (distanceKm === 0) {
+      console.log(`⚠️ "${ride.name}" has 0 distance - ride data:`, {
+        summary: ride.summary,
+        distance_km: ride.distance_km,
+        elevation_gain_m: ride.elevation_gain_m
+      });
     }
 
     // Create template based on this ride
     const template = {
       id: ride.id,
       name: ride.name || `Route from ${new Date(ride.created_at).toLocaleDateString()}`,
-      baseDistance: ride.summary.distance,
-      baseElevation: ride.summary.elevation_gain,
-      baseDuration: ride.summary.duration,
+      baseDistance: distanceKm * 1000, // Convert to meters
+      baseElevation: elevationM,
+      baseDuration: ride.summary?.duration || ride.duration_seconds || 0,
       keyPoints: keyPoints.map(p => ({
         lat: p.latitude,
         lon: p.longitude,
@@ -865,9 +883,14 @@ function createRouteTemplates(pastRides) {
         west: ride.bounds_west
       }
     };
-    
+
+    const templateDistanceKm = template.baseDistance / 1000;
+    console.log(`✅ Created template: "${template.name}" - ${templateDistanceKm.toFixed(1)}km, ${template.pattern}, confidence: ${template.confidence.toFixed(2)}`);
+
     templates.push(template);
   });
+
+  console.log(`📊 Template creation summary: ${templates.length} created, ${skippedNoGPS} skipped (no GPS), ${skippedTooShort} skipped (too short)`);
 
   // Sort by most recent and highest confidence
   templates.sort((a, b) => {
@@ -876,7 +899,7 @@ function createRouteTemplates(pastRides) {
     return bScore - aScore;
   });
 
-  console.log(`✅ Created ${templates.length} route templates`);
+  console.log(`✅ Final template count: ${templates.length} (keeping top 10)`);
   return templates.slice(0, 10); // Keep top 10 templates
 }
 
