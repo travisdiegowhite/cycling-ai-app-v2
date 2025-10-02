@@ -62,6 +62,7 @@ import { getRouteDate } from '../utils/dateUtils';
 import RouteMap from './RouteMap';
 import ActivityHeatmap from './ActivityHeatmap';
 import RideDetailModal from './RideDetailModal';
+import RideLocationHeatmap from './RideLocationHeatmap';
 
 const SmartRideAnalysis = () => {
   const { user } = useAuth();
@@ -898,25 +899,8 @@ const SmartRideAnalysis = () => {
                     </Stack>
                   </Card>
 
-                  {/* Riding Areas */}
-                  {ridingPatterns.frequentAreas?.length > 0 && (
-                    <Card withBorder p="md">
-                      <Title order={5} mb="md">Favorite Areas</Title>
-                      <Stack gap="xs">
-                        {ridingPatterns.frequentAreas.slice(0, 3).map((area, index) => (
-                          <Group key={index} justify="space-between">
-                            <Group gap="xs">
-                              <MapPin size={16} />
-                              <Text size="sm">Area {index + 1}</Text>
-                            </Group>
-                            <Badge size="sm" variant="light">
-                              {area.frequency} rides
-                            </Badge>
-                          </Group>
-                        ))}
-                      </Stack>
-                    </Card>
-                  )}
+                  {/* Ride Location Heatmap - replaces Favorite Areas */}
+                  <RideLocationHeatmap routes={filteredRoutes} />
 
                   {/* Performance Confidence */}
                   <Card withBorder p="md">
