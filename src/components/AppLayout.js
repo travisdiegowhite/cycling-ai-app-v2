@@ -13,7 +13,7 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus, Zap } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus, Zap, FileText, Scale } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -183,6 +183,30 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
         </Flex>
 
         <Container mt="auto" p={0}>
+          <Flex direction="column" gap="xs" mb="sm">
+            <Button
+              variant="subtle"
+              size="xs"
+              leftSection={<FileText size={14} />}
+              onClick={() => window.open('/privacy-policy', '_blank')}
+              justify="flex-start"
+              fullWidth
+              c="dimmed"
+            >
+              Privacy Policy
+            </Button>
+            <Button
+              variant="subtle"
+              size="xs"
+              leftSection={<Scale size={14} />}
+              onClick={() => window.open('/terms-of-service', '_blank')}
+              justify="flex-start"
+              fullWidth
+              c="dimmed"
+            >
+              Terms of Service
+            </Button>
+          </Flex>
           <Text size="xs" c="dimmed" ta="center">
             Built with React and powered by AI for smarter cycling experiences.
           </Text>
