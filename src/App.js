@@ -11,6 +11,10 @@ import AIRouteMap from './components/AIRouteMap';
 import SmartRideAnalysis from './components/SmartRideAnalysis';
 import StravaIntegration from './components/StravaIntegration';
 import StravaCallback from './components/StravaCallback';
+import WahooCallback from './components/WahooCallback';
+import GarminCallback from './components/GarminCallback';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfService from './components/TermsOfService';
 import AppLayout from './components/AppLayout';
 import RouteBuilder from './components/RouteBuilder';
 import RouteStudio from './components/RouteStudio';
@@ -37,9 +41,23 @@ const AppContent = () => {
     else if (path === '/strava') setActivePage('strava');
   }, [location]);
 
-  // Handle Strava callback route (no layout needed)
+  // Handle OAuth callback routes (no layout needed)
   if (location.pathname === '/strava/callback') {
     return <StravaCallback />;
+  }
+  if (location.pathname === '/wahoo/callback') {
+    return <WahooCallback />;
+  }
+  if (location.pathname === '/garmin/callback') {
+    return <GarminCallback />;
+  }
+
+  // Handle public pages (no auth required, no layout)
+  if (location.pathname === '/privacy-policy') {
+    return <PrivacyPolicy />;
+  }
+  if (location.pathname === '/terms-of-service') {
+    return <TermsOfService />;
   }
 
   const renderContent = () => {

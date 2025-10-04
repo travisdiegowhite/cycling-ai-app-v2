@@ -1,0 +1,277 @@
+// Garmin Connect API Integration Service
+// Secure server-side OAuth and API integration
+// Documentation: https://developer.garmin.com/gc-developer-program/
+
+import { supabase } from '../supabase';
+
+const GARMIN_OAUTH_BASE = 'https://connect.garmin.com/oauthConfirm';
+const GARMIN_API_BASE = 'https://apis.garmin.com';
+
+// Get the API base URL based on environment
+const getApiBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return ''; // Use relative URLs in production
+  }
+  return 'http://localhost:3000';
+};
+
+/**
+ * Secure Garmin OAuth and API service
+ * Note: Garmin uses OAuth 1.0a (different from Wahoo's OAuth 2.0)
+ */
+export class GarminService {
+  constructor() {
+    this.consumerKey = process.env.REACT_APP_GARMIN_CONSUMER_KEY;
+    this.redirectUri = process.env.REACT_APP_GARMIN_REDIRECT_URI || `${window.location.origin}/garmin/callback`;
+  }
+
+  /**
+   * Check if Garmin credentials are configured
+   */
+  isConfigured() {
+    return !!(this.consumerKey);
+  }
+
+  /**
+   * Get current user ID from Supabase auth
+   */
+  async getCurrentUserId() {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id || null;
+  }
+
+  /**
+   * Initiate Garmin OAuth flow (OAuth 1.0a requires server-side request token)
+   * This calls the server to get a request token first
+   */
+  async initiateAuth() {
+    if (!this.isConfigured()) {
+      throw new Error('Garmin consumer key must be configured');
+    }
+
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
+    try {
+      console.log('🔍 Initiating Garmin OAuth flow...');
+
+      // Call server to get OAuth 1.0a request token
+      const response = await fetch(`${getApiBaseUrl()}/api/garmin-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'get_request_token',
+          userId: userId
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      const authUrl = data.authorizationUrl;
+
+      console.log('🔗 Generated Garmin Auth URL');
+      return authUrl;
+
+    } catch (error) {
+      console.error('❌ Garmin auth initiation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Complete OAuth flow after callback (exchange verifier for access token)
+   */
+  async completeAuth(oauthToken, oauthVerifier) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
+    try {
+      console.log('🔄 Completing Garmin OAuth flow...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/garmin-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'exchange_token',
+          oauthToken: oauthToken,
+          oauthVerifier: oauthVerifier,
+          userId: userId
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Garmin connection successful');
+
+      return data;
+    } catch (error) {
+      console.error('❌ Garmin auth completion failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user has connected Garmin account
+   */
+  async isConnected() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('bike_computer_integrations')
+        .select('id, sync_enabled')
+        .eq('user_id', userId)
+        .eq('provider', 'garmin')
+        .single();
+
+      return !error && data && data.sync_enabled;
+    } catch (error) {
+      console.error('Error checking Garmin connection:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get Garmin integration details for current user
+   */
+  async getIntegration() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('bike_computer_integrations')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('provider', 'garmin')
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching Garmin integration:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Disconnect Garmin account
+   */
+  async disconnect() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/garmin-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'disconnect',
+          userId: userId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to disconnect Garmin');
+      }
+
+      console.log('✅ Garmin disconnected successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to disconnect Garmin:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Manually trigger sync from Garmin
+   * Note: Garmin primarily uses PUSH webhooks, but manual sync is available
+   */
+  async syncActivities(options = {}) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
+    try {
+      console.log('🔄 Syncing activities from Garmin...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/garmin-sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: userId,
+          ...options
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Garmin sync completed:', data);
+
+      return data;
+    } catch (error) {
+      console.error('❌ Garmin sync failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get sync history
+   */
+  async getSyncHistory(limit = 50) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('bike_computer_sync_history')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('provider', 'garmin')
+        .order('synced_at', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching Garmin sync history:', error);
+      return [];
+    }
+  }
+}
+
+// Export singleton instance
+const garminService = new GarminService();
+export default garminService;
