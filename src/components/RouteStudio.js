@@ -753,10 +753,10 @@ const RouteStudio = () => {
         confidence: snappedRoute?.confidence || null,
         distance_km: snappedRoute?.distance ? snappedRoute.distance / 1000 : 0,
         duration_seconds: snappedRoute?.duration ? Math.round(snappedRoute.duration) : 0,
-        elevation_gain_m: elevationStats?.totalElevationGain || 0,
-        elevation_loss_m: elevationStats?.totalElevationLoss || 0,
-        elevation_min_m: elevationStats?.minElevation || null,
-        elevation_max_m: elevationStats?.maxElevation || null,
+        elevation_gain_m: elevationStats?.gain || 0,
+        elevation_loss_m: elevationStats?.loss || 0,
+        elevation_min_m: elevationStats?.min || null,
+        elevation_max_m: elevationStats?.max || null,
       };
 
       console.log('Route data to save:', routeData);
@@ -804,15 +804,19 @@ const RouteStudio = () => {
   // Calculate route stats
   const routeStats = useMemo(() => {
     if (!snappedRoute || !snappedRoute.coordinates) return null;
-    
+
     const distance = snappedRoute.distance || polylineDistance(snappedRoute.coordinates);
-    const elevationGain = elevationStats?.totalElevationGain || 0;
-    const elevationLoss = elevationStats?.totalElevationLoss || 0;
-    
+    const elevationGain = elevationStats?.gain || 0;
+    const elevationLoss = elevationStats?.loss || 0;
+    const minElevation = elevationStats?.min || 0;
+    const maxElevation = elevationStats?.max || 0;
+
     return {
       distance: formatDistance(distance),
       elevationGain: formatElevation(elevationGain),
       elevationLoss: formatElevation(elevationLoss),
+      minElevation: formatElevation(minElevation),
+      maxElevation: formatElevation(maxElevation),
       confidence: snappedRoute.confidence || 0,
     };
   }, [snappedRoute, elevationStats, formatDistance, formatElevation]);
