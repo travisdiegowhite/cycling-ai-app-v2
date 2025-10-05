@@ -82,7 +82,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       const weather = await getWeatherData(location[1], location[0]);
       if (weather) {
         setWeatherData(weather);
-        toast.success(`Weather updated: ${formatTemperature(weather.temperature)}, ${weather.description}`);
+        // Format temperature inline to avoid dependency issues
+        const tempF = Math.round((weather.temperature * 9/5) + 32);
+        toast.success(`Weather updated: ${tempF}°F, ${weather.description}`);
       } else {
         // Use mock data as fallback
         setWeatherData(getMockWeatherData());
@@ -91,7 +93,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       console.warn('Weather fetch failed, using mock data:', error);
       setWeatherData(getMockWeatherData());
     }
-  }, [formatTemperature]);
+  }, []);
 
   // Geocode address to coordinates using Mapbox Geocoding API
   const geocodeAddress = async (address) => {
