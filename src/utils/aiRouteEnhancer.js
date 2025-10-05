@@ -4,13 +4,10 @@
  * Shared between Route Studio and AI Route Generator for consistent AI quality
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { EnhancedContextCollector } from './enhancedContext';
 import { smartCyclingRouter } from './smartCyclingRouter';
 import { polylineDistance } from './geo';
 import { calculateElevationMetrics } from './elevation';
-
-const ANTHROPIC_API_KEY = process.env.REACT_APP_ANTHROPIC_API_KEY;
 
 /**
  * Analyze a route and generate AI-powered enhancement suggestions
