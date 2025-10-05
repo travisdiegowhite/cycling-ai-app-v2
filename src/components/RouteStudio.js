@@ -254,6 +254,7 @@ const RouteStudio = () => {
 
   // Custom clear route that also clears AI-specific state
   const clearRoute = useCallback(() => {
+    console.log('🗑️ Clearing route - resetting all state');
     baseClearRoute();
     setOriginalRoute(null);
     setSuggestedRoute(null);
@@ -263,6 +264,8 @@ const RouteStudio = () => {
     setAiSuggestionHistory([]);
     setRouteName('');
     setRouteDescription('');
+    setShowAIPanel(false); // Close AI panel on clear
+    console.log('✅ Route cleared - ready for new route');
   }, [baseClearRoute]);
 
   // Auto-fetch elevation when route is snapped
@@ -272,10 +275,16 @@ const RouteStudio = () => {
     }
   }, [snappedRoute, fetchElevation]);
 
-  // Debug waypoints
+  // Debug waypoints and route state
   useEffect(() => {
-    console.log('Waypoints updated:', waypoints.length, waypoints);
-  }, [waypoints]);
+    console.log('📍 Waypoints updated:', {
+      count: waypoints.length,
+      waypoints: waypoints.map(w => ({ id: w.id, type: w.type, position: w.position })),
+      hasSnappedRoute: !!snappedRoute,
+      snappedRouteCoords: snappedRoute?.coordinates?.length || 0,
+      previewingSuggestion: !!previewingSuggestion
+    });
+  }, [waypoints, snappedRoute, previewingSuggestion]);
 
   // Real AI suggestion generation using aiRouteEnhancer
   const generateAISuggestions = useCallback(async () => {
@@ -1047,25 +1056,39 @@ const RouteStudio = () => {
           <ScaleControl position="bottom-left" />
           
           {/* Original Route Line */}
-          {!previewingSuggestion && ((snappedRoute && snappedRoute.coordinates && snappedRoute.coordinates.length > 0) || 
-            (waypoints.length >= 2)) && (
-            <Source 
-              id="route-line" 
-              type="geojson" 
-              data={buildLineString(snappedRoute?.coordinates || waypoints.map(wp => wp.position))}
-            >
-              <Layer
-                id="route"
-                type="line"
-                paint={{
-                  'line-color': snappedRoute ? '#228be6' : '#ff6b35',
-                  'line-width': 4,
-                  'line-opacity': snappedRoute ? 0.8 : 0.6,
-                  'line-dasharray': snappedRoute ? undefined : [2, 2]
-                }}
-              />
-            </Source>
-          )}
+          {(() => {
+            const shouldShowRoute = !previewingSuggestion && ((snappedRoute && snappedRoute.coordinates && snappedRoute.coordinates.length > 0) || (waypoints.length >= 2));
+            const routeCoordinates = snappedRoute?.coordinates || waypoints.map(wp => wp.position);
+
+            console.log('🗺️ Route line render:', {
+              shouldShowRoute,
+              previewingSuggestion: !!previewingSuggestion,
+              hasSnappedRoute: !!snappedRoute,
+              snappedCoordCount: snappedRoute?.coordinates?.length || 0,
+              waypointCount: waypoints.length,
+              routeCoordCount: routeCoordinates?.length || 0
+            });
+
+            return shouldShowRoute ? (
+              <Source
+                key={`route-line-${waypoints.length}-${snappedRoute?.coordinates?.length || 0}`}
+                id="route-line"
+                type="geojson"
+                data={buildLineString(routeCoordinates)}
+              >
+                <Layer
+                  id="route"
+                  type="line"
+                  paint={{
+                    'line-color': snappedRoute ? '#228be6' : '#ff6b35',
+                    'line-width': 4,
+                    'line-opacity': snappedRoute ? 0.8 : 0.6,
+                    'line-dasharray': snappedRoute ? undefined : [2, 2]
+                  }}
+                />
+              </Source>
+            ) : null;
+          })()}
 
           {/* Original Route (when previewing) */}
           {previewingSuggestion && originalRoute && (
