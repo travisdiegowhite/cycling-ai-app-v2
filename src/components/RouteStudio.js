@@ -1083,7 +1083,7 @@ const RouteStudio = () => {
                     'line-color': snappedRoute ? '#228be6' : '#ff6b35',
                     'line-width': 4,
                     'line-opacity': snappedRoute ? 0.8 : 0.6,
-                    'line-dasharray': snappedRoute ? undefined : [2, 2]
+                    ...(snappedRoute ? {} : { 'line-dasharray': [2, 2] })
                   }}
                 />
               </Source>
