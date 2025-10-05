@@ -158,6 +158,7 @@ export const useRouteManipulation = ({
         distance: route.distance || 0,
         duration: route.duration || 0,
         confidence: 1.0,
+        waypointCount: waypoints.length, // Track how many waypoints were snapped
       });
       
       setSnapProgress(0.8);

@@ -286,6 +286,19 @@ const RouteStudio = () => {
     });
   }, [waypoints, snappedRoute, previewingSuggestion]);
 
+  // Clear snapped route when waypoints change (user is modifying the route)
+  // This ensures new waypoints are visible in the route line
+  useEffect(() => {
+    if (snappedRoute && waypoints.length > 0) {
+      // Check if waypoints have changed from what was snapped
+      const snappedWaypointCount = snappedRoute.waypointCount || 0;
+      if (waypoints.length !== snappedWaypointCount) {
+        console.log('🔄 Waypoints changed - clearing snapped route to show new waypoints');
+        setSnappedRoute(null);
+      }
+    }
+  }, [waypoints.length]); // Only trigger when waypoint count changes
+
   // Real AI suggestion generation using aiRouteEnhancer
   const generateAISuggestions = useCallback(async () => {
     if (waypoints.length < 2) {
