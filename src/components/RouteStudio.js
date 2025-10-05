@@ -805,14 +805,20 @@ const RouteStudio = () => {
   const routeStats = useMemo(() => {
     if (!snappedRoute || !snappedRoute.coordinates) return null;
 
-    const distance = snappedRoute.distance || polylineDistance(snappedRoute.coordinates);
+    // snappedRoute.distance is in METERS from Mapbox API
+    // polylineDistance returns KILOMETERS
+    // formatDistance expects KILOMETERS
+    const distanceInKm = snappedRoute.distance
+      ? snappedRoute.distance / 1000  // Convert meters to km
+      : polylineDistance(snappedRoute.coordinates); // Already in km
+
     const elevationGain = elevationStats?.gain || 0;
     const elevationLoss = elevationStats?.loss || 0;
     const minElevation = elevationStats?.min || 0;
     const maxElevation = elevationStats?.max || 0;
 
     return {
-      distance: formatDistance(distance),
+      distance: formatDistance(distanceInKm),
       elevationGain: formatElevation(elevationGain),
       elevationLoss: formatElevation(elevationLoss),
       minElevation: formatElevation(minElevation),
