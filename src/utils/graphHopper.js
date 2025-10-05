@@ -53,48 +53,71 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
 
     // Traffic avoidance using GraphHopper's custom model
     if (preferences.routingPreferences?.trafficTolerance === 'low') {
-      // Use GraphHopper's "safest" route preference
+      // Use GraphHopper's "safest" route preference with VERY strict avoidance
       params.append('ch.disable', 'true'); // Disable contraction hierarchies for more flexibility
       params.append('custom_model', JSON.stringify({
         "priority": [
-          { "if": "road_class == PRIMARY", "multiply_by": "0.1" },
-          { "if": "road_class == TRUNK", "multiply_by": "0.05" },
-          { "if": "road_class == MOTORWAY", "multiply_by": "0.01" },
-          { "if": "bike_network != MISSING", "multiply_by": "1.5" },
-          { "if": "surface == PAVED", "multiply_by": "1.2" }
-        ]
+          // BLOCK dangerous roads completely
+          { "if": "road_class == MOTORWAY", "multiply_by": "0" },
+          { "if": "road_class == TRUNK", "multiply_by": "0" },
+          { "if": "road_class == PRIMARY", "multiply_by": "0.01" }, // Almost block primary roads
+          { "if": "max_speed > 50", "multiply_by": "0.05" }, // Avoid high-speed roads
+          // STRONGLY prefer safe infrastructure
+          { "if": "bike_network != MISSING", "multiply_by": "3.0" }, // 3x preference for bike networks
+          { "if": "road_class == CYCLEWAY", "multiply_by": "5.0" }, // 5x preference for dedicated bike paths
+          { "if": "road_class == RESIDENTIAL", "multiply_by": "2.0" }, // 2x preference for residential streets
+          { "if": "road_class == LIVING_STREET", "multiply_by": "2.5" }, // Prefer living streets
+          { "if": "road_class == SERVICE", "multiply_by": "1.5" }, // Prefer service roads
+          { "if": "surface == PAVED", "multiply_by": "1.3" }
+        ],
+        "distance_influence": 70 // Allow up to 70% longer routes for safety
       }));
-      console.log('🚫 GraphHopper: Applying strict traffic avoidance');
+      console.log('🚫 GraphHopper: Applying STRICT traffic avoidance - blocking motorways, trunks, and heavily penalizing primary roads');
     } else if (preferences.routingPreferences?.trafficTolerance === 'medium') {
       params.append('ch.disable', 'true');
       params.append('custom_model', JSON.stringify({
         "priority": [
-          { "if": "road_class == TRUNK", "multiply_by": "0.3" },
-          { "if": "road_class == MOTORWAY", "multiply_by": "0.1" },
-          { "if": "bike_network != MISSING", "multiply_by": "1.3" }
-        ]
+          { "if": "road_class == MOTORWAY", "multiply_by": "0" }, // Still block motorways
+          { "if": "road_class == TRUNK", "multiply_by": "0.05" }, // Heavily penalize trunks
+          { "if": "road_class == PRIMARY", "multiply_by": "0.3" }, // Moderately avoid primary
+          { "if": "max_speed > 70", "multiply_by": "0.1" }, // Avoid very high-speed roads
+          { "if": "bike_network != MISSING", "multiply_by": "2.0" },
+          { "if": "road_class == CYCLEWAY", "multiply_by": "3.0" },
+          { "if": "road_class == RESIDENTIAL", "multiply_by": "1.5" }
+        ],
+        "distance_influence": 40 // Allow up to 40% longer for moderate safety
       }));
       console.log('⚖️ GraphHopper: Applying moderate traffic avoidance');
     }
 
-    // Bike infrastructure preference
+    // Bike infrastructure preference (only applies if no traffic tolerance was set)
     if (preferences.safetyPreferences?.bikeInfrastructure === 'strongly_preferred' ||
         preferences.safetyPreferences?.bikeInfrastructure === 'required') {
-      // Boost cycling infrastructure in routing
-      const infraBoost = preferences.safetyPreferences.bikeInfrastructure === 'required' ? '2.0' : '1.5';
 
       if (!params.has('custom_model')) {
+        // No traffic model set yet, create one focused on bike infrastructure
         params.append('ch.disable', 'true');
+
+        const infraBoost = preferences.safetyPreferences.bikeInfrastructure === 'required' ? '3.0' : '2.0';
+
         params.append('custom_model', JSON.stringify({
           "priority": [
+            // Block unsafe roads when infrastructure is required
+            { "if": "road_class == MOTORWAY", "multiply_by": "0" },
+            { "if": "road_class == TRUNK", "multiply_by": "0" },
+            { "if": "road_class == PRIMARY", "multiply_by": preferences.safetyPreferences.bikeInfrastructure === 'required' ? "0" : "0.1" },
+            // Strongly boost bike infrastructure
             { "if": "bike_network != MISSING", "multiply_by": infraBoost },
-            { "if": "bike_network == LCN", "multiply_by": "1.8" },
-            { "if": "bike_network == RCN", "multiply_by": "1.6" },
-            { "if": "bike_network == NCN", "multiply_by": "1.4" }
-          ]
+            { "if": "bike_network == LCN", "multiply_by": "2.5" }, // Local cycling network
+            { "if": "bike_network == RCN", "multiply_by": "2.3" }, // Regional cycling network
+            { "if": "bike_network == NCN", "multiply_by": "2.0" }, // National cycling network
+            { "if": "road_class == CYCLEWAY", "multiply_by": "4.0" },
+            { "if": "road_class == RESIDENTIAL", "multiply_by": "1.8" }
+          ],
+          "distance_influence": preferences.safetyPreferences.bikeInfrastructure === 'required' ? 80 : 50
         }));
+        console.log(`🛣️ GraphHopper: Requiring bike infrastructure (${infraBoost}x boost)`);
       }
-      console.log(`🛣️ GraphHopper: Boosting bike infrastructure (${infraBoost}x)`);
     }
   }
 

@@ -358,9 +358,9 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
   let excludeParam = '';
   let routingProfile = profile;
   let annotations = 'distance,duration';
-  
+
   console.log('🔧 getCyclingDirections called with preferences:', preferences);
-  
+
   if (preferences?.routingPreferences?.trafficTolerance === 'low') {
     // Low traffic tolerance - aggressive traffic avoidance
     excludeParam = '&exclude=motorway,trunk,primary,toll,ferry';
@@ -384,6 +384,10 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
     // High traffic tolerance - minimal restrictions
     excludeParam = '&exclude=ferry'; // Only exclude ferries
     console.log('🚗 High traffic tolerance - allowing most road types');
+  } else {
+    // DEFAULT: No preference specified - use safe cycling defaults
+    excludeParam = '&exclude=motorway,trunk,toll,ferry';
+    console.log('🚴 No traffic preference - using safe cycling defaults (excluding motorways and trunks)');
   }
   
   // Additional exclusions based on bike infrastructure preferences
