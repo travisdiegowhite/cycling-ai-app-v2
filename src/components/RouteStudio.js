@@ -68,6 +68,32 @@ const RouteStudio = () => {
     pitch: 0,
     bearing: 0
   });
+
+  // Geolocate to user's current position on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log('📍 User location found:', position.coords);
+          setViewState(prev => ({
+            ...prev,
+            longitude: position.coords.longitude,
+            latitude: position.coords.latitude,
+            zoom: 13
+          }));
+        },
+        (error) => {
+          console.log('📍 Geolocation error (using default location):', error.message);
+          // Silently fail and keep default San Francisco location
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 0
+        }
+      );
+    }
+  }, []); // Run once on mount
   
   const [waypoints, setWaypoints] = useState([]);
   const [snappedRoute, setSnappedRoute] = useState(null);
@@ -895,6 +921,12 @@ const RouteStudio = () => {
           cursor={activeMode === 'draw' ? 'crosshair' : 'default'}
         >
           <NavigationControl position="top-right" />
+          <GeolocateControl
+            position="top-right"
+            trackUserLocation
+            showUserHeading
+            showAccuracyCircle={false}
+          />
           <ScaleControl position="bottom-left" />
           
           {/* Original Route Line */}
