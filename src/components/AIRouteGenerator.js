@@ -262,14 +262,14 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   useEffect(() => {
     const loadUserPreferences = async () => {
       if (!user?.id) return;
-      
+
       try {
         console.log('🔧 Loading user preferences for traffic avoidance...');
         const preferences = await EnhancedContextCollector.getCompletePreferences(user.id);
         if (preferences) {
           setUserPreferences(preferences);
           console.log('✅ Loaded user preferences:', preferences);
-          
+
           // Log key traffic avoidance settings
           if (preferences.routingPreferences?.trafficTolerance) {
             console.log(`🚫 Traffic tolerance: ${preferences.routingPreferences.trafficTolerance}`);
@@ -284,9 +284,14 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         console.error('❌ Failed to load user preferences:', error);
       }
     };
-    
+
     loadUserPreferences();
   }, [user?.id]);
+
+  // Automatically get current location on mount
+  useEffect(() => {
+    getCurrentLocation();
+  }, [getCurrentLocation]);
 
   // Generate intelligent routes
   const generateRoutes = async () => {
