@@ -4,8 +4,6 @@
  * Shared between Route Studio and AI Route Generator for consistent AI quality
  */
 
-import { EnhancedContextCollector } from './enhancedContext';
-import { smartCyclingRouter } from './smartCyclingRouter';
 import { polylineDistance } from './geo';
 import { calculateElevationMetrics } from './elevation';
 

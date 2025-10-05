@@ -100,52 +100,7 @@ const RouteStudio = () => {
     }
   }, []); // Run once on mount
 
-  // Load user preferences on mount
-  useEffect(() => {
-    const loadPreferences = async () => {
-      if (!user) return;
-
-      try {
-        console.log('📋 Loading user preferences...');
-        const preferences = await EnhancedContextCollector.gatherDetailedPreferences(
-          user.id,
-          { startLocation: waypoints[0]?.position || [viewState.longitude, viewState.latitude] }
-        );
-        setUserPreferences(preferences);
-        console.log('✅ User preferences loaded');
-      } catch (error) {
-        console.error('Failed to load preferences:', error);
-        // Continue without preferences
-      }
-    };
-
-    loadPreferences();
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch weather when first waypoint is added
-  useEffect(() => {
-    const fetchWeather = async () => {
-      if (waypoints.length === 0 || weatherData) return;
-
-      const location = waypoints[0].position;
-      try {
-        console.log('🌤️ Fetching weather data...');
-        const weather = await getWeatherData(location[1], location[0]);
-        if (weather) {
-          setWeatherData(weather);
-          console.log('✅ Weather data loaded:', weather.description);
-        } else {
-          setWeatherData(getMockWeatherData());
-        }
-      } catch (error) {
-        console.warn('Weather fetch failed, using mock data');
-        setWeatherData(getMockWeatherData());
-      }
-    };
-
-    fetchWeather();
-  }, [waypoints.length]); // eslint-disable-line react-hooks/exhaustive-deps
-  
+  // Core state - must be declared before useEffect hooks that reference them
   const [waypoints, setWaypoints] = useState([]);
   const [snappedRoute, setSnappedRoute] = useState(null);
   const [elevationProfile, setElevationProfile] = useState([]);
@@ -188,7 +143,53 @@ const RouteStudio = () => {
   const [saving, setSaving] = useState(false);
   
   const mapRef = useRef(null);
-  
+
+  // Load user preferences on mount
+  useEffect(() => {
+    const loadPreferences = async () => {
+      if (!user) return;
+
+      try {
+        console.log('📋 Loading user preferences...');
+        const preferences = await EnhancedContextCollector.gatherDetailedPreferences(
+          user.id,
+          { startLocation: waypoints[0]?.position || [viewState.longitude, viewState.latitude] }
+        );
+        setUserPreferences(preferences);
+        console.log('✅ User preferences loaded');
+      } catch (error) {
+        console.error('Failed to load preferences:', error);
+        // Continue without preferences
+      }
+    };
+
+    loadPreferences();
+  }, [user, viewState.longitude, viewState.latitude]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch weather when first waypoint is added
+  useEffect(() => {
+    const fetchWeather = async () => {
+      if (waypoints.length === 0 || weatherData) return;
+
+      const location = waypoints[0].position;
+      try {
+        console.log('🌤️ Fetching weather data...');
+        const weather = await getWeatherData(location[1], location[0]);
+        if (weather) {
+          setWeatherData(weather);
+          console.log('✅ Weather data loaded:', weather.description);
+        } else {
+          setWeatherData(getMockWeatherData());
+        }
+      } catch (error) {
+        console.warn('Weather fetch failed, using mock data');
+        setWeatherData(getMockWeatherData());
+      }
+    };
+
+    fetchWeather();
+  }, [waypoints.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Save state before AI suggestion for undo
   const saveStateBeforeAISuggestion = useCallback(() => {
     const state = {
