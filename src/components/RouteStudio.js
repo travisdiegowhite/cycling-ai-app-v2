@@ -158,13 +158,13 @@ const RouteStudio = () => {
       toast.success('Undid last AI suggestion');
     }
   }, [aiSuggestionHistory]);
-  
+
   // Use the same route manipulation hook as ProfessionalRouteBuilder
   const {
     addWaypoint,
     snapToRoads,
     fetchElevation,
-    clearRoute,
+    clearRoute: baseClearRoute,
     undo,
     redo,
     reverseRoute,
@@ -193,6 +193,19 @@ const RouteStudio = () => {
     setError,
     useImperial,
   });
+
+  // Custom clear route that also clears AI-specific state
+  const clearRoute = useCallback(() => {
+    baseClearRoute();
+    setOriginalRoute(null);
+    setSuggestedRoute(null);
+    setPreviewingSuggestion(null);
+    setAiSuggestions([]);
+    setAppliedSuggestions(new Set());
+    setAiSuggestionHistory([]);
+    setRouteName('');
+    setRouteDescription('');
+  }, [baseClearRoute]);
 
   // Auto-fetch elevation when route is snapped
   useEffect(() => {
