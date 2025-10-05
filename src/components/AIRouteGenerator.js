@@ -75,9 +75,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   ];
 
   // Fetch weather data when location is set
-  const fetchWeatherData = async (location) => {
+  const fetchWeatherData = useCallback(async (location) => {
     if (!location) return;
-    
+
     try {
       const weather = await getWeatherData(location[1], location[0]);
       if (weather) {
@@ -91,7 +91,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       console.warn('Weather fetch failed, using mock data:', error);
       setWeatherData(getMockWeatherData());
     }
-  };
+  }, [formatTemperature]);
 
   // Geocode address to coordinates using Mapbox Geocoding API
   const geocodeAddress = async (address) => {
@@ -133,7 +133,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   };
 
   // Reverse geocode coordinates to address
-  const reverseGeocode = async (location) => {
+  const reverseGeocode = useCallback(async (location) => {
     const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
     if (!mapboxToken || !location) return '';
 
@@ -142,9 +142,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       const response = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxToken}&types=address,poi`
       );
-      
+
       const data = await response.json();
-      
+
       if (data.features && data.features.length > 0) {
         return data.features[0].place_name;
       }
@@ -153,7 +153,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       console.warn('Reverse geocoding failed:', error);
       return '';
     }
-  };
+  }, []);
 
   // Handle address search
   const handleAddressSearch = async () => {
@@ -192,16 +192,16 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         const location = [position.coords.longitude, position.coords.latitude];
         setStartLocation(location);
         onStartLocationSet && onStartLocationSet(location);
-        
+
         // Get address for current location
         const address = await reverseGeocode(location);
         setCurrentAddress(address);
-        
+
         toast.success('Current location set as start point');
-        
+
         // Fetch weather for this location
         await fetchWeatherData(location);
-        
+
         // Center map on current location
         if (mapRef?.current) {
           mapRef.current.flyTo({
@@ -217,33 +217,33 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [mapRef]);
+  }, [mapRef, onStartLocationSet, reverseGeocode, fetchWeatherData]);
 
   // Handle map click for start location
   useEffect(() => {
     if (!mapRef?.current) return;
 
     const map = mapRef.current.getMap();
-    
+
     const handleMapClick = async (e) => {
       const { lng, lat } = e.lngLat;
       const location = [lng, lat];
       setStartLocation(location);
       onStartLocationSet && onStartLocationSet(location);
-      
+
       // Get address for clicked location
       const address = await reverseGeocode(location);
       setCurrentAddress(address);
-      
+
       toast.success('Start location set');
-      
+
       // Fetch weather for clicked location
       await fetchWeatherData(location);
     };
 
     map.on('click', handleMapClick);
     return () => map.off('click', handleMapClick);
-  }, [mapRef]);
+  }, [mapRef, onStartLocationSet, reverseGeocode, fetchWeatherData]);
 
   // Handle external location changes (e.g., from map marker dragging)
   useEffect(() => {
@@ -256,7 +256,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       // Fetch weather for new location
       fetchWeatherData(externalStartLocation);
     }
-  }, [externalStartLocation]);
+  }, [externalStartLocation, startLocation, reverseGeocode, fetchWeatherData]);
 
   // Load user preferences for traffic avoidance
   useEffect(() => {
@@ -291,7 +291,8 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   // Automatically get current location on mount
   useEffect(() => {
     getCurrentLocation();
-  }, [getCurrentLocation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Generate intelligent routes
   const generateRoutes = async () => {
