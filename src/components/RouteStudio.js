@@ -44,6 +44,7 @@ import {
   TrendingUp,
   Shield,
   Camera,
+  Settings,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildLineString, polylineDistance } from '../utils/geo';
