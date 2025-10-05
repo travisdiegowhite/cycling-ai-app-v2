@@ -53,12 +53,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { useUnits } from '../utils/units';
 import { useRouteManipulation } from '../hooks/useRouteManipulation';
 import { useNavigate } from 'react-router-dom';
+import { analyzeAndEnhanceRoute } from '../utils/aiRouteEnhancer';
+import { EnhancedContextCollector } from '../utils/enhancedContext';
+import { getWeatherData, getMockWeatherData } from '../utils/weather';
+import PreferenceSettings from './PreferenceSettings';
 
 const RouteStudio = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const { useImperial, distanceUnit, elevationUnit, formatDistance, formatElevation } = useUnits();
+  const { useImperial, distanceUnit, elevationUnit, formatDistance, formatElevation, formatTemperature } = useUnits();
   
   // Core route building state (similar to ProfessionalRouteBuilder)
   const [viewState, setViewState] = useState({
@@ -94,6 +98,52 @@ const RouteStudio = () => {
       );
     }
   }, []); // Run once on mount
+
+  // Load user preferences on mount
+  useEffect(() => {
+    const loadPreferences = async () => {
+      if (!user) return;
+
+      try {
+        console.log('📋 Loading user preferences...');
+        const preferences = await EnhancedContextCollector.gatherDetailedPreferences(
+          user.id,
+          { startLocation: waypoints[0]?.position || [viewState.longitude, viewState.latitude] }
+        );
+        setUserPreferences(preferences);
+        console.log('✅ User preferences loaded');
+      } catch (error) {
+        console.error('Failed to load preferences:', error);
+        // Continue without preferences
+      }
+    };
+
+    loadPreferences();
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch weather when first waypoint is added
+  useEffect(() => {
+    const fetchWeather = async () => {
+      if (waypoints.length === 0 || weatherData) return;
+
+      const location = waypoints[0].position;
+      try {
+        console.log('🌤️ Fetching weather data...');
+        const weather = await getWeatherData(location[1], location[0]);
+        if (weather) {
+          setWeatherData(weather);
+          console.log('✅ Weather data loaded:', weather.description);
+        } else {
+          setWeatherData(getMockWeatherData());
+        }
+      } catch (error) {
+        console.warn('Weather fetch failed, using mock data');
+        setWeatherData(getMockWeatherData());
+      }
+    };
+
+    fetchWeather();
+  }, [waypoints.length]); // eslint-disable-line react-hooks/exhaustive-deps
   
   const [waypoints, setWaypoints] = useState([]);
   const [snappedRoute, setSnappedRoute] = useState(null);
@@ -108,6 +158,12 @@ const RouteStudio = () => {
   const [snapping, setSnapping] = useState(false);
   const [snapProgress, setSnapProgress] = useState(0);
   const [error, setError] = useState(null);
+
+  // User preferences and context
+  const [userPreferences, setUserPreferences] = useState(null);
+  const [trainingGoal, setTrainingGoal] = useState('endurance');
+  const [weatherData, setWeatherData] = useState(null);
+  const [preferencesOpened, setPreferencesOpened] = useState(false);
   
   // AI Enhancement state
   const [showAIPanel, setShowAIPanel] = useState(false);
@@ -219,65 +275,76 @@ const RouteStudio = () => {
     console.log('Waypoints updated:', waypoints.length, waypoints);
   }, [waypoints]);
 
-  // Mock AI suggestion generation based on current route
+  // Real AI suggestion generation using aiRouteEnhancer
   const generateAISuggestions = useCallback(async () => {
     if (waypoints.length < 2) {
       toast.error('Create a route with at least 2 waypoints first');
       return;
     }
-    
+
+    if (!snappedRoute || !snappedRoute.coordinates) {
+      toast.error('Please snap route to roads first to get AI suggestions');
+      return;
+    }
+
     setLoadingAISuggestions(true);
-    
-    // Simulate AI analysis time
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const mockSuggestions = [
-      {
-        id: 1,
-        type: 'scenery',
-        icon: <Camera size={16} />,
-        title: 'Scenic Route Enhancement',
-        description: 'Route through Riverside Park for better views and photo opportunities',
-        impact: '+0.5mi, +50ft elevation',
-        confidence: 0.85,
-        coordinates: [] // Would contain actual route coordinates in real implementation
-      },
-      {
-        id: 2,
-        type: 'safety',
-        icon: <Shield size={16} />,
-        title: 'Safer Path Available',
-        description: 'Use dedicated bike lanes on Oak Street instead of busy Main Street',
-        impact: 'Safer route, same distance',
-        confidence: 0.92,
-        coordinates: []
-      },
-      {
-        id: 3,
-        type: 'performance',
-        icon: <TrendingUp size={16} />,
-        title: 'Optimize for Training',
-        description: 'Alternative route with consistent 3-5% grade for interval training',
-        impact: 'Better training zones',
-        confidence: 0.78,
-        coordinates: []
-      },
-      {
-        id: 4,
-        type: 'efficiency',
-        icon: <Lightbulb size={16} />,
-        title: 'Reduce Elevation',
-        description: 'Lower elevation route saves 200ft of climbing with minimal distance increase',
-        impact: '-200ft elevation, +0.3mi',
-        confidence: 0.88,
-        coordinates: []
+
+    try {
+      console.log('🤖 Generating AI-powered suggestions...');
+
+      // Prepare route data for analysis
+      const routeForAnalysis = {
+        coordinates: snappedRoute.coordinates,
+        distance: snappedRoute.distance,
+        duration: snappedRoute.duration,
+        elevationProfile: elevationProfile,
+        waypoints: waypoints
+      };
+
+      // Get user preferences or use defaults
+      const prefs = userPreferences || {
+        routingPreferences: { trafficTolerance: 'low', hillPreference: 'moderate' },
+        scenicPreferences: { scenicImportance: 'medium' },
+        safetyPreferences: {}
+      };
+
+      // Get AI-powered suggestions
+      const suggestions = await analyzeAndEnhanceRoute(
+        routeForAnalysis,
+        prefs,
+        trainingGoal,
+        weatherData
+      );
+
+      // Map suggestions to include icons
+      const iconMap = {
+        safety: <Shield size={16} />,
+        scenic: <Camera size={16} />,
+        training: <TrendingUp size={16} />,
+        elevation: <Lightbulb size={16} />,
+        weather: <Sparkles size={16} />
+      };
+
+      const suggestionsWithIcons = suggestions.map((sug, index) => ({
+        ...sug,
+        id: index + 1,
+        icon: iconMap[sug.type] || <Brain size={16} />
+      }));
+
+      setAiSuggestions(suggestionsWithIcons);
+      setLoadingAISuggestions(false);
+
+      if (suggestions.length > 0) {
+        toast.success(`Generated ${suggestions.length} AI-powered suggestions! 🎯`);
+      } else {
+        toast.success('Your route looks great! No major improvements needed.');
       }
-    ];
-    
-    setAiSuggestions(mockSuggestions);
-    setLoadingAISuggestions(false);
-    toast.success(`Generated ${mockSuggestions.length} AI suggestions for your route`);
-  }, [waypoints]);
+    } catch (error) {
+      console.error('AI suggestion generation failed:', error);
+      toast.error('Failed to generate AI suggestions. Please try again.');
+      setLoadingAISuggestions(false);
+    }
+  }, [waypoints, snappedRoute, elevationProfile, userPreferences, trainingGoal, weatherData]);
 
   // Preview suggestion - show both routes for comparison
   const previewSuggestion = useCallback(async (suggestion) => {
@@ -820,6 +887,41 @@ const RouteStudio = () => {
               size="sm"
             />
 
+            {/* Training Goal */}
+            <Select
+              label="Training Goal"
+              value={trainingGoal}
+              onChange={setTrainingGoal}
+              data={[
+                { value: 'endurance', label: '🚴 Endurance' },
+                { value: 'intervals', label: '⚡ Intervals' },
+                { value: 'recovery', label: '😌 Recovery' },
+                { value: 'hills', label: '⛰️ Hills' },
+              ]}
+              size="sm"
+              description="AI suggestions optimized for your goal"
+            />
+
+            {/* Weather Display */}
+            {weatherData && (
+              <Card withBorder p="sm">
+                <Group justify="space-between" mb="xs">
+                  <Text size="sm" fw={500}>Current Weather</Text>
+                  <Text size="xs" c="dimmed">{weatherData.description}</Text>
+                </Group>
+                <Group justify="space-between" wrap="nowrap">
+                  <Group gap="xs">
+                    <Text size="xs">🌡️</Text>
+                    <Text size="xs">{formatTemperature(weatherData.temperature)}</Text>
+                  </Group>
+                  <Group gap="xs">
+                    <Text size="xs">💨</Text>
+                    <Text size="xs">{weatherData.windSpeed} km/h</Text>
+                  </Group>
+                </Group>
+              </Card>
+            )}
+
             {/* Route Stats */}
             {routeStats && (
               <Card withBorder p="sm">
@@ -1140,12 +1242,23 @@ const RouteStudio = () => {
             </Tooltip>
             
             <Tooltip label="Export GPX">
-              <ActionIcon 
-                onClick={exportGPX} 
-                disabled={waypoints.length < 2} 
+              <ActionIcon
+                onClick={exportGPX}
+                disabled={waypoints.length < 2}
                 variant="default"
               >
                 <Download size={18} />
+              </ActionIcon>
+            </Tooltip>
+
+            <Divider orientation="vertical" />
+
+            <Tooltip label="Preferences">
+              <ActionIcon
+                onClick={() => setPreferencesOpened(true)}
+                variant="default"
+              >
+                <Settings size={18} />
               </ActionIcon>
             </Tooltip>
           </Paper>
@@ -1379,6 +1492,23 @@ const RouteStudio = () => {
             </Button>
           </Group>
         </Stack>
+      </Modal>
+
+      {/* Preferences Modal */}
+      <Modal
+        opened={preferencesOpened}
+        onClose={() => setPreferencesOpened(false)}
+        title="Route Preferences"
+        size="lg"
+      >
+        <PreferenceSettings
+          userId={user?.id}
+          onSave={(prefs) => {
+            setUserPreferences(prefs);
+            setPreferencesOpened(false);
+            toast.success('Preferences saved! AI suggestions will use your updated preferences.');
+          }}
+        />
       </Modal>
     </div>
   );
