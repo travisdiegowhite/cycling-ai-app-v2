@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { Toaster } from 'react-hot-toast';
+import { Analytics } from '@vercel/analytics/react';
 import FileUpload from './components/FileUpload';
 import Auth from './components/Auth';
 import Map from './components/Map';
@@ -101,6 +102,7 @@ function App() {
           </Router>
         </UnitPreferencesProvider>
       </AuthProvider>
+      <Analytics />
     </MantineProvider>
   );
 }
