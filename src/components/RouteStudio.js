@@ -58,6 +58,8 @@ import { analyzeAndEnhanceRoute } from '../utils/aiRouteEnhancer';
 import { EnhancedContextCollector } from '../utils/enhancedContext';
 import { getWeatherData, getMockWeatherData } from '../utils/weather';
 import PreferenceSettings from './PreferenceSettings';
+import TrainingContextSelector from './TrainingContextSelector';
+import { estimateTSS } from '../utils/trainingPlans';
 
 const RouteStudio = () => {
   const navigate = useNavigate();
@@ -118,6 +120,13 @@ const RouteStudio = () => {
   // User preferences and context
   const [userPreferences, setUserPreferences] = useState(null);
   const [trainingGoal, setTrainingGoal] = useState('endurance');
+  const [trainingContext, setTrainingContext] = useState({
+    workoutType: 'endurance',
+    phase: 'base',
+    targetDuration: 60,
+    targetTSS: 75,
+    primaryZone: 2
+  });
   const [weatherData, setWeatherData] = useState(null);
   const [preferencesOpened, setPreferencesOpened] = useState(false);
   
@@ -337,7 +346,8 @@ const RouteStudio = () => {
         routeForAnalysis,
         prefs,
         trainingGoal,
-        weatherData
+        weatherData,
+        trainingContext // Include workout type, phase, TSS, duration
       );
 
       // Map suggestions to include icons
@@ -934,6 +944,15 @@ const RouteStudio = () => {
               ]}
               size="sm"
               description="AI suggestions optimized for your goal"
+            />
+
+            {/* Training Context */}
+            <TrainingContextSelector
+              value={trainingContext}
+              onChange={setTrainingContext}
+              showEstimatedTSS={snappedRoute?.coordinates?.length > 0}
+              routeDistance={snappedRoute ? (snappedRoute.distance / 1000) : 0}
+              routeElevation={elevationStats?.gain || 0}
             />
 
             {/* Weather Display */}

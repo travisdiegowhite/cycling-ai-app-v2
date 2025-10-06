@@ -13,7 +13,7 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus, Zap, FileText, Scale } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus, Zap, FileText, Scale, TrendingUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -179,6 +179,16 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             fullWidth
           >
             Strava Integration
+          </Button>
+
+          <Button
+            variant={activePage === 'training' ? 'filled' : 'subtle'}
+            leftSection={<TrendingUp size={18} />}
+            onClick={() => handleNavigation('training', '/training')}
+            justify="flex-start"
+            fullWidth
+          >
+            Training Dashboard
           </Button>
         </Flex>
 

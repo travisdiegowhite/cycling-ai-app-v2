@@ -1,0 +1,346 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Container,
+  Grid,
+  Card,
+  Text,
+  Group,
+  Stack,
+  Badge,
+  RingProgress,
+  Title,
+  Tabs,
+  Select,
+  Button,
+  ThemeIcon,
+  Divider,
+  Alert,
+  Paper,
+  SimpleGrid,
+  ActionIcon,
+  Tooltip,
+} from '@mantine/core';
+import {
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Calendar,
+  Award,
+  Target,
+  Clock,
+  Zap,
+  Plus,
+  Info,
+  BarChart3,
+  LineChart,
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../supabase';
+import { useNavigate } from 'react-router-dom';
+import {
+  calculateCTL,
+  calculateATL,
+  calculateTSB,
+  interpretTSB,
+  TRAINING_ZONES,
+  WORKOUT_TYPES,
+} from '../utils/trainingPlans';
+import TrainingLoadChart from './TrainingLoadChart';
+import RideHistoryTable from './RideHistoryTable';
+import TrainingCalendar from './TrainingCalendar';
+
+/**
+ * Training Dashboard - Phase 2
+ * Displays training metrics, load charts, and ride history
+ */
+const TrainingDashboard = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // State
+  const [loading, setLoading] = useState(true);
+  const [trainingMetrics, setTrainingMetrics] = useState(null);
+  const [recentRides, setRecentRides] = useState([]);
+  const [dailyTSS, setDailyTSS] = useState([]);
+  const [activePlan, setActivePlan] = useState(null);
+  const [timeRange, setTimeRange] = useState('30'); // days
+
+  // Load training data
+  useEffect(() => {
+    if (!user?.id) return;
+    loadTrainingData();
+  }, [user?.id, timeRange]);
+
+  const loadTrainingData = async () => {
+    try {
+      setLoading(true);
+
+      // Load active training plan
+      const { data: plans } = await supabase
+        .from('training_plans')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (plans && plans.length > 0) {
+        setActivePlan(plans[0]);
+      }
+
+      // Load recent rides (last 90 days for CTL calculation)
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - 90);
+
+      const { data: rides } = await supabase
+        .from('routes')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('created_at', daysAgo.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (rides) {
+        setRecentRides(rides);
+
+        // Calculate daily TSS
+        const tssMap = {};
+        rides.forEach(ride => {
+          const date = new Date(ride.created_at).toISOString().split('T')[0];
+          if (!tssMap[date]) {
+            tssMap[date] = 0;
+          }
+          // Estimate TSS from ride data (you may have actual TSS stored)
+          const estimatedTSS = estimateTSSFromRide(ride);
+          tssMap[date] += estimatedTSS;
+        });
+
+        // Convert to array format for last 90 days
+        const tssArray = [];
+        for (let i = 89; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          const dateKey = date.toISOString().split('T')[0];
+          tssArray.push({
+            date: dateKey,
+            tss: tssMap[dateKey] || 0
+          });
+        }
+        setDailyTSS(tssArray);
+
+        // Calculate current training metrics
+        const tssValues = tssArray.map(d => d.tss);
+        const ctl = calculateCTL(tssValues);
+        const atl = calculateATL(tssValues.slice(-7)); // Last 7 days
+        const tsb = calculateTSB(ctl, atl);
+        const tsbInterpretation = interpretTSB(tsb);
+
+        setTrainingMetrics({
+          ctl,
+          atl,
+          tsb,
+          interpretation: tsbInterpretation,
+          weeklyTSS: tssValues.slice(-7).reduce((a, b) => a + b, 0),
+          monthlyTSS: tssValues.slice(-30).reduce((a, b) => a + b, 0),
+        });
+      }
+
+    } catch (error) {
+      console.error('Failed to load training data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper: Estimate TSS from ride data
+  const estimateTSSFromRide = (ride) => {
+    const distance = ride.distance || 0;
+    const elevation = ride.total_elevation_gain || 0;
+    const duration = ride.duration || 60; // Default 60 min if not available
+
+    // Simple estimation: 50 TSS/hour base + elevation factor
+    const baseTSS = (duration / 60) * 50;
+    const elevationFactor = (elevation / 300) * 10;
+    return Math.round(baseTSS + elevationFactor);
+  };
+
+  if (loading) {
+    return (
+      <Container size="xl" py="xl">
+        <Text>Loading training data...</Text>
+      </Container>
+    );
+  }
+
+  return (
+    <Container size="xl" py="xl">
+      {/* Header */}
+      <Group justify="space-between" mb="xl">
+        <div>
+          <Title order={2}>Training Dashboard</Title>
+          <Text size="sm" c="dimmed">
+            Track your fitness, analyze your training load, and plan your workouts
+          </Text>
+        </div>
+        <Group>
+          <Select
+            value={timeRange}
+            onChange={setTimeRange}
+            data={[
+              { value: '7', label: 'Last 7 days' },
+              { value: '30', label: 'Last 30 days' },
+              { value: '90', label: 'Last 90 days' },
+            ]}
+            size="sm"
+          />
+          <Button
+            leftSection={<Plus size={16} />}
+            onClick={() => navigate('/training/plans/new')}
+          >
+            New Training Plan
+          </Button>
+        </Group>
+      </Group>
+
+      {/* Active Plan Alert */}
+      {activePlan && (
+        <Alert
+          icon={<Award size={16} />}
+          title={`Active Plan: ${activePlan.name}`}
+          color="blue"
+          mb="lg"
+        >
+          <Group justify="space-between">
+            <Text size="sm">
+              Week {activePlan.current_week} of {activePlan.duration_weeks} • {activePlan.current_phase} phase
+            </Text>
+            <Button size="xs" variant="light" onClick={() => navigate(`/training/plans/${activePlan.id}`)}>
+              View Plan
+            </Button>
+          </Group>
+        </Alert>
+      )}
+
+      {/* Training Metrics Cards */}
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="xl">
+        {/* CTL - Chronic Training Load (Fitness) */}
+        <Card withBorder p="md">
+          <Group justify="space-between" mb="xs">
+            <Text size="sm" c="dimmed">Fitness (CTL)</Text>
+            <Tooltip label="42-day exponentially weighted average TSS">
+              <ActionIcon size="xs" variant="subtle">
+                <Info size={14} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          <Group align="flex-end" gap="xs">
+            <Text size="xl" fw={700}>{trainingMetrics?.ctl || 0}</Text>
+            <TrendingUp size={16} color="#22c55e" />
+          </Group>
+          <Text size="xs" c="dimmed" mt="xs">
+            Long-term training stress
+          </Text>
+        </Card>
+
+        {/* ATL - Acute Training Load (Fatigue) */}
+        <Card withBorder p="md">
+          <Group justify="space-between" mb="xs">
+            <Text size="sm" c="dimmed">Fatigue (ATL)</Text>
+            <Tooltip label="7-day exponentially weighted average TSS">
+              <ActionIcon size="xs" variant="subtle">
+                <Info size={14} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          <Group align="flex-end" gap="xs">
+            <Text size="xl" fw={700}>{trainingMetrics?.atl || 0}</Text>
+            <Activity size={16} color="#f59e0b" />
+          </Group>
+          <Text size="xs" c="dimmed" mt="xs">
+            Recent training stress
+          </Text>
+        </Card>
+
+        {/* TSB - Training Stress Balance (Form) */}
+        <Card withBorder p="md">
+          <Group justify="space-between" mb="xs">
+            <Text size="sm" c="dimmed">Form (TSB)</Text>
+            <Tooltip label="Chronic Training Load minus Acute Training Load">
+              <ActionIcon size="xs" variant="subtle">
+                <Info size={14} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          <Group align="flex-end" gap="xs">
+            <Text size="xl" fw={700}>{trainingMetrics?.tsb || 0}</Text>
+            <Badge color={trainingMetrics?.interpretation?.color || 'gray'} variant="light">
+              {trainingMetrics?.interpretation?.status || 'neutral'}
+            </Badge>
+          </Group>
+          <Text size="xs" c="dimmed" mt="xs">
+            {trainingMetrics?.interpretation?.message || 'Balanced training state'}
+          </Text>
+        </Card>
+
+        {/* Weekly TSS */}
+        <Card withBorder p="md">
+          <Group justify="space-between" mb="xs">
+            <Text size="sm" c="dimmed">Weekly TSS</Text>
+            <Tooltip label="Total Training Stress Score this week">
+              <ActionIcon size="xs" variant="subtle">
+                <Info size={14} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          <Group align="flex-end" gap="xs">
+            <Text size="xl" fw={700}>{trainingMetrics?.weeklyTSS || 0}</Text>
+            <Zap size={16} color="#3b82f6" />
+          </Group>
+          <Text size="xs" c="dimmed" mt="xs">
+            Last 7 days
+          </Text>
+        </Card>
+      </SimpleGrid>
+
+      {/* Form Interpretation */}
+      {trainingMetrics?.interpretation && (
+        <Alert
+          color={trainingMetrics.interpretation.color}
+          title={`You are ${trainingMetrics.interpretation.status}`}
+          icon={<Activity size={16} />}
+          mb="lg"
+        >
+          <Text size="sm">{trainingMetrics.interpretation.recommendation}</Text>
+        </Alert>
+      )}
+
+      {/* Tabs for different views */}
+      <Tabs defaultValue="overview">
+        <Tabs.List mb="md">
+          <Tabs.Tab value="overview" leftSection={<BarChart3 size={16} />}>
+            Overview
+          </Tabs.Tab>
+          <Tabs.Tab value="history" leftSection={<Activity size={16} />}>
+            Ride History
+          </Tabs.Tab>
+          <Tabs.Tab value="calendar" leftSection={<Calendar size={16} />}>
+            Calendar
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="overview">
+          <TrainingLoadChart data={dailyTSS} metrics={trainingMetrics} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="history">
+          <RideHistoryTable rides={recentRides} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="calendar">
+          <TrainingCalendar activePlan={activePlan} />
+        </Tabs.Panel>
+      </Tabs>
+    </Container>
+  );
+};
+
+export default TrainingDashboard;

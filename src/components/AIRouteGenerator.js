@@ -36,6 +36,8 @@ import { getWeatherData, getMockWeatherData } from '../utils/weather';
 import { generateAIRoutes } from '../utils/aiRouteGenerator';
 import PreferenceSettings from './PreferenceSettings';
 import { EnhancedContextCollector } from '../utils/enhancedContext';
+import TrainingContextSelector from './TrainingContextSelector';
+import { estimateTSS } from '../utils/trainingPlans';
 
 const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, externalStartLocation }) => {
   const { user } = useAuth();
@@ -49,7 +51,16 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   const [startLocation, setStartLocation] = useState(null);
   const [addressInput, setAddressInput] = useState('');
   const [currentAddress, setCurrentAddress] = useState('');
-  
+
+  // Training context state
+  const [trainingContext, setTrainingContext] = useState({
+    workoutType: 'endurance',
+    phase: 'base',
+    targetDuration: 60,
+    targetTSS: 75,
+    primaryZone: 2
+  });
+
   // Generation state
   const [generating, setGenerating] = useState(false);
   const [generatedRoutes, setGeneratedRoutes] = useState([]);
@@ -331,6 +342,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         weatherData,
         userId: user?.id,
         userPreferences: userPreferences,
+        trainingContext: trainingContext, // Include workout type, phase, TSS, duration
       });
       
       console.log('🎯 Generated routes:', routes);
@@ -558,6 +570,12 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
           </Radio.Group>
         </div>
 
+        {/* Training Context */}
+        <TrainingContextSelector
+          value={trainingContext}
+          onChange={setTrainingContext}
+        />
+
         {/* Route Type */}
         <div>
           <Text size="sm" fw={500} mb="sm">Route Type</Text>
@@ -625,7 +643,16 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
             </Group>
             
             <Stack gap="sm">
-              {generatedRoutes.map((route, index) => (
+              {generatedRoutes.map((route, index) => {
+                // Calculate estimated TSS for this route
+                const estimatedRouteTSS = estimateTSS(
+                  trainingContext.targetDuration || 60,
+                  route.distance,
+                  route.elevationGain || 0,
+                  trainingContext.workoutType || 'endurance'
+                );
+
+                return (
                 <Card key={index} withBorder p="md" style={{ cursor: 'pointer' }}>
                   <Group justify="space-between" align="flex-start">
                     <div style={{ flex: 1 }}>
@@ -634,8 +661,13 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                         <Badge size="sm" color={route.difficulty === 'easy' ? 'green' : route.difficulty === 'hard' ? 'red' : 'yellow'}>
                           {route.difficulty}
                         </Badge>
+                        {estimatedRouteTSS && (
+                          <Badge size="sm" color="blue" variant="light">
+                            {estimatedRouteTSS} TSS
+                          </Badge>
+                        )}
                       </Group>
-                      
+
                       <Grid gutter="xs">
                         <Grid.Col span={6}>
                           <Text size="xs" c="dimmed">Distance</Text>
@@ -646,7 +678,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                           <Text size="sm" fw={500}>+{formatElevation(route.elevationGain)}</Text>
                         </Grid.Col>
                       </Grid>
-                      
+
                       <Text size="xs" c="dimmed" mt="xs">
                         {route.description}
                       </Text>
@@ -661,7 +693,8 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                     </Button>
                   </Group>
                 </Card>
-              ))}
+                );
+              })}
             </Stack>
           </div>
         )}

@@ -18,6 +18,8 @@ import TermsOfService from './components/TermsOfService';
 import AppLayout from './components/AppLayout';
 import RouteBuilder from './components/RouteBuilder';
 import RouteStudio from './components/RouteStudio';
+import TrainingDashboard from './components/TrainingDashboard';
+import TrainingPlanBuilder from './components/TrainingPlanBuilder';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UnitPreferencesProvider } from './utils/units';
 import { theme } from './theme';
@@ -39,6 +41,7 @@ const AppContent = () => {
     else if (path === '/smart-analysis') setActivePage('smart-analysis');
     else if (path === '/upload') setActivePage('upload');
     else if (path === '/strava') setActivePage('strava');
+    else if (path.startsWith('/training')) setActivePage('training');
   }, [location]);
 
   // Handle OAuth callback routes (no layout needed)
@@ -72,6 +75,8 @@ const AppContent = () => {
         <Route path="/smart-analysis" element={<SmartRideAnalysis />} />
         <Route path="/upload" element={<FileUpload />} />
         <Route path="/strava" element={<StravaIntegration />} />
+        <Route path="/training" element={<TrainingDashboard />} />
+        <Route path="/training/plans/new" element={<TrainingPlanBuilder />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
