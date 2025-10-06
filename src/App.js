@@ -56,10 +56,10 @@ const AppContent = () => {
   }
 
   // Handle public pages (no auth required, no layout)
-  if (location.pathname === '/privacy-policy') {
+  if (location.pathname === '/privacy' || location.pathname === '/privacy-policy') {
     return <PrivacyPolicy />;
   }
-  if (location.pathname === '/terms-of-service') {
+  if (location.pathname === '/terms' || location.pathname === '/terms-of-service') {
     return <TermsOfService />;
   }
 

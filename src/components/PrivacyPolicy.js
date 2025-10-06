@@ -57,6 +57,25 @@ const PrivacyPolicy = () => {
               <List.Item><strong>Sync:</strong> Automatically import activities from connected devices and services</List.Item>
               <List.Item><strong>Service Improvement:</strong> Analyze aggregate data to improve our algorithms</List.Item>
             </List>
+
+            <Title order={3} size="h4" mt="md" mb="sm">3.1 Garmin API Data Usage</Title>
+            <Text mb="sm">
+              When you connect your Garmin account, we use the Garmin Connect API to access and use your data specifically for:
+            </Text>
+            <List>
+              <List.Item>Importing your cycling activities, workouts, and training data from Garmin Connect</List.Item>
+              <List.Item>Analyzing your performance metrics (heart rate, power, cadence, speed, distance, elevation) to provide personalized route recommendations</List.Item>
+              <List.Item>Understanding your training patterns and fitness level to suggest appropriate route difficulty and duration</List.Item>
+              <List.Item>Synchronizing activity data to display your ride history and statistics within our application</List.Item>
+              <List.Item>Generating AI-powered insights based on your Garmin training data to improve route planning</List.Item>
+              <List.Item>Creating training plans that align with your Garmin-recorded fitness trends</List.Item>
+            </List>
+            <Text mt="sm">
+              All data retrieved from Garmin Connect API is stored securely, encrypted, and used solely for providing
+              our cycling route planning and analysis services to you. We do not share your Garmin data with third parties
+              except as required to provide our services (e.g., hosting infrastructure). You can disconnect your Garmin
+              account at any time, which will immediately stop data synchronization and remove stored Garmin OAuth tokens.
+            </Text>
           </div>
 
           <div>
@@ -183,7 +202,10 @@ const PrivacyPolicy = () => {
               For questions about this Privacy Policy or to exercise your rights, contact us at:
             </Text>
             <Text mt="sm">
-              Email: <Anchor href="mailto:privacy@yourdomain.com">privacy@yourdomain.com</Anchor>
+              Email: <Anchor href="mailto:privacy@tribos.studio">privacy@tribos.studio</Anchor>
+            </Text>
+            <Text mt="xs">
+              Administrator: <Anchor href="mailto:travis@tribos.studio">travis@tribos.studio</Anchor>
             </Text>
           </div>
 

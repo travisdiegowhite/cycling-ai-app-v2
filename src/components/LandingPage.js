@@ -335,14 +335,29 @@ const LandingPage = ({ onGetStarted }) => {
       {/* Footer */}
       <Box bg="gray.1" py={40}>
         <Container size="lg">
-          <Center>
-            <Group spacing="md">
-              <Route size={24} color="#2196f3" />
-              <Text size="sm" c="dimmed">
-                © 2024 Cycling AI. Intelligent route planning for serious cyclists.
-              </Text>
-            </Group>
-          </Center>
+          <Stack spacing="md">
+            <Center>
+              <Group spacing="md">
+                <Route size={24} color="#2196f3" />
+                <Text size="sm" c="dimmed">
+                  © 2024 Cycling AI. Intelligent route planning for serious cyclists.
+                </Text>
+              </Group>
+            </Center>
+            <Center>
+              <Group spacing="lg">
+                <Anchor href="/privacy" size="sm" c="dimmed">
+                  Privacy Policy
+                </Anchor>
+                <Anchor href="/terms" size="sm" c="dimmed">
+                  Terms of Service
+                </Anchor>
+                <Anchor href="mailto:travis@tribos.studio" size="sm" c="dimmed">
+                  Contact
+                </Anchor>
+              </Group>
+            </Center>
+          </Stack>
         </Container>
       </Box>
     </Box>
