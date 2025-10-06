@@ -202,7 +202,7 @@ const PrivacyPolicy = () => {
               For questions about this Privacy Policy or to exercise your rights, contact us at:
             </Text>
             <Text mt="sm">
-              Email: <Anchor href="mailto:privacy@tribos.studio">privacy@tribos.studio</Anchor>
+              Email: <Anchor href="mailto:travis@tribos.studio">travis@tribos.studio</Anchor>
             </Text>
             <Text mt="xs">
               Administrator: <Anchor href="mailto:travis@tribos.studio">travis@tribos.studio</Anchor>
