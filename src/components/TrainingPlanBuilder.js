@@ -192,21 +192,44 @@ const TrainingPlanBuilder = () => {
 
   // Create training plan
   const createPlan = async () => {
+    // Validate we have a schedule
+    if (!weeklySchedule || weeklySchedule.length === 0) {
+      toast.error('Please generate a training schedule first');
+      return;
+    }
+
     try {
       setCreating(true);
+
+      // Prepare plan data (convert null date to undefined to avoid DB issues)
+      const planToInsert = {
+        user_id: user.id,
+        name: planData.name,
+        goal_type: planData.goal_type,
+        goal_event_date: planData.goal_event_date || null,
+        fitness_level: planData.fitness_level,
+        hours_per_week: planData.hours_per_week,
+        duration_weeks: planData.duration_weeks,
+        current_week: 1,
+        current_phase: planData.current_phase,
+        ftp: planData.ftp || null,
+        max_heart_rate: planData.max_heart_rate || null,
+        status: 'active'
+      };
+
+      console.log('Creating plan with data:', planToInsert);
 
       // Insert training plan
       const { data: plan, error: planError } = await supabase
         .from('training_plans')
-        .insert([{
-          user_id: user.id,
-          ...planData,
-          status: 'active'
-        }])
+        .insert([planToInsert])
         .select()
         .single();
 
-      if (planError) throw planError;
+      if (planError) {
+        console.error('Plan insert error:', planError);
+        throw planError;
+      }
 
       // Insert all planned workouts
       const allWorkouts = [];
@@ -220,18 +243,23 @@ const TrainingPlanBuilder = () => {
         });
       });
 
+      console.log(`Inserting ${allWorkouts.length} workouts...`);
+
       const { error: workoutsError } = await supabase
         .from('planned_workouts')
         .insert(allWorkouts);
 
-      if (workoutsError) throw workoutsError;
+      if (workoutsError) {
+        console.error('Workouts insert error:', workoutsError);
+        throw workoutsError;
+      }
 
       toast.success('Training plan created successfully!');
       navigate('/training');
 
     } catch (error) {
       console.error('Failed to create training plan:', error);
-      toast.error('Failed to create training plan');
+      toast.error(`Failed to create training plan: ${error.message || 'Unknown error'}`);
     } finally {
       setCreating(false);
     }
