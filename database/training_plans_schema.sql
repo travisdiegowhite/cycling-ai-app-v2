@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS planned_workouts (
   day_of_week INTEGER NOT NULL CHECK (day_of_week >= 0 AND day_of_week <= 6), -- 0=Sunday, 6=Saturday
   workout_type TEXT NOT NULL CHECK (workout_type IN ('rest', 'recovery', 'endurance', 'tempo', 'sweet_spot', 'threshold', 'vo2max', 'hill_repeats', 'intervals', 'long_ride')),
   target_tss INTEGER CHECK (target_tss >= 0 AND target_tss <= 500),
-  target_duration INTEGER NOT NULL CHECK (target_duration > 0), -- minutes
+  target_duration INTEGER NOT NULL CHECK (target_duration >= 0), -- minutes (0 for rest days)
   target_zone DECIMAL CHECK (target_zone >= 1 AND target_zone <= 5),
   terrain_preference TEXT CHECK (terrain_preference IN ('flat', 'rolling', 'hilly', 'mixed')),
   description TEXT,
