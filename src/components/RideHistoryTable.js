@@ -86,10 +86,14 @@ const RideHistoryTable = ({ rides }) => {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {filteredRides.map((ride) => (
+            {filteredRides.map((ride) => {
+              // Use recorded_at (actual activity date) or fall back to created_at
+              const displayDate = ride.recorded_at || ride.created_at;
+
+              return (
               <Table.Tr key={ride.id}>
                 <Table.Td>
-                  <Text size="xs">{formatDate(ride.created_at)}</Text>
+                  <Text size="xs">{formatDate(displayDate)}</Text>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm" fw={500}>{ride.name || 'Untitled Route'}</Text>
@@ -143,7 +147,8 @@ const RideHistoryTable = ({ rides }) => {
                   </Group>
                 </Table.Td>
               </Table.Tr>
-            ))}
+              );
+            })}
           </Table.Tbody>
         </Table>
       </div>

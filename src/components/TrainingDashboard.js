@@ -96,8 +96,8 @@ const TrainingDashboard = () => {
         .from('routes')
         .select('*')
         .eq('user_id', user.id)
-        .gte('created_at', daysAgo.toISOString())
-        .order('created_at', { ascending: false });
+        .gte('recorded_at', daysAgo.toISOString())
+        .order('recorded_at', { ascending: false });
 
       if (rides) {
         setRecentRides(rides);
@@ -105,7 +105,9 @@ const TrainingDashboard = () => {
         // Calculate daily TSS
         const tssMap = {};
         rides.forEach(ride => {
-          const date = new Date(ride.created_at).toISOString().split('T')[0];
+          // Use recorded_at (actual activity date) instead of created_at (import date)
+          const activityDate = ride.recorded_at || ride.created_at;
+          const date = new Date(activityDate).toISOString().split('T')[0];
           if (!tssMap[date]) {
             tssMap[date] = 0;
           }
