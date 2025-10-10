@@ -906,7 +906,12 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                     <Button
                       size="sm"
                       leftSection={<Play size={14} />}
-                      onClick={() => onRouteGenerated && onRouteGenerated(route)}
+                      onClick={() => {
+                        if (onRouteGenerated) {
+                          // Defer to avoid React error #185
+                          setTimeout(() => onRouteGenerated(route), 0);
+                        }
+                      }}
                     >
                       Use Route
                     </Button>
