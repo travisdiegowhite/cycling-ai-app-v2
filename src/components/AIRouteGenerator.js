@@ -17,6 +17,7 @@ import {
   TextInput,
   Select,
   Divider,
+  Switch,
 } from '@mantine/core';
 import {
   Brain,
@@ -80,6 +81,10 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   const [geocoding, setGeocoding] = useState(false);
   const [preferencesOpened, setPreferencesOpened] = useState(false);
   const [userPreferences, setUserPreferences] = useState(null);
+
+  // Feature toggles for debugging
+  const [usePastRides, setUsePastRides] = useState(false); // Default OFF to avoid junk routes
+  const [useTrainingContext, setUseTrainingContext] = useState(true);
 
   // Training goal options
   const trainingGoals = [
@@ -478,9 +483,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         trainingGoal,
         routeType,
         weatherData,
-        userId: user?.id,
+        userId: usePastRides ? user?.id : null, // Only pass userId if usePastRides is enabled
         userPreferences: userPreferences,
-        trainingContext: trainingContext, // Include workout type, phase, TSS, duration
+        trainingContext: useTrainingContext ? trainingContext : null, // Only pass training context if enabled
       });
       
       console.log('🎯 Generated routes:', routes);
@@ -564,6 +569,28 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         <Text size="xs" c="dimmed" mt="-8">
           Set your safety, surface, scenic preferences and avoid specific areas
         </Text>
+
+        {/* Debug Toggles */}
+        <Card withBorder p="sm" style={{ backgroundColor: '#fff9db' }}>
+          <Text size="sm" fw={500} mb="sm">🔧 Route Generation Options</Text>
+          <Stack gap="sm">
+            <Switch
+              label="Use Past Rides"
+              description="Learn from your riding history (may include old/test routes)"
+              checked={usePastRides}
+              onChange={(e) => setUsePastRides(e.currentTarget.checked)}
+            />
+            <Switch
+              label="Use Training Context"
+              description="Match routes to your workout requirements"
+              checked={useTrainingContext}
+              onChange={(e) => setUseTrainingContext(e.currentTarget.checked)}
+            />
+          </Stack>
+          <Text size="xs" c="dimmed" mt="xs">
+            💡 If routes look incorrect, try disabling "Use Past Rides"
+          </Text>
+        </Card>
 
         {/* Current Conditions */}
         <Card withBorder p="sm" style={{ backgroundColor: '#f8f9fa' }}>
