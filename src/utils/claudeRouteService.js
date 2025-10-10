@@ -8,7 +8,7 @@ const getApiBaseUrl = () => {
   if (process.env.NODE_ENV === 'production') {
     return ''; // Use relative URLs in production (same origin)
   }
-  return 'http://localhost:3000'; // Development server
+  return 'http://localhost:3001'; // Development API server
 };
 
 // Check if Claude service is available
