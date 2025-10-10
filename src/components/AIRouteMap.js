@@ -24,23 +24,23 @@ const AIRouteMap = () => {
 
   const handleRouteGenerated = (route) => {
     console.log('Route generated with coordinates:', route.coordinates?.length || 0, 'points');
-    setSelectedRoute(route);
 
-    // Defer map bounds fitting to avoid React state update during render
-    if (route.coordinates && route.coordinates.length > 0) {
-      setTimeout(() => {
-        if (mapRef.current) {
-          console.log('Fitting map to route bounds');
-          const bounds = calculateBounds(route.coordinates);
-          mapRef.current.fitBounds(bounds, {
-            padding: { top: 50, bottom: 50, left: 50, right: 350 }, // Leave space for the sidebar
-            duration: 1000
-          });
-        }
-      }, 100);
-    } else {
-      console.log('No coordinates to display for route');
-    }
+    // Defer ALL state updates to avoid React error #185
+    setTimeout(() => {
+      setSelectedRoute(route);
+
+      // Fit map to route bounds after state update
+      if (route.coordinates && route.coordinates.length > 0 && mapRef.current) {
+        console.log('Fitting map to route bounds');
+        const bounds = calculateBounds(route.coordinates);
+        mapRef.current.fitBounds(bounds, {
+          padding: { top: 50, bottom: 50, left: 50, right: 350 }, // Leave space for the sidebar
+          duration: 1000
+        });
+      } else {
+        console.log('No coordinates to display for route');
+      }
+    }, 0);
   };
 
   const handleStartLocationSet = (location) => {
