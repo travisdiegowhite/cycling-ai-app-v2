@@ -522,28 +522,22 @@ async function generateMapboxOutAndBack(startLocation, targetDistance, trainingG
 async function generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken, userPreferences = null) {
   const [startLon, startLat] = startLocation;
 
-  // Calculate strategic waypoints for a realistic loop with MUCH smaller radius
-  // Reduce radius to prevent waypoints from being too far apart
-  const radius = Math.min((targetDistance / (2 * Math.PI)) * pattern.radius * 0.5, targetDistance * 0.15);
-  const waypoints = [startLocation];
+  // NEW APPROACH: Use out-and-back with single midpoint for simplicity
+  // This is much more reliable than trying to create a loop with multiple waypoints
+  const halfDistance = targetDistance / 2;
 
-  // Create only 2 strategic waypoints to keep routes simple and valid
-  const numWaypoints = 2;
-  for (let i = 1; i <= numWaypoints; i++) {
-    const angle = (pattern.bearing + (i * (360 / (numWaypoints + 1)))) * (Math.PI / 180);
+  // Calculate ONE destination point at roughly half the target distance
+  const angle = pattern.bearing * (Math.PI / 180);
+  const distanceKm = Math.min(halfDistance, 20); // Cap at 20km to avoid invalid routes
 
-    // REDUCED variation to keep waypoints closer to roads
-    const angleVariation = angle + (Math.random() - 0.5) * 0.2; // Reduced from 0.3
-    const radiusVariation = radius * (0.8 + Math.random() * 0.4); // Tighter range
+  // Convert km to degrees (approximate)
+  const deltaLat = (distanceKm / 111.32) * Math.cos(angle);
+  const deltaLon = (distanceKm / (111.32 * Math.cos(startLat * Math.PI / 180))) * Math.sin(angle);
 
-    const deltaLat = (radiusVariation / 111.32) * Math.cos(angleVariation);
-    const deltaLon = (radiusVariation / (111.32 * Math.cos(startLat * Math.PI / 180))) * Math.sin(angleVariation);
+  const midpoint = [startLon + deltaLon, startLat + deltaLat];
 
-    waypoints.push([startLon + deltaLon, startLat + deltaLat]);
-  }
-
-  // Close the loop
-  waypoints.push(startLocation);
+  // Simple out-and-back: start -> midpoint -> start
+  const waypoints = [startLocation, midpoint, startLocation];
   
   try {
     console.log(`Generating ${pattern.name} with ${waypoints.length} waypoints`);
