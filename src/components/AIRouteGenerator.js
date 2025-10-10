@@ -466,7 +466,10 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       console.log('Parameters:', { startLocation, timeAvailable, trainingGoal, routeType });
       console.log('Weather data:', weatherData);
       console.log('🎛️ User preferences for traffic avoidance:', userPreferences);
-      
+      console.log('🔧 Feature toggles:', { usePastRides, useTrainingContext });
+      console.log('📊 Passing userId:', usePastRides ? user?.id : null);
+      console.log('🎯 Passing trainingContext:', useTrainingContext ? trainingContext : null);
+
       // Show traffic avoidance status
       if (userPreferences?.routingPreferences?.trafficTolerance === 'low') {
         console.log('🚫 TRAFFIC AVOIDANCE ACTIVE - Will prioritize quiet roads');
@@ -475,8 +478,8 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       } else {
         console.log('🚗 HIGH TRAFFIC TOLERANCE - Will use any road type');
       }
-      
-      
+
+
       const routes = await generateAIRoutes({
         startLocation,
         timeAvailable,
