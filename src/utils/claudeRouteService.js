@@ -36,7 +36,8 @@ export async function generateClaudeRoutes(params) {
     weatherData,
     ridingPatterns,
     targetDistance,
-    userId
+    userId,
+    trainingContext
   } = params;
 
   try {
@@ -46,15 +47,20 @@ export async function generateClaudeRoutes(params) {
     let prompt;
     if (userId) {
       try {
-        const enhancedContext = await EnhancedContextCollector.gatherDetailedPreferences(userId, params);
+        // Pass trainingContext to the enhanced context collector
+        const paramsWithContext = { ...params, trainingContext };
+        const enhancedContext = await EnhancedContextCollector.gatherDetailedPreferences(userId, paramsWithContext);
         console.log('Using enhanced context for route generation');
+        if (trainingContext) {
+          console.log('🎯 Training context included:', trainingContext);
+        }
         prompt = EnhancedContextCollector.buildEnhancedRoutePrompt(enhancedContext);
       } catch (error) {
         console.warn('Failed to get enhanced context, using basic prompt:', error);
-        prompt = buildRoutePrompt(params);
+        prompt = buildRoutePrompt({ ...params, trainingContext });
       }
     } else {
-      prompt = buildRoutePrompt(params);
+      prompt = buildRoutePrompt({ ...params, trainingContext });
     }
 
     console.log('Sending prompt to secure API...');
@@ -106,7 +112,8 @@ function buildRoutePrompt(params) {
     routeType,
     weatherData,
     ridingPatterns,
-    targetDistance
+    targetDistance,
+    trainingContext
   } = params;
 
   const [longitude, latitude] = startLocation;
@@ -133,6 +140,21 @@ WEATHER CONDITIONS:`;
   } else {
     prompt += `
 - Weather data not available`;
+  }
+
+  // Add training context if provided (from training plan workout)
+  if (trainingContext) {
+    prompt += `
+
+TRAINING PLAN WORKOUT:
+- Workout Type: ${trainingContext.workoutType}
+- Training Phase: ${trainingContext.phase}
+- Target Duration: ${trainingContext.targetDuration} minutes
+- Target TSS (Training Stress Score): ${trainingContext.targetTSS}
+- Primary Heart Rate Zone: Zone ${trainingContext.primaryZone}
+
+IMPORTANT: This route should be specifically designed for a ${trainingContext.workoutType} workout in the ${trainingContext.phase} phase.
+The route must match the intensity requirements and duration of this structured training session.`;
   }
 
   if (ridingPatterns) {

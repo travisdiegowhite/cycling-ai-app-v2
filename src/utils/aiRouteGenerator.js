@@ -21,7 +21,8 @@ export async function generateAIRoutes(params) {
     trainingGoal,
     routeType,
     weatherData: providedWeather,
-    userId
+    userId,
+    trainingContext
   } = params;
 
   console.log('Generating AI routes with params:', params);
@@ -110,7 +111,8 @@ export async function generateAIRoutes(params) {
       ridingPatterns,
       targetDistance,
       claudeAnalysis,
-      userId
+      userId,
+      trainingContext
     });
     
     console.log(`✅ Claude returned ${claudeRoutes.length} route suggestions`);
