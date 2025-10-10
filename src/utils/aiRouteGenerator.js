@@ -98,10 +98,12 @@ export async function generateAIRoutes(params) {
   }
   
   // Priority 0: Generate Claude AI route suggestions first
-  console.log('🧠 Generating intelligent routes with Claude AI...');
+  console.log('🧠 ====== STARTING CLAUDE AI ROUTE GENERATION ======');
   console.log('Claude parameters:', { startLocation, timeAvailable, trainingGoal, routeType, targetDistance });
-  
+  console.log('userId:', userId, 'trainingContext:', trainingContext);
+
   try {
+    console.log('🔄 Calling generateClaudeRoutes...');
     const claudeRoutes = await generateClaudeRoutes({
       startLocation,
       timeAvailable,
@@ -114,9 +116,10 @@ export async function generateAIRoutes(params) {
       userId,
       trainingContext
     });
-    
-    console.log(`✅ Claude returned ${claudeRoutes.length} route suggestions`);
-    
+
+    console.log(`✅ ====== CLAUDE RETURNED ${claudeRoutes.length} ROUTES ======`);
+    console.log('Claude routes:', claudeRoutes);
+
     if (claudeRoutes.length > 0) {
       console.log(`Converting ${claudeRoutes.length} Claude suggestions to full routes...`);
       // Convert Claude suggestions to full routes with coordinates
