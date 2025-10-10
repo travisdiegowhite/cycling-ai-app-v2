@@ -445,9 +445,11 @@ async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, 
     { name: 'Route A', bearing: 0, radius: 0.7 },
     { name: 'Route B', bearing: 90, radius: 0.8 },
     { name: 'Route C', bearing: 180, radius: 0.7 },
-    { name: 'Route D', bearing: 270, radius: 0.8 }
+    { name: 'Route D', bearing: 270, radius: 0.8 },
+    { name: 'Route E', bearing: 45, radius: 0.75 },
+    { name: 'Route F', bearing: 135, radius: 0.75 }
   ];
-  
+
   // Prioritize directions based on user patterns if available
   if (patternBasedSuggestions?.preferredDirection?.source === 'historical') {
     const preferredBearing = patternBasedSuggestions.preferredDirection.bearing;
@@ -457,8 +459,9 @@ async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, 
       return aDiff - bDiff;
     });
   }
-  
-  for (let i = 0; i < Math.min(3, loopPatterns.length); i++) {
+
+  // Try more patterns to compensate for failures
+  for (let i = 0; i < Math.min(6, loopPatterns.length); i++) {
     const pattern = loopPatterns[i];
     
     try {
@@ -518,26 +521,27 @@ async function generateMapboxOutAndBack(startLocation, targetDistance, trainingG
 // Generate single Mapbox loop with strategic waypoints
 async function generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken, userPreferences = null) {
   const [startLon, startLat] = startLocation;
-  
-  // Calculate strategic waypoints for a realistic loop
-  const radius = (targetDistance / (2 * Math.PI)) * pattern.radius;
+
+  // Calculate strategic waypoints for a realistic loop with MUCH smaller radius
+  // Reduce radius to prevent waypoints from being too far apart
+  const radius = Math.min((targetDistance / (2 * Math.PI)) * pattern.radius * 0.5, targetDistance * 0.15);
   const waypoints = [startLocation];
-  
-  // Create 3-4 strategic waypoints instead of many geometric points
-  const numWaypoints = 3;
+
+  // Create only 2 strategic waypoints to keep routes simple and valid
+  const numWaypoints = 2;
   for (let i = 1; i <= numWaypoints; i++) {
     const angle = (pattern.bearing + (i * (360 / (numWaypoints + 1)))) * (Math.PI / 180);
-    
-    // Add variation but keep it realistic
-    const angleVariation = angle + (Math.random() - 0.5) * 0.3;
-    const radiusVariation = radius * (0.7 + Math.random() * 0.6);
-    
+
+    // REDUCED variation to keep waypoints closer to roads
+    const angleVariation = angle + (Math.random() - 0.5) * 0.2; // Reduced from 0.3
+    const radiusVariation = radius * (0.8 + Math.random() * 0.4); // Tighter range
+
     const deltaLat = (radiusVariation / 111.32) * Math.cos(angleVariation);
     const deltaLon = (radiusVariation / (111.32 * Math.cos(startLat * Math.PI / 180))) * Math.sin(angleVariation);
-    
+
     waypoints.push([startLon + deltaLon, startLat + deltaLat]);
   }
-  
+
   // Close the loop
   waypoints.push(startLocation);
   
