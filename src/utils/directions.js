@@ -361,45 +361,45 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
 
   console.log('🔧 getCyclingDirections called with preferences:', preferences);
 
+  // UPDATED: Mapbox Directions API only supports: ferry, cash_only_tolls, unpaved, tunnel
+  // motorway, trunk, toll, primary are NO LONGER valid exclude values
   if (preferences?.routingPreferences?.trafficTolerance === 'low') {
-    // Low traffic tolerance - aggressive traffic avoidance
-    excludeParam = '&exclude=motorway,trunk,primary,toll,ferry';
+    // Low traffic tolerance - exclude unpaved and tolls
+    excludeParam = '&exclude=cash_only_tolls,unpaved,ferry';
     annotations += ',congestion'; // Request congestion data when available
-    console.log('🚫 Low traffic tolerance - excluding high-traffic roads including primary roads');
+    console.log('🚫 Low traffic tolerance - excluding tolls, unpaved roads, and ferries');
 
     // For very quiet roads, consider walking profile which often uses local streets
     if (preferences?.scenicPreferences?.quietnessLevel === 'high') {
       routingProfile = 'walking';
       console.log('🤫 High quietness preference - using walking profile for local roads');
     }
-
-    // Note: Mapbox doesn't support 'avoid' parameter for cycling profile
-    // All exclusions should be in the 'exclude' parameter
   } else if (preferences?.routingPreferences?.trafficTolerance === 'medium') {
     // Medium traffic tolerance - moderate avoidance
-    excludeParam = '&exclude=motorway,trunk,toll,ferry';
+    excludeParam = '&exclude=cash_only_tolls,ferry';
     annotations += ',congestion';
-    console.log('⚖️ Medium traffic tolerance - excluding major highways and trunk roads');
+    console.log('⚖️ Medium traffic tolerance - excluding tolls and ferries');
   } else if (preferences?.routingPreferences?.trafficTolerance === 'high') {
     // High traffic tolerance - minimal restrictions
     excludeParam = '&exclude=ferry'; // Only exclude ferries
     console.log('🚗 High traffic tolerance - allowing most road types');
   } else {
     // DEFAULT: No preference specified - use safe cycling defaults
-    excludeParam = '&exclude=motorway,trunk,toll,ferry';
-    console.log('🚴 No traffic preference - using safe cycling defaults (excluding motorways and trunks)');
+    // NOTE: We can't exclude motorways/trunks anymore, but cycling profile naturally avoids them
+    excludeParam = '&exclude=ferry';
+    console.log('🚴 No traffic preference - using cycling profile (naturally avoids highways)');
   }
   
   // Additional exclusions based on bike infrastructure preferences
   if (preferences?.safetyPreferences?.bikeInfrastructure === 'required') {
     // Most restrictive - must have bike infrastructure
-    excludeParam += excludeParam.includes('exclude=') ? ',bridge,tunnel' : '&exclude=bridge,tunnel';
+    excludeParam += excludeParam.includes('exclude=') ? ',tunnel' : '&exclude=tunnel';
     routingProfile = 'walking'; // Walking profile better for bike paths
-    console.log('🚴 Bike infrastructure required - using walking profile');
+    console.log('🚴 Bike infrastructure required - using walking profile and avoiding tunnels');
   } else if (preferences?.safetyPreferences?.bikeInfrastructure === 'strongly_preferred') {
-    // Add bridges to exclusions for better bike path routing
-    excludeParam += excludeParam.includes('exclude=') ? ',bridge' : '&exclude=bridge';
-    console.log('🚴 Bike infrastructure strongly preferred');
+    // Prefer routes without tunnels for better cycling experience
+    excludeParam += excludeParam.includes('exclude=') ? ',tunnel' : '&exclude=tunnel';
+    console.log('🚴 Bike infrastructure strongly preferred - avoiding tunnels');
   }
   
   // Try multiple routing strategies for quiet road preferences
@@ -469,10 +469,12 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
   try {
     const response = await fetch(url);
     if (!response.ok) {
+      const errorText = await response.text();
       console.error(`Directions API error: ${response.status} ${response.statusText}`);
+      console.error(`Error details:`, errorText);
       return { coordinates: waypoints, distance: 0, duration: 0, confidence: 0 };
     }
-    
+
     const data = await response.json();
     
     if (!data.routes || !data.routes.length) {

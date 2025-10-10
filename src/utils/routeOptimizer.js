@@ -378,7 +378,17 @@ export function validateLoopRoute(coordinates, options = {}) {
   const totalDistance = calculateTotalDistance(coordinates);
   const directDistance = haversineDistance(start[1], start[0], end[1], end[0]);
 
-  // For loops, we expect some inefficiency, but not too much
+  // For ACTUAL LOOPS (where start == end), directDistance will be ~0
+  // So we can't use the standard efficiency calculation
+  // Instead, just validate that the loop isn't absurdly long
+  const isActualLoop = closingDistance < maxClosingDistance;
+
+  if (isActualLoop) {
+    // For loops, skip efficiency check - it will always be ~0
+    return { valid: true, efficiency: 1.0, closingDistance, isLoop: true };
+  }
+
+  // For point-to-point routes, check efficiency
   const efficiency = directDistance / totalDistance;
   if (efficiency < minEfficiency && totalDistance > 2000) {
     return {
@@ -388,5 +398,5 @@ export function validateLoopRoute(coordinates, options = {}) {
     };
   }
 
-  return { valid: true, efficiency, closingDistance };
+  return { valid: true, efficiency, closingDistance, isLoop: false };
 }

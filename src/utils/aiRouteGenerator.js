@@ -65,10 +65,14 @@ export async function generateAIRoutes(params) {
   }
 
   // Calculate target distance, enhanced with Strava performance data
+  const baseTargetDistance = calculateTargetDistance(timeAvailable, trainingGoal);
   let targetDistance = calculateTargetDistance(timeAvailable, trainingGoal, ridingPatterns?.performanceMetrics);
+
+  console.log(`📏 Distance calculation: ${timeAvailable}min × ${(targetDistance / (timeAvailable / 60)).toFixed(1)}km/h = ${targetDistance.toFixed(1)}km (${(targetDistance * 0.621371).toFixed(1)} miles)`);
+
   if (patternBasedSuggestions?.adjustedDistance) {
+    console.log(`⚠️ Pattern-based adjustment: ${targetDistance.toFixed(1)}km → ${patternBasedSuggestions.adjustedDistance.toFixed(1)}km`);
     targetDistance = patternBasedSuggestions.adjustedDistance;
-    console.log(`Adjusted target distance from ${calculateTargetDistance(timeAvailable, trainingGoal)}km to ${targetDistance}km based on riding patterns`);
   }
   
   // Log enhanced pattern information
@@ -222,10 +226,15 @@ export async function generateAIRoutes(params) {
   }
 
   // Filter out null/invalid routes
+  console.log(`📊 Route generation summary: ${routes.length} total routes attempted`);
   const validRoutes = routes.filter(route => route !== null && route !== undefined);
-  
+  const rejectedCount = routes.length - validRoutes.length;
+
+  console.log(`📊 Results: ${validRoutes.length} valid, ${rejectedCount} rejected`);
+
   if (validRoutes.length === 0) {
-    console.warn('No valid routes generated, creating fallback route');
+    console.warn('⚠️ NO VALID ROUTES - All routes rejected by validation checks');
+    console.warn(`⚠️ Creating fallback geometric route for ${targetDistance.toFixed(1)}km`);
     // Create one simple fallback route as last resort
     const fallbackRoute = createMockRoute('Fallback Route', targetDistance, trainingGoal, startLocation);
     return [fallbackRoute];
@@ -460,18 +469,22 @@ async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, 
   
   for (let i = 0; i < Math.min(3, loopPatterns.length); i++) {
     const pattern = loopPatterns[i];
-    
+
     try {
       const route = await generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken, userPreferences);
       if (route && route.coordinates && route.coordinates.length > 20) {
         routes.push(route);
-        console.log(`Successfully generated ${pattern.name} with ${route.coordinates.length} points`);
+        console.log(`✅ Successfully generated ${pattern.name} with ${route.coordinates.length} points`);
+      } else {
+        console.warn(`⚠️ ${pattern.name} returned null or insufficient coordinates`);
       }
     } catch (error) {
-      console.warn(`Failed to generate ${pattern.name}:`, error);
+      console.warn(`❌ Failed to generate ${pattern.name}:`, error);
     }
   }
-  
+
+  console.log(`🔄 generateMapboxLoops completed: ${routes.length} routes from ${loopPatterns.length} patterns`);
+
   return routes;
 }
 
@@ -518,11 +531,19 @@ async function generateMapboxOutAndBack(startLocation, targetDistance, trainingG
 // Generate single Mapbox loop with strategic waypoints
 async function generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken, userPreferences = null) {
   const [startLon, startLat] = startLocation;
-  
+
   // Calculate strategic waypoints for a realistic loop
-  const radius = (targetDistance / (2 * Math.PI)) * pattern.radius;
+  // The actual routed distance is typically 40-50% of the geometric circle
+  // So we need to increase the radius to compensate
+  const baseRadius = (targetDistance / (2 * Math.PI)) * pattern.radius;
+
+  // Increase radius by 2.2x to account for routing taking shorter paths
+  // This gives us actual routes closer to the target distance
+  const radius = baseRadius * 2.2;
   const waypoints = [startLocation];
-  
+
+  console.log(`📏 Target distance: ${targetDistance.toFixed(1)}km, calculated radius: ${radius.toFixed(2)}km (increased 2.2x for routing)`);
+
   // Create 3-4 strategic waypoints instead of many geometric points
   const numWaypoints = 3;
   for (let i = 1; i <= numWaypoints; i++) {
@@ -553,22 +574,31 @@ async function generateMapboxLoop(startLocation, targetDistance, pattern, traini
       mapboxToken: mapboxToken
     });
 
-    if (route) {
-      console.log(`✅ Smart router selected: ${route.source} - ${getRoutingStrategyDescription(route)}`);
-    }
-    
-    // Validate the route
-    if (!route.coordinates || route.coordinates.length < 20 || route.confidence < 0.5) {
-      console.warn(`${pattern.name} generated poor quality route, skipping`);
+    // Check if route is null (routing failed completely)
+    if (!route) {
+      console.warn(`❌ ${pattern.name} - routing failed, no route returned`);
       return null;
     }
-    
-    // Check route complexity to avoid geometric patterns (relaxed threshold)
-    const complexity = calculateRouteComplexity(route.coordinates);
-    if (complexity < 0.03) { // Reduced from 0.1 to 0.03 to be less strict
-      console.warn(`${pattern.name} appears too geometric (complexity: ${complexity.toFixed(2)}), skipping`);
+
+    console.log(`✅ Smart router selected: ${route.source} - ${getRoutingStrategyDescription(route)}`);
+
+    // Validate the route - SIMPLIFIED to reduce false rejections
+    console.log(`🔍 Validating ${pattern.name}: coords=${route.coordinates?.length || 0}, confidence=${route.confidence?.toFixed(2) || 0}, distance=${(route.distance / 1000).toFixed(1)}km`);
+
+    // Only reject if truly broken (no coordinates or very low confidence)
+    if (!route.coordinates || route.coordinates.length < 10) {
+      console.warn(`❌ ${pattern.name} REJECTED - no valid coordinates`);
       return null;
     }
+
+    if (route.confidence < 0.3) {
+      console.warn(`❌ ${pattern.name} REJECTED - confidence too low: ${route.confidence?.toFixed(2)}`);
+      return null;
+    }
+
+    // REMOVED: Complexity check - was rejecting too many valid long routes
+    console.log(`✅ ${pattern.name} PASSED validation`);
+
 
     // Skip optimization to preserve road snapping
     console.log(`🔧 Preserving road structure for ${pattern.name}: ${route.coordinates.length} points`);

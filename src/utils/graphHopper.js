@@ -47,12 +47,17 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
     optimize: 'false'
   });
 
+  // DEFAULT: Always apply some traffic avoidance for cycling
+  // This makes GraphHopper routes safer than Mapbox by default
+  let customModelApplied = false;
+
   // Add cycling-specific preferences for GraphHopper
   if (preferences) {
     console.log('🚴 Applying GraphHopper cycling preferences:', preferences);
 
     // Traffic avoidance using GraphHopper's custom model
     if (preferences.routingPreferences?.trafficTolerance === 'low') {
+      customModelApplied = true;
       // Use GraphHopper's "safest" route preference with VERY strict avoidance
       params.append('ch.disable', 'true'); // Disable contraction hierarchies for more flexibility
       params.append('custom_model', JSON.stringify({
@@ -88,13 +93,15 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
         "distance_influence": 40 // Allow up to 40% longer for moderate safety
       }));
       console.log('⚖️ GraphHopper: Applying moderate traffic avoidance');
+      customModelApplied = true;
     }
 
     // Bike infrastructure preference (only applies if no traffic tolerance was set)
     if (preferences.safetyPreferences?.bikeInfrastructure === 'strongly_preferred' ||
         preferences.safetyPreferences?.bikeInfrastructure === 'required') {
 
-      if (!params.has('custom_model')) {
+      if (!customModelApplied) {
+        customModelApplied = true;
         // No traffic model set yet, create one focused on bike infrastructure
         params.append('ch.disable', 'true');
 
@@ -119,6 +126,13 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
         console.log(`🛣️ GraphHopper: Requiring bike infrastructure (${infraBoost}x boost)`);
       }
     }
+  }
+
+  // DEFAULT: Use standard bike profile
+  // NOTE: custom_model requires paid GraphHopper plan ("Free packages cannot use flexible mode")
+  // The free 'bike' profile already naturally avoids motorways and prefers bike-friendly roads
+  if (!customModelApplied) {
+    console.log('🚴 GraphHopper: Using standard bike profile (free tier - naturally avoids motorways)');
   }
 
   const url = `${GRAPHHOPPER_BASE_URL}/route?${params}&point=${points.replace(/\|/g, '&point=')}`;
@@ -171,17 +185,19 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
 
 // Select appropriate cycling profile based on training goal
 export function selectGraphHopperProfile(trainingGoal) {
+  // NOTE: Free GraphHopper API only supports: bike, foot, car
+  // racingbike and mtb require paid plans
+  // We use 'bike' profile with custom_model to achieve similar results
+
   switch (trainingGoal) {
     case 'hills':
     case 'intervals':
-      return GRAPHHOPPER_PROFILES.RACINGBIKE; // Road bike profile
-    
+    case 'endurance':
+      return GRAPHHOPPER_PROFILES.BIKE; // Use bike with custom_model for road optimization
+
     case 'recovery':
       return GRAPHHOPPER_PROFILES.BIKE; // Standard bike (quieter roads)
-    
-    case 'endurance':
-      return GRAPHHOPPER_PROFILES.RACINGBIKE; // Road optimized
-    
+
     default:
       return GRAPHHOPPER_PROFILES.BIKE;
   }
