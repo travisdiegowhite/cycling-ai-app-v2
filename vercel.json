@@ -29,7 +29,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://api.mapbox.com https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline' https://api.mapbox.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com https://api.mapbox.com; connect-src 'self' https://api.mapbox.com https://*.supabase.co https://api.strava.com https://www.strava.com https://api.openweathermap.org https://api.open-elevation.com https://www.tribos.studio https://cycling-ai-app-v2.vercel.app https://vitals.vercel-insights.com; worker-src 'self' blob:; frame-ancestors 'none';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://api.mapbox.com https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline' https://api.mapbox.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com https://api.mapbox.com; connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://*.supabase.co https://api.strava.com https://www.strava.com https://api.openweathermap.org https://api.open-elevation.com https://www.tribos.studio https://cycling-ai-app-v2.vercel.app https://vitals.vercel-insights.com; worker-src 'self' blob:; frame-ancestors 'none';"
         },
         {
           "key": "Permissions-Policy",

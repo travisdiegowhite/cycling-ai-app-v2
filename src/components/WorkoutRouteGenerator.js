@@ -127,9 +127,13 @@ const WorkoutRouteGenerator = () => {
       },
       (error) => {
         console.error('Geolocation error:', error);
-        toast.error('Could not get current location');
+        // Don't show error toast as it's not critical
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      {
+        enableHighAccuracy: false, // Use faster, less accurate location
+        timeout: 15000, // Longer timeout
+        maximumAge: 300000 // Accept cached location up to 5 minutes old
+      }
     );
   }, []);
 
