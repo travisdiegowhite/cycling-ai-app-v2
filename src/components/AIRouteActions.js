@@ -127,8 +127,9 @@ const AIRouteActions = ({ route, onSaved }) => {
       toast.success('Route saved successfully!');
       setSaveModalOpen(false);
 
+      // Defer callback to avoid React error #185
       if (onSaved) {
-        onSaved(data);
+        setTimeout(() => onSaved(data), 0);
       }
 
     } catch (err) {
