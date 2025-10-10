@@ -25,15 +25,19 @@ const AIRouteMap = () => {
   const handleRouteGenerated = (route) => {
     console.log('Route generated with coordinates:', route.coordinates?.length || 0, 'points');
     setSelectedRoute(route);
-    
-    // If route has coordinates, fit map to show the entire route
-    if (route.coordinates && route.coordinates.length > 0 && mapRef.current) {
-      console.log('Fitting map to route bounds');
-      const bounds = calculateBounds(route.coordinates);
-      mapRef.current.fitBounds(bounds, {
-        padding: { top: 50, bottom: 50, left: 50, right: 350 }, // Leave space for the sidebar
-        duration: 1000
-      });
+
+    // Defer map bounds fitting to avoid React state update during render
+    if (route.coordinates && route.coordinates.length > 0) {
+      setTimeout(() => {
+        if (mapRef.current) {
+          console.log('Fitting map to route bounds');
+          const bounds = calculateBounds(route.coordinates);
+          mapRef.current.fitBounds(bounds, {
+            padding: { top: 50, bottom: 50, left: 50, right: 350 }, // Leave space for the sidebar
+            duration: 1000
+          });
+        }
+      }, 100);
     } else {
       console.log('No coordinates to display for route');
     }
