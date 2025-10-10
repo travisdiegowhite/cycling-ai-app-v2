@@ -20,6 +20,7 @@ const AIRouteMap = () => {
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [startLocation, setStartLocation] = useState(null);
   const mapRef = useRef(null);
+  const isProgrammaticMove = useRef(false);
 
 
   const handleRouteGenerated = (route) => {
@@ -31,15 +32,23 @@ const AIRouteMap = () => {
     setStartLocation(location);
   };
 
-  // Fit map to route bounds when selectedRoute changes (safer than doing it in callback)
+  // Fit map to route bounds when selectedRoute changes
   useEffect(() => {
     if (selectedRoute?.coordinates && selectedRoute.coordinates.length > 0 && mapRef.current) {
       console.log('Fitting map to route bounds');
       const bounds = calculateBounds(selectedRoute.coordinates);
+
+      // Flag that this is a programmatic move, not user interaction
+      isProgrammaticMove.current = true;
       mapRef.current.fitBounds(bounds, {
         padding: { top: 50, bottom: 50, left: 50, right: 350 },
         duration: 1000
       });
+
+      // Reset flag after animation completes
+      setTimeout(() => {
+        isProgrammaticMove.current = false;
+      }, 1100);
     }
   }, [selectedRoute]);
 
@@ -106,7 +115,12 @@ const AIRouteMap = () => {
           <Map
             ref={mapRef}
             {...viewState}
-            onMove={evt => setViewState(evt.viewState)}
+            onMove={evt => {
+              // Only update viewState for user-initiated moves, not programmatic fitBounds
+              if (!isProgrammaticMove.current) {
+                setViewState(evt.viewState);
+              }
+            }}
             mapboxAccessToken={process.env.REACT_APP_MAPBOX_TOKEN}
             style={{ width: '100%', height: '100%' }}
             mapStyle="mapbox://styles/mapbox/outdoors-v12"
