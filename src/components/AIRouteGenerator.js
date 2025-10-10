@@ -492,13 +492,17 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       });
       
       console.log('🎯 Generated routes:', routes);
-      setGeneratedRoutes(routes);
-      
-      if (routes.length > 0) {
-        toast.success(`Generated ${routes.length} optimized route options!`);
-      } else {
-        toast.warning('No suitable routes found. Try adjusting your parameters.');
-      }
+
+      // Defer state update to avoid React error #185
+      setTimeout(() => {
+        setGeneratedRoutes(routes);
+
+        if (routes.length > 0) {
+          toast.success(`Generated ${routes.length} optimized route options!`);
+        } else {
+          toast.warning('No suitable routes found. Try adjusting your parameters.');
+        }
+      }, 0);
     } catch (err) {
       console.error('Route generation error:', err);
       setError(err.message || 'Failed to generate routes');
