@@ -380,6 +380,7 @@ const TrainingPlanView = () => {
         <Tabs.Panel value="schedule">
           <WeeklySchedule
             schedule={weeklySchedule}
+            showGenerateRoute={true}
             onUpdate={(updated) => {
               // Handle schedule updates if needed
               console.log('Schedule updated:', updated);

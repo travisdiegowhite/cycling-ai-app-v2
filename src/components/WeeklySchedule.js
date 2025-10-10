@@ -14,14 +14,16 @@ import {
   Button,
   Modal,
 } from '@mantine/core';
-import { Edit, Trash2, Plus } from 'lucide-react';
+import { Edit, Trash2, Plus, Map } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { WORKOUT_TYPES, TRAINING_PHASES } from '../utils/trainingPlans';
 
 /**
  * Weekly Schedule Component
  * Displays and allows editing of weekly workout schedules
  */
-const WeeklySchedule = ({ schedule, onUpdate }) => {
+const WeeklySchedule = ({ schedule, onUpdate, showGenerateRoute = false }) => {
+  const navigate = useNavigate();
   const [editingWorkout, setEditingWorkout] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
@@ -154,6 +156,18 @@ const WeeklySchedule = ({ schedule, onUpdate }) => {
                           </Group>
 
                           <Group gap="xs">
+                            {showGenerateRoute && workout.id && workout.workout_type !== 'rest' && (
+                              <Tooltip label="Generate route for this workout">
+                                <ActionIcon
+                                  size="sm"
+                                  variant="subtle"
+                                  color="blue"
+                                  onClick={() => navigate(`/training/workouts/${workout.id}/generate-route`)}
+                                >
+                                  <Map size={14} />
+                                </ActionIcon>
+                              </Tooltip>
+                            )}
                             <Tooltip label="Edit workout">
                               <ActionIcon
                                 size="sm"
