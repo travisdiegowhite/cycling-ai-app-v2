@@ -98,12 +98,10 @@ export async function generateAIRoutes(params) {
   }
   
   // Priority 0: Generate Claude AI route suggestions first
-  console.log('🧠 ====== STARTING CLAUDE AI ROUTE GENERATION ======');
+  console.log('🧠 Generating intelligent routes with Claude AI...');
   console.log('Claude parameters:', { startLocation, timeAvailable, trainingGoal, routeType, targetDistance });
-  console.log('userId:', userId, 'trainingContext:', trainingContext);
-
+  
   try {
-    console.log('🔄 Calling generateClaudeRoutes...');
     const claudeRoutes = await generateClaudeRoutes({
       startLocation,
       timeAvailable,
@@ -116,10 +114,9 @@ export async function generateAIRoutes(params) {
       userId,
       trainingContext
     });
-
-    console.log(`✅ ====== CLAUDE RETURNED ${claudeRoutes.length} ROUTES ======`);
-    console.log('Claude routes:', claudeRoutes);
-
+    
+    console.log(`✅ Claude returned ${claudeRoutes.length} route suggestions`);
+    
     if (claudeRoutes.length > 0) {
       console.log(`Converting ${claudeRoutes.length} Claude suggestions to full routes...`);
       // Convert Claude suggestions to full routes with coordinates
@@ -448,11 +445,9 @@ async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, 
     { name: 'Route A', bearing: 0, radius: 0.7 },
     { name: 'Route B', bearing: 90, radius: 0.8 },
     { name: 'Route C', bearing: 180, radius: 0.7 },
-    { name: 'Route D', bearing: 270, radius: 0.8 },
-    { name: 'Route E', bearing: 45, radius: 0.75 },
-    { name: 'Route F', bearing: 135, radius: 0.75 }
+    { name: 'Route D', bearing: 270, radius: 0.8 }
   ];
-
+  
   // Prioritize directions based on user patterns if available
   if (patternBasedSuggestions?.preferredDirection?.source === 'historical') {
     const preferredBearing = patternBasedSuggestions.preferredDirection.bearing;
@@ -462,9 +457,8 @@ async function generateMapboxLoops(startLocation, targetDistance, trainingGoal, 
       return aDiff - bDiff;
     });
   }
-
-  // Try more patterns to compensate for failures
-  for (let i = 0; i < Math.min(6, loopPatterns.length); i++) {
+  
+  for (let i = 0; i < Math.min(3, loopPatterns.length); i++) {
     const pattern = loopPatterns[i];
     
     try {
@@ -524,23 +518,28 @@ async function generateMapboxOutAndBack(startLocation, targetDistance, trainingG
 // Generate single Mapbox loop with strategic waypoints
 async function generateMapboxLoop(startLocation, targetDistance, pattern, trainingGoal, mapboxToken, userPreferences = null) {
   const [startLon, startLat] = startLocation;
-
-  // NEW APPROACH: Use out-and-back with single midpoint for simplicity
-  // This is much more reliable than trying to create a loop with multiple waypoints
-  const halfDistance = targetDistance / 2;
-
-  // Calculate ONE destination point at roughly half the target distance
-  const angle = pattern.bearing * (Math.PI / 180);
-  const distanceKm = Math.min(halfDistance, 20); // Cap at 20km to avoid invalid routes
-
-  // Convert km to degrees (approximate)
-  const deltaLat = (distanceKm / 111.32) * Math.cos(angle);
-  const deltaLon = (distanceKm / (111.32 * Math.cos(startLat * Math.PI / 180))) * Math.sin(angle);
-
-  const midpoint = [startLon + deltaLon, startLat + deltaLat];
-
-  // Simple out-and-back: start -> midpoint -> start
-  const waypoints = [startLocation, midpoint, startLocation];
+  
+  // Calculate strategic waypoints for a realistic loop
+  const radius = (targetDistance / (2 * Math.PI)) * pattern.radius;
+  const waypoints = [startLocation];
+  
+  // Create 3-4 strategic waypoints instead of many geometric points
+  const numWaypoints = 3;
+  for (let i = 1; i <= numWaypoints; i++) {
+    const angle = (pattern.bearing + (i * (360 / (numWaypoints + 1)))) * (Math.PI / 180);
+    
+    // Add variation but keep it realistic
+    const angleVariation = angle + (Math.random() - 0.5) * 0.3;
+    const radiusVariation = radius * (0.7 + Math.random() * 0.6);
+    
+    const deltaLat = (radiusVariation / 111.32) * Math.cos(angleVariation);
+    const deltaLon = (radiusVariation / (111.32 * Math.cos(startLat * Math.PI / 180))) * Math.sin(angleVariation);
+    
+    waypoints.push([startLon + deltaLon, startLat + deltaLat]);
+  }
+  
+  // Close the loop
+  waypoints.push(startLocation);
   
   try {
     console.log(`Generating ${pattern.name} with ${waypoints.length} waypoints`);
