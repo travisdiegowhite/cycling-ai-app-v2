@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Map, Source, Layer, Marker, NavigationControl } from 'react-map-gl';
 import { useMediaQuery } from '@mantine/hooks';
 import { buildLineString } from '../utils/geo';
@@ -24,28 +24,24 @@ const AIRouteMap = () => {
 
   const handleRouteGenerated = (route) => {
     console.log('Route generated with coordinates:', route.coordinates?.length || 0, 'points');
-
-    // Defer ALL state updates to avoid React error #185
-    setTimeout(() => {
-      setSelectedRoute(route);
-
-      // Fit map to route bounds after state update
-      if (route.coordinates && route.coordinates.length > 0 && mapRef.current) {
-        console.log('Fitting map to route bounds');
-        const bounds = calculateBounds(route.coordinates);
-        mapRef.current.fitBounds(bounds, {
-          padding: { top: 50, bottom: 50, left: 50, right: 350 }, // Leave space for the sidebar
-          duration: 1000
-        });
-      } else {
-        console.log('No coordinates to display for route');
-      }
-    }, 0);
+    setSelectedRoute(route);
   };
 
   const handleStartLocationSet = (location) => {
     setStartLocation(location);
   };
+
+  // Fit map to route bounds when selectedRoute changes (safer than doing it in callback)
+  useEffect(() => {
+    if (selectedRoute?.coordinates && selectedRoute.coordinates.length > 0 && mapRef.current) {
+      console.log('Fitting map to route bounds');
+      const bounds = calculateBounds(selectedRoute.coordinates);
+      mapRef.current.fitBounds(bounds, {
+        padding: { top: 50, bottom: 50, left: 50, right: 350 },
+        duration: 1000
+      });
+    }
+  }, [selectedRoute]);
 
   // Calculate bounds for a set of coordinates
   const calculateBounds = (coordinates) => {
