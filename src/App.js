@@ -22,7 +22,6 @@ import RouteStudio from './components/RouteStudio';
 import TrainingDashboard from './components/TrainingDashboard';
 import TrainingPlanBuilder from './components/TrainingPlanBuilder';
 import TrainingPlanView from './components/TrainingPlanView';
-import WorkoutRouteGenerator from './components/WorkoutRouteGenerator';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UnitPreferencesProvider } from './utils/units';
 import { theme } from './theme';
@@ -81,7 +80,6 @@ const AppContent = () => {
         <Route path="/training" element={<TrainingDashboard />} />
         <Route path="/training/plans/new" element={<TrainingPlanBuilder />} />
         <Route path="/training/plans/:planId" element={<TrainingPlanView />} />
-        <Route path="/training/workouts/:workoutId/generate-route" element={<WorkoutRouteGenerator />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );

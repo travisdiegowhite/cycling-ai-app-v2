@@ -15,6 +15,8 @@ import {
   Loader,
   Center,
   TextInput,
+  Select,
+  Divider,
 } from '@mantine/core';
 import {
   Brain,
@@ -30,6 +32,7 @@ import {
   Settings,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnits } from '../utils/units';
 import { getWeatherData, getMockWeatherData } from '../utils/weather';
@@ -37,11 +40,13 @@ import { generateAIRoutes } from '../utils/aiRouteGenerator';
 import PreferenceSettings from './PreferenceSettings';
 import { EnhancedContextCollector } from '../utils/enhancedContext';
 import TrainingContextSelector from './TrainingContextSelector';
-import { estimateTSS } from '../utils/trainingPlans';
+import { estimateTSS, WORKOUT_TYPES } from '../utils/trainingPlans';
+import { supabase } from '../supabase';
 
 const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, externalStartLocation }) => {
   const { user } = useAuth();
   const { formatDistance, formatElevation, formatTemperature, formatSpeed } = useUnits();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   
   // User inputs
@@ -60,6 +65,12 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     targetTSS: 75,
     primaryZone: 2
   });
+
+  // Training plan integration
+  const [activePlans, setActivePlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [planWorkouts, setPlanWorkouts] = useState([]);
+  const [selectedWorkout, setSelectedWorkout] = useState(null);
 
   // Generation state
   const [generating, setGenerating] = useState(false);
@@ -305,11 +316,134 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     loadUserPreferences();
   }, [user?.id]);
 
+  // Load active training plans
+  useEffect(() => {
+    const loadTrainingPlans = async () => {
+      if (!user?.id) return;
+
+      try {
+        const { data: plans } = await supabase
+          .from('training_plans')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false });
+
+        setActivePlans(plans || []);
+      } catch (error) {
+        console.error('Failed to load training plans:', error);
+      }
+    };
+
+    loadTrainingPlans();
+  }, [user?.id]);
+
+  // Load workouts when plan is selected
+  useEffect(() => {
+    const loadWorkouts = async () => {
+      if (!selectedPlan) {
+        setPlanWorkouts([]);
+        setSelectedWorkout(null);
+        return;
+      }
+
+      try {
+        const { data: workouts } = await supabase
+          .from('planned_workouts')
+          .select('*')
+          .eq('plan_id', selectedPlan)
+          .neq('workout_type', 'rest')
+          .order('week_number', { ascending: true })
+          .order('day_of_week', { ascending: true });
+
+        setPlanWorkouts(workouts || []);
+      } catch (error) {
+        console.error('Failed to load workouts:', error);
+      }
+    };
+
+    loadWorkouts();
+  }, [selectedPlan]);
+
+  // Update training context when workout is selected
+  useEffect(() => {
+    if (!selectedWorkout) return;
+
+    const workout = planWorkouts.find(w => w.id === selectedWorkout);
+    if (workout) {
+      setTrainingContext({
+        workoutType: workout.workout_type,
+        phase: workout.phase || 'base',
+        targetDuration: workout.target_duration,
+        targetTSS: workout.target_tss,
+        primaryZone: workout.target_zone,
+      });
+
+      // Also update time available to match workout duration
+      setTimeAvailable(workout.target_duration);
+    }
+  }, [selectedWorkout, planWorkouts]);
+
   // Automatically get current location on mount
   useEffect(() => {
     getCurrentLocation();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Handle workout parameter from URL
+  useEffect(() => {
+    const workoutId = searchParams.get('workout');
+
+    if (workoutId && !selectedWorkout && user?.id) {
+      const loadWorkoutFromUrl = async () => {
+        try {
+          // Find the workout and its plan
+          const { data: workout, error } = await supabase
+            .from('planned_workouts')
+            .select('*, training_plans!inner(id, name)')
+            .eq('id', workoutId)
+            .eq('training_plans.user_id', user.id)
+            .single();
+
+          if (error) {
+            console.error('Failed to load workout from URL:', error);
+            // Clear the invalid parameter
+            setSearchParams({});
+            return;
+          }
+
+          if (workout) {
+            // Set the plan first
+            setSelectedPlan(workout.plan_id);
+            // Workout will be set after planWorkouts loads
+            // Store the workout ID to select it once workouts are loaded
+            sessionStorage.setItem('pendingWorkoutSelection', workoutId);
+          }
+        } catch (error) {
+          console.error('Error loading workout from URL:', error);
+          setSearchParams({});
+        }
+      };
+
+      loadWorkoutFromUrl();
+    }
+  }, [searchParams, selectedWorkout, user?.id, setSearchParams]);
+
+  // Select workout once plan workouts are loaded (for URL parameter flow)
+  useEffect(() => {
+    const pendingWorkoutId = sessionStorage.getItem('pendingWorkoutSelection');
+    if (pendingWorkoutId && planWorkouts.length > 0 && !selectedWorkout) {
+      // Check if the workout is in the loaded workouts
+      const workout = planWorkouts.find(w => w.id === pendingWorkoutId);
+      if (workout) {
+        setSelectedWorkout(pendingWorkoutId);
+        sessionStorage.removeItem('pendingWorkoutSelection');
+        // Clear the URL parameter after selection
+        setSearchParams({});
+        toast.success(`Loaded workout: Week ${workout.week_number} - ${WORKOUT_TYPES[workout.workout_type]?.name || workout.workout_type}`);
+      }
+    }
+  }, [planWorkouts, selectedWorkout, setSearchParams]);
 
   // Generate intelligent routes
   const generateRoutes = async () => {
@@ -573,6 +707,53 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
             </Stack>
           </Radio.Group>
         </div>
+
+        {/* Training Plan Workout Selector */}
+        {activePlans.length > 0 && (
+          <Card withBorder p="md" style={{ backgroundColor: '#f0f9ff' }}>
+            <Text size="sm" fw={600} mb="sm">Use Training Plan Workout</Text>
+            <Stack gap="sm">
+              <Select
+                label="Select Training Plan"
+                placeholder="Choose a plan"
+                data={activePlans.map(plan => ({
+                  value: plan.id,
+                  label: plan.name
+                }))}
+                value={selectedPlan}
+                onChange={setSelectedPlan}
+                clearable
+              />
+
+              {selectedPlan && planWorkouts.length > 0 && (
+                <Select
+                  label="Select Workout"
+                  placeholder="Choose a workout"
+                  data={planWorkouts.map(workout => {
+                    const workoutType = WORKOUT_TYPES[workout.workout_type];
+                    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    return {
+                      value: workout.id,
+                      label: `Week ${workout.week_number}, ${dayNames[workout.day_of_week]} - ${workoutType?.name || workout.workout_type} (${workout.target_duration}min, ${workout.target_tss} TSS)`
+                    };
+                  })}
+                  value={selectedWorkout}
+                  onChange={setSelectedWorkout}
+                  clearable
+                  maxDropdownHeight={300}
+                />
+              )}
+
+              {selectedWorkout && (
+                <Alert color="blue" variant="light">
+                  Training context updated from workout! Time available and TSS targets have been set automatically.
+                </Alert>
+              )}
+            </Stack>
+          </Card>
+        )}
+
+        <Divider label="Or customize manually" labelPosition="center" my="md" />
 
         {/* Training Context */}
         <TrainingContextSelector

@@ -157,12 +157,12 @@ const WeeklySchedule = ({ schedule, onUpdate, showGenerateRoute = false }) => {
 
                           <Group gap="xs">
                             {showGenerateRoute && workout.id && workout.workout_type !== 'rest' && (
-                              <Tooltip label="Generate route for this workout">
+                              <Tooltip label="Generate AI route for this workout">
                                 <ActionIcon
                                   size="sm"
                                   variant="subtle"
                                   color="blue"
-                                  onClick={() => navigate(`/training/workouts/${workout.id}/generate-route`)}
+                                  onClick={() => navigate('/?workout=' + workout.id)}
                                 >
                                   <Map size={14} />
                                 </ActionIcon>
