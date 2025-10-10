@@ -21,6 +21,7 @@ import RouteBuilder from './components/RouteBuilder';
 import RouteStudio from './components/RouteStudio';
 import TrainingDashboard from './components/TrainingDashboard';
 import TrainingPlanBuilder from './components/TrainingPlanBuilder';
+import TrainingPlanView from './components/TrainingPlanView';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UnitPreferencesProvider } from './utils/units';
 import { theme } from './theme';
@@ -78,6 +79,7 @@ const AppContent = () => {
         <Route path="/strava" element={<StravaIntegration />} />
         <Route path="/training" element={<TrainingDashboard />} />
         <Route path="/training/plans/new" element={<TrainingPlanBuilder />} />
+        <Route path="/training/plans/:planId" element={<TrainingPlanView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
