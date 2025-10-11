@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { polylineDistance } from '../utils/geo';
 import { getElevationData, calculateElevationMetrics } from '../utils/elevation';
+import { getSmartCyclingRoute } from '../utils/smartCyclingRouter';
 
 
 /**
@@ -32,6 +33,8 @@ export const useRouteManipulation = ({
   error,
   setError,
   useImperial,
+  userPreferences = null, // NEW: User preferences for traffic avoidance
+  useSmartRouting = false, // NEW: Toggle for smart routing
 }) => {
 
   // === Add Waypoint ===
@@ -96,67 +99,107 @@ export const useRouteManipulation = ({
     }
   }, [useImperial, setElevationProfile, setElevationStats]);
 
-  // === Snap to Roads using Mapbox Directions API ===
+  // === Snap to Roads using Smart Cycling Router or Mapbox Directions API ===
   const snapToRoads = useCallback(async () => {
     if (waypoints.length < 2) {
       toast.error('Need at least 2 waypoints');
       return;
     }
-    
+
     setSnapping(true);
     setSnapProgress(0);
     setError(null);
-    
+
     try {
       const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
       if (!mapboxToken) {
         throw new Error('Mapbox token not configured');
       }
 
-      // Use Mapbox Directions API for proper road snapping
-      const coordinates = waypoints.map(wp => `${wp.position[0]},${wp.position[1]}`).join(';');
-      const profile = routingProfile === 'cycling' ? 'cycling' : 
-                      routingProfile === 'walking' ? 'walking' : 'driving';
-      
-      const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinates}?` +
-        `geometries=geojson&` +
-        `overview=full&` +
-        `steps=false&` +
-        `annotations=distance,duration&` +
-        `access_token=${mapboxToken}`;
-      
-      setSnapProgress(0.3);
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Directions API error: ${response.status}`);
+      const waypointCoordinates = waypoints.map(wp => wp.position);
+      let snappedCoordinates;
+      let routeDistance = 0;
+      let routeDuration = 0;
+
+      // NEW: Use smart cycling routing when enabled and profile is a cycling type
+      const cyclingProfiles = ['road', 'gravel', 'mountain', 'commuting'];
+      if (useSmartRouting && cyclingProfiles.includes(routingProfile)) {
+        const isGravel = routingProfile === 'gravel';
+        const isMountain = routingProfile === 'mountain';
+        console.log(`🧠 Using smart ${routingProfile} routing`);
+        console.log('📋 User preferences:', userPreferences);
+
+        setSnapProgress(0.2);
+
+        const smartRoute = await getSmartCyclingRoute(waypointCoordinates, {
+          profile: isGravel ? 'gravel' : isMountain ? 'mountain' : 'bike',
+          preferences: (isGravel || isMountain) ? null : userPreferences, // Gravel/Mountain have their own logic
+          trainingGoal: routingProfile === 'commuting' ? 'recovery' : 'endurance',
+          mapboxToken: mapboxToken
+        });
+
+        if (smartRoute && smartRoute.coordinates && smartRoute.coordinates.length > 0) {
+          snappedCoordinates = smartRoute.coordinates;
+          routeDistance = smartRoute.distance || 0;
+          routeDuration = smartRoute.duration || 0;
+
+          console.log(`✅ Smart route generated via: ${smartRoute.source}`);
+          toast.success(`Route optimized using ${smartRoute.source === 'graphhopper' ? 'cycling-aware' : 'standard'} routing`);
+
+          setSnapProgress(0.6);
+        } else {
+          console.warn('Smart routing failed, falling back to basic Mapbox');
+          throw new Error('Smart routing unavailable, using fallback');
+        }
+      } else {
+        // Use standard Mapbox Directions API
+        const coordinates = waypoints.map(wp => `${wp.position[0]},${wp.position[1]}`).join(';');
+        const cyclingTypes = ['road', 'gravel', 'mountain', 'commuting'];
+        const profile = cyclingTypes.includes(routingProfile) ? 'cycling' :
+                        routingProfile === 'walking' ? 'walking' : 'driving';
+
+        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinates}?` +
+          `geometries=geojson&` +
+          `overview=full&` +
+          `steps=false&` +
+          `annotations=distance,duration&` +
+          `access_token=${mapboxToken}`;
+
+        setSnapProgress(0.3);
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Directions API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setSnapProgress(0.6);
+
+        if (!data.routes || !data.routes.length) {
+          throw new Error('No routes found');
+        }
+
+        const route = data.routes[0];
+        snappedCoordinates = route.geometry.coordinates;
+        routeDistance = route.distance || 0;
+        routeDuration = route.duration || 0;
       }
-      
-      const data = await response.json();
-      setSnapProgress(0.6);
-      
-      if (!data.routes || !data.routes.length) {
-        throw new Error('No routes found');
-      }
-      
-      const route = data.routes[0];
-      let snappedCoordinates = route.geometry.coordinates;
       
       // Ensure the route ends exactly at our final waypoint
       const finalWaypoint = waypoints[waypoints.length - 1].position;
       const routeEnd = snappedCoordinates[snappedCoordinates.length - 1];
-      
+
       // If the route doesn't end close enough to our final waypoint, add it
       const endDistance = Math.abs(routeEnd[0] - finalWaypoint[0]) + Math.abs(routeEnd[1] - finalWaypoint[1]);
       if (endDistance > 0.0001) { // ~11 meters
         console.log('Adding final waypoint to ensure complete route coverage');
         snappedCoordinates = [...snappedCoordinates, finalWaypoint];
       }
-      
+
       setSnappedRoute({
         coordinates: snappedCoordinates,
-        distance: route.distance || 0,
-        duration: route.duration || 0,
+        distance: routeDistance,
+        duration: routeDuration,
         confidence: 1.0,
         waypointCount: waypoints.length, // Track how many waypoints were snapped
       });
@@ -177,7 +220,7 @@ export const useRouteManipulation = ({
       setSnapping(false);
       setSnapProgress(0);
     }
-  }, [waypoints, routingProfile, setSnapping, setSnapProgress, setError, setSnappedRoute, fetchElevation]);
+  }, [waypoints, routingProfile, setSnapping, setSnapProgress, setError, setSnappedRoute, fetchElevation, useSmartRouting, userPreferences]);
 
   // === Clear Route ===
   const clearRoute = useCallback(() => {

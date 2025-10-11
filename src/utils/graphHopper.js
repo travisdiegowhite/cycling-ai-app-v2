@@ -6,8 +6,9 @@ const GRAPHHOPPER_BASE_URL = 'https://graphhopper.com/api/1';
 // GraphHopper cycling profiles
 export const GRAPHHOPPER_PROFILES = {
   BIKE: 'bike',                    // Standard cycling
-  RACINGBIKE: 'racingbike',       // Road cycling optimized  
+  RACINGBIKE: 'racingbike',       // Road cycling optimized
   MOUNTAINBIKE: 'mtb',            // Mountain biking
+  GRAVEL: 'bike',                 // Gravel cycling (uses bike with custom model)
   FOOT: 'foot'                     // Walking/hiking
 };
 
@@ -51,8 +52,47 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
   // This makes GraphHopper routes safer than Mapbox by default
   let customModelApplied = false;
 
+  // GRAVEL PROFILE: Extremely high preference for unpaved roads and dirt paths
+  if (profile === GRAPHHOPPER_PROFILES.GRAVEL) {
+    customModelApplied = true;
+    params.append('ch.disable', 'true'); // Disable contraction hierarchies for flexibility
+    params.append('custom_model', JSON.stringify({
+      "priority": [
+        // MASSIVELY boost unpaved surfaces
+        { "if": "surface == GRAVEL", "multiply_by": "8.0" },
+        { "if": "surface == DIRT", "multiply_by": "10.0" },
+        { "if": "surface == COMPACTED", "multiply_by": "7.0" },
+        { "if": "surface == FINE_GRAVEL", "multiply_by": "8.0" },
+        { "if": "surface == GROUND", "multiply_by": "9.0" },
+        { "if": "surface == UNPAVED", "multiply_by": "8.0" },
+
+        // Strongly prefer trails and paths
+        { "if": "road_class == PATH", "multiply_by": "6.0" },
+        { "if": "road_class == TRACK", "multiply_by": "7.0" },
+        { "if": "road_class == BRIDLEWAY", "multiply_by": "5.0" },
+
+        // Avoid paved roads (but don't block them completely)
+        { "if": "surface == PAVED", "multiply_by": "0.2" },
+        { "if": "surface == ASPHALT", "multiply_by": "0.2" },
+        { "if": "surface == CONCRETE", "multiply_by": "0.15" },
+
+        // Heavily penalize highways and major roads
+        { "if": "road_class == MOTORWAY", "multiply_by": "0" },
+        { "if": "road_class == TRUNK", "multiply_by": "0.05" },
+        { "if": "road_class == PRIMARY", "multiply_by": "0.1" },
+        { "if": "road_class == SECONDARY", "multiply_by": "0.3" },
+
+        // Allow residential and tertiary as last resort
+        { "if": "road_class == TERTIARY", "multiply_by": "0.5" },
+        { "if": "road_class == RESIDENTIAL", "multiply_by": "0.6" }
+      ],
+      "distance_influence": 150 // Allow up to 150% longer routes to find gravel paths
+    }));
+    console.log('🌾 GraphHopper: Applying GRAVEL profile - prioritizing dirt paths and unpaved roads');
+  }
+
   // Add cycling-specific preferences for GraphHopper
-  if (preferences) {
+  if (preferences && !customModelApplied) {
     console.log('🚴 Applying GraphHopper cycling preferences:', preferences);
 
     // Traffic avoidance using GraphHopper's custom model
@@ -183,8 +223,13 @@ export async function getGraphHopperCyclingDirections(coordinates, options = {})
   }
 }
 
-// Select appropriate cycling profile based on training goal
-export function selectGraphHopperProfile(trainingGoal) {
+// Select appropriate cycling profile based on training goal or explicit profile
+export function selectGraphHopperProfile(trainingGoal, explicitProfile = null) {
+  // If explicit profile is provided, use it
+  if (explicitProfile === 'gravel') {
+    return GRAPHHOPPER_PROFILES.GRAVEL;
+  }
+
   // NOTE: Free GraphHopper API only supports: bike, foot, car
   // racingbike and mtb require paid plans
   // We use 'bike' profile with custom_model to achieve similar results

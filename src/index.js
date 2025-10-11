@@ -7,6 +7,17 @@ import 'leaflet/dist/leaflet.css';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 
+// Suppress ResizeObserver loop errors (harmless React warning)
+const resizeObserverLoopErrRe = /^[^(ResizeObserver loop limit exceeded|ResizeObserver loop completed)]/;
+const originalError = console.error;
+console.error = (...args) => {
+  const errorMessage = args[0]?.toString() || '';
+  if (errorMessage.includes('ResizeObserver loop')) {
+    return; // Suppress this specific error
+  }
+  originalError.call(console, ...args);
+};
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>

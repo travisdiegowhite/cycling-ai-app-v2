@@ -81,6 +81,7 @@ import { supabase } from '../supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnits } from '../utils/units';
 import { useRouteManipulation } from '../hooks/useRouteManipulation';
+import { EnhancedContextCollector } from '../utils/enhancedContext';
 
 /**
  * Interactive SVG Elevation Chart Component with route location highlighting
@@ -410,9 +411,11 @@ const ProfessionalRouteBuilder = forwardRef(({
   const [routeName, setRouteName] = useState('');
   const [routeDescription, setRouteDescription] = useState('');
   const [activeMode, setActiveMode] = useState('draw'); // draw, edit, view
-  const [routingProfile, setRoutingProfile] = useState('cycling'); // cycling, walking, driving
+  const [routingProfile, setRoutingProfile] = useState('road'); // road, gravel, mountain, commuting, walking, driving
   const [autoRoute, setAutoRoute] = useState(true); // Auto-snap to roads
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [useSmartRouting, setUseSmartRouting] = useState(false); // NEW: Toggle for smart cycling routing
+  const [userPreferences, setUserPreferences] = useState(null); // NEW: User preferences for traffic avoidance
   
   // === Route Data State ===
   const [saving, setSaving] = useState(false);
@@ -547,6 +550,25 @@ const ProfessionalRouteBuilder = forwardRef(({
     { value: 'terrain', label: 'Terrain', url: 'mapbox://styles/mapbox/outdoors-v12' },
   ];
   
+  // === Load User Preferences for Traffic Avoidance ===
+  useEffect(() => {
+    const loadPreferences = async () => {
+      if (!user?.id) return;
+
+      try {
+        const prefs = await EnhancedContextCollector.getCompletePreferences(user.id);
+        if (prefs) {
+          setUserPreferences(prefs);
+          console.log('✅ Loaded user preferences for route builder:', prefs);
+        }
+      } catch (error) {
+        console.error('Failed to load user preferences:', error);
+      }
+    };
+
+    loadPreferences();
+  }, [user?.id]);
+
   // === Route Manipulation Functions ===
   const {
     addWaypoint,
@@ -580,6 +602,8 @@ const ProfessionalRouteBuilder = forwardRef(({
     error,
     setError,
     useImperial,
+    userPreferences, // NEW: Pass user preferences
+    useSmartRouting, // NEW: Pass smart routing toggle
   });
   
   // === Keyboard Shortcuts ===
@@ -596,6 +620,32 @@ const ProfessionalRouteBuilder = forwardRef(({
     ['mod+shift+R', (e) => { e.preventDefault(); reverseRoute(); }],
   ]);
   
+  // === Smart Routing Labels (memoized to prevent re-renders) ===
+  const smartRoutingConfig = useMemo(() => {
+    if (routingProfile === 'gravel') {
+      return {
+        label: 'Prioritize dirt roads & trails',
+        description: 'Extremely high preference for unpaved surfaces'
+      };
+    }
+    if (routingProfile === 'mountain') {
+      return {
+        label: 'Mountain bike trails',
+        description: 'Prioritize singletrack and technical terrain'
+      };
+    }
+    if (routingProfile === 'commuting') {
+      return {
+        label: 'Optimize for commuting',
+        description: 'Balance speed with safety for daily commutes'
+      };
+    }
+    return {
+      label: 'Prefer bike lanes & quiet roads',
+      description: 'Avoid high-traffic roads (uses your route preferences)'
+    };
+  }, [routingProfile]);
+
   // === Calculate Route Statistics ===
   const routeStats = useMemo(() => {
     const coords = snappedRoute?.coordinates || waypoints.map(w => w.position);
@@ -603,7 +653,7 @@ const ProfessionalRouteBuilder = forwardRef(({
     // But snappedRoute.distance is already in meters from Mapbox API
     const distance = snappedRoute?.distance || (coords.length > 1 ? polylineDistance(coords) * 1000 : 0);
     const duration = snappedRoute?.duration || ((distance / 1000) / 25 * 3600); // Assume 25km/h average
-    
+
     return {
       distance, // in meters
       duration, // in seconds
@@ -1450,12 +1500,14 @@ const ProfessionalRouteBuilder = forwardRef(({
                           <Text fw={500} size="sm">Route Statistics</Text>
                           <Group gap="xs">
                             <Badge size="sm" variant="light" color={
-                              routingProfile === 'cycling' ? 'blue' :
-                              routingProfile === 'walking' ? 'green' : 'orange'
+                              routingProfile === 'road' ? 'blue' :
+                              routingProfile === 'gravel' ? 'brown' :
+                              routingProfile === 'mountain' ? 'grape' : 'cyan'
                             }>
-                              {routingProfile === 'cycling' && <Bike size={12} />}
-                              {routingProfile === 'walking' && <Footprints size={12} />}
-                              {routingProfile === 'driving' && <Car size={12} />}
+                              {routingProfile === 'road' && <Bike size={12} />}
+                              {routingProfile === 'gravel' && '🌾'}
+                              {routingProfile === 'mountain' && '⛰️'}
+                              {routingProfile === 'commuting' && '🚲'}
                             </Badge>
                             {snappedRoute && (
                               <Badge size="sm" variant="light" color="green">
@@ -1700,9 +1752,10 @@ const ProfessionalRouteBuilder = forwardRef(({
                           value={routingProfile}
                           onChange={setRoutingProfile}
                           data={[
-                            { value: 'cycling', label: '🚴 Cycling' },
-                            { value: 'walking', label: '🚶 Walking' },
-                            { value: 'driving', label: '🚗 Driving' },
+                            { value: 'road', label: '🚴 Road' },
+                            { value: 'gravel', label: '🌾 Gravel' },
+                            { value: 'mountain', label: '⛰️ Mountain (Coming Soon)', disabled: true },
+                            { value: 'commuting', label: '🚲 Commuting (Coming Soon)', disabled: true },
                           ]}
                           size="sm"
                         />
@@ -1712,6 +1765,15 @@ const ProfessionalRouteBuilder = forwardRef(({
                           description="Automatically snap to roads"
                           checked={autoRoute}
                           onChange={(e) => setAutoRoute(e.currentTarget.checked)}
+                          size="sm"
+                        />
+
+                        <Switch
+                          label={smartRoutingConfig.label}
+                          description={smartRoutingConfig.description}
+                          checked={useSmartRouting}
+                          onChange={(e) => setUseSmartRouting(e.currentTarget.checked)}
+                          disabled={!['road', 'gravel', 'mountain', 'commuting'].includes(routingProfile)}
                           size="sm"
                         />
                       </Stack>
@@ -2216,6 +2278,28 @@ const ProfessionalRouteBuilder = forwardRef(({
               </Menu.Dropdown>
             </Menu>
             
+            {/* Routing Profile Selector */}
+            <Select
+              value={routingProfile}
+              onChange={(value) => {
+                console.log('Profile changed to:', value);
+                setRoutingProfile(value);
+              }}
+              data={[
+                { value: 'road', label: '🚴 Road' },
+                { value: 'gravel', label: '🌾 Gravel' },
+                { value: 'mountain', label: '⛰️ Mountain (Coming Soon)', disabled: true },
+                { value: 'commuting', label: '🚲 Commuting (Coming Soon)', disabled: true },
+              ]}
+              size="sm"
+              style={{ width: 180 }}
+              placeholder="Select Profile"
+              allowDeselect={false}
+              comboboxProps={{ zIndex: 10000 }}
+            />
+
+            <Divider orientation="vertical" />
+
             <Menu position="bottom-end">
               <Menu.Target>
                 <ActionIcon variant="default">
@@ -2223,27 +2307,21 @@ const ProfessionalRouteBuilder = forwardRef(({
                 </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
-                <Menu.Label>Routing Profile</Menu.Label>
+                <Menu.Label>Quick Settings</Menu.Label>
                 <Menu.Item
-                  leftSection={<Bike size={14} />}
-                  onClick={() => setRoutingProfile('cycling')}
-                  rightSection={routingProfile === 'cycling' && <Check size={14} />}
+                  leftSection={<Target size={14} />}
+                  onClick={() => setAutoRoute(!autoRoute)}
+                  rightSection={autoRoute && <Check size={14} />}
                 >
-                  Cycling
+                  Auto-route
                 </Menu.Item>
                 <Menu.Item
-                  leftSection={<Footprints size={14} />}
-                  onClick={() => setRoutingProfile('walking')}
-                  rightSection={routingProfile === 'walking' && <Check size={14} />}
+                  leftSection={<Route size={14} />}
+                  onClick={() => setUseSmartRouting(!useSmartRouting)}
+                  rightSection={useSmartRouting && <Check size={14} />}
+                  disabled={!['road', 'gravel', 'mountain', 'commuting'].includes(routingProfile)}
                 >
-                  Walking
-                </Menu.Item>
-                <Menu.Item
-                  leftSection={<Car size={14} />}
-                  onClick={() => setRoutingProfile('driving')}
-                  rightSection={routingProfile === 'driving' && <Check size={14} />}
-                >
-                  Driving
+                  Smart Routing
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
@@ -2494,4 +2572,4 @@ const ProfessionalRouteBuilder = forwardRef(({
 
 ProfessionalRouteBuilder.displayName = 'ProfessionalRouteBuilder';
 
-export default ProfessionalRouteBuilder;
+export default ProfessionalRouteBuilder;// Cache bust 1760191273

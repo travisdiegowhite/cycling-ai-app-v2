@@ -21,10 +21,11 @@ export async function getSmartCyclingRoute(waypoints, options = {}) {
 
   console.log('🧠 Smart cycling router: Finding optimal route...');
   console.log('📍 Waypoints:', waypoints.length);
+  console.log('🎯 Profile:', profile);
   console.log('🎯 Training goal:', trainingGoal);
   console.log('⚙️ Preferences:', preferences);
 
-  // Strategy 1: Try GraphHopper for cycling-optimized routing
+  // Strategy 1: Try GraphHopper for cycling-optimized routing (including gravel)
   const graphHopperResult = await tryGraphHopperRouting(waypoints, {
     profile,
     preferences,
@@ -81,9 +82,9 @@ async function tryGraphHopperRouting(waypoints, options) {
 
   try {
     // Select optimal GraphHopper profile
-    const ghProfile = selectGraphHopperProfile(trainingGoal);
+    const ghProfile = selectGraphHopperProfile(trainingGoal, profile);
 
-    console.log(`🚴 Trying GraphHopper with profile: ${ghProfile}`);
+    console.log(`🚴 Trying GraphHopper with profile: ${ghProfile} (original: ${profile})`);
 
     const result = await getGraphHopperCyclingDirections(waypoints, {
       profile: ghProfile,
@@ -191,6 +192,11 @@ function calculateRouteQuality(route, preferences) {
     }
   }
 
+  // Gravel profile bonus - prefer GraphHopper for gravel routing
+  if (route.profile === 'gravel' && route.source === 'graphhopper') {
+    score += 0.2; // Strong preference for GraphHopper on gravel routes
+  }
+
   return Math.min(score, 1.0);
 }
 
@@ -199,6 +205,11 @@ function calculateRouteQuality(route, preferences) {
  */
 export function getRoutingStrategyDescription(route) {
   if (!route) return 'No route available';
+
+  // Check for gravel profile first
+  if (route.profile === 'gravel') {
+    return 'Prioritized dirt roads, trails, and unpaved surfaces';
+  }
 
   switch (route.source) {
     case 'graphhopper':
