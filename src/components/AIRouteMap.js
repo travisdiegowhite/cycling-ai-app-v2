@@ -43,17 +43,24 @@ const AIRouteMap = () => {
       console.log('Fitting map to route bounds');
       const bounds = calculateBounds(selectedRoute.coordinates);
 
-      // Flag that this is a programmatic move, not user interaction
-      isProgrammaticMove.current = true;
-      mapRef.current.fitBounds(bounds, {
-        padding: { top: 50, bottom: 50, left: 50, right: 350 },
-        duration: 1000
-      });
+      // CRITICAL: Defer fitBounds to AFTER render completes
+      // This prevents React error #185 by ensuring fitBounds (which triggers onMove)
+      // doesn't run during the render phase
+      requestAnimationFrame(() => {
+        if (mapRef.current) {
+          // Flag that this is a programmatic move, not user interaction
+          isProgrammaticMove.current = true;
+          mapRef.current.fitBounds(bounds, {
+            padding: { top: 50, bottom: 50, left: 50, right: 350 },
+            duration: 1000
+          });
 
-      // Reset flag after animation completes
-      setTimeout(() => {
-        isProgrammaticMove.current = false;
-      }, 1100);
+          // Reset flag after animation completes
+          setTimeout(() => {
+            isProgrammaticMove.current = false;
+          }, 1100);
+        }
+      });
     }
   }, [selectedRoute]);
 
