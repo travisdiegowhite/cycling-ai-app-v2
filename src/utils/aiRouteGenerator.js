@@ -249,10 +249,19 @@ export async function generateAIRoutes(params) {
     userPreferences
   });
 
-  console.log(`Generated ${scoredRoutes.length} valid routes from ${routes.length} attempts`);
-  
+  // Filter out geometric fallback routes (they have very few coordinates, typically 8-10)
+  const realRoutes = scoredRoutes.filter(route => {
+    const isGeometric = route.coordinates && route.coordinates.length < 50;
+    if (isGeometric) {
+      console.warn(`🚫 Filtering out geometric fallback route: ${route.name} (only ${route.coordinates.length} points)`);
+    }
+    return !isGeometric;
+  });
+
+  console.log(`Generated ${realRoutes.length} quality routes from ${routes.length} attempts (filtered ${scoredRoutes.length - realRoutes.length} geometric fallbacks)`);
+
   // Return top 3-5 routes
-  return scoredRoutes.slice(0, 4);
+  return realRoutes.slice(0, 4);
 }
 
 // Calculate target distance based on time, training goal, and performance metrics
