@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useTransition } from 'react';
 import { Map, Source, Layer, Marker, NavigationControl } from 'react-map-gl';
 import { useMediaQuery } from '@mantine/hooks';
 import { buildLineString } from '../utils/geo';
@@ -9,6 +9,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 
 const AIRouteMap = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const [isPending, startTransition] = useTransition();
   const [viewState, setViewState] = useState({
     longitude: -0.09,
     latitude: 51.505,
@@ -25,7 +26,11 @@ const AIRouteMap = () => {
 
   const handleRouteGenerated = (route) => {
     console.log('Route generated with coordinates:', route.coordinates?.length || 0, 'points');
-    setSelectedRoute(route);
+    // Use startTransition to mark this as a non-urgent update
+    // This prevents React error #185 when rapidly switching between routes
+    startTransition(() => {
+      setSelectedRoute(route);
+    });
   };
 
   const handleStartLocationSet = (location) => {
