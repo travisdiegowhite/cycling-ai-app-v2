@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect, useTransition } from 'react';
+import React, { useState, useRef } from 'react';
 import { Map, Source, Layer, Marker, NavigationControl } from 'react-map-gl';
 import { useMediaQuery } from '@mantine/hooks';
+import { Button } from '@mantine/core';
+import { Maximize2 } from 'lucide-react';
 import { buildLineString } from '../utils/geo';
 import AIRouteGenerator from './AIRouteGenerator';
 import RouteProfile from './RouteProfile';
@@ -9,7 +11,6 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 
 const AIRouteMap = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const [isPending, startTransition] = useTransition();
   const [viewState, setViewState] = useState({
     longitude: -0.09,
     latitude: 51.505,
@@ -17,52 +18,31 @@ const AIRouteMap = () => {
     pitch: 0,
     bearing: 0,
   });
-  
+
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [startLocation, setStartLocation] = useState(null);
   const mapRef = useRef(null);
-  const isProgrammaticMove = useRef(false);
 
 
   const handleRouteGenerated = (route) => {
     console.log('Route generated with coordinates:', route.coordinates?.length || 0, 'points');
-    // Use startTransition to mark this as a non-urgent update
-    // This prevents React error #185 when rapidly switching between routes
-    startTransition(() => {
-      setSelectedRoute(route);
-    });
+    setSelectedRoute(route);
   };
 
   const handleStartLocationSet = (location) => {
     setStartLocation(location);
   };
 
-  // Fit map to route bounds when selectedRoute changes
-  useEffect(() => {
+  // Manual fit to bounds - called by button click
+  const fitRouteInView = () => {
     if (selectedRoute?.coordinates && selectedRoute.coordinates.length > 0 && mapRef.current) {
-      console.log('Fitting map to route bounds');
       const bounds = calculateBounds(selectedRoute.coordinates);
-
-      // CRITICAL: Defer fitBounds to AFTER render completes
-      // This prevents React error #185 by ensuring fitBounds (which triggers onMove)
-      // doesn't run during the render phase
-      requestAnimationFrame(() => {
-        if (mapRef.current) {
-          // Flag that this is a programmatic move, not user interaction
-          isProgrammaticMove.current = true;
-          mapRef.current.fitBounds(bounds, {
-            padding: { top: 50, bottom: 50, left: 50, right: 350 },
-            duration: 1000
-          });
-
-          // Reset flag after animation completes
-          setTimeout(() => {
-            isProgrammaticMove.current = false;
-          }, 1100);
-        }
+      mapRef.current.fitBounds(bounds, {
+        padding: { top: 50, bottom: 50, left: 50, right: 350 },
+        duration: 1000
       });
     }
-  }, [selectedRoute]);
+  };
 
   // Calculate bounds for a set of coordinates
   const calculateBounds = (coordinates) => {
@@ -119,20 +99,34 @@ const AIRouteMap = () => {
         minHeight: isMobile ? '60vh' : 'auto'
       }}>
         {/* Map */}
-        <div style={{ 
-          flex: 1, 
-          minHeight: isMobile ? '50vh' : '60vh', 
-          position: 'relative' 
+        <div style={{
+          flex: 1,
+          minHeight: isMobile ? '50vh' : '60vh',
+          position: 'relative'
         }}>
+          {/* Fit to Route button */}
+          {selectedRoute && selectedRoute.coordinates && selectedRoute.coordinates.length > 0 && (
+            <Button
+              onClick={fitRouteInView}
+              leftSection={<Maximize2 size={16} />}
+              variant="filled"
+              size="xs"
+              style={{
+                position: 'absolute',
+                top: 10,
+                left: 10,
+                zIndex: 1,
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              }}
+            >
+              Fit to Route
+            </Button>
+          )}
+
           <Map
             ref={mapRef}
             {...viewState}
-            onMove={evt => {
-              // Only update viewState for user-initiated moves, not programmatic fitBounds
-              if (!isProgrammaticMove.current) {
-                setViewState(evt.viewState);
-              }
-            }}
+            onMove={evt => setViewState(evt.viewState)}
             mapboxAccessToken={process.env.REACT_APP_MAPBOX_TOKEN}
             style={{ width: '100%', height: '100%' }}
             mapStyle="mapbox://styles/mapbox/outdoors-v12"
