@@ -19,9 +19,12 @@ import TermsOfService from './components/TermsOfService';
 import AppLayout from './components/AppLayout';
 import RouteBuilder from './components/RouteBuilder';
 import RouteStudio from './components/RouteStudio';
+import RouteDiscovery from './components/RouteDiscovery';
 import TrainingDashboard from './components/TrainingDashboard';
 import TrainingPlanBuilder from './components/TrainingPlanBuilder';
 import TrainingPlanView from './components/TrainingPlanView';
+import HelpCenter from './components/HelpCenter';
+import Onboarding from './components/Onboarding';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UnitPreferencesProvider } from './utils/units';
 import { theme } from './theme';
@@ -32,6 +35,7 @@ const AppContent = () => {
   const { user } = useAuth();
   const location = useLocation();
   const [activePage, setActivePage] = useState('ai-routes');
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Update active page based on route
   useEffect(() => {
@@ -40,11 +44,25 @@ const AppContent = () => {
     else if (path === '/map') setActivePage('map');
     else if (path === '/route-builder') setActivePage('route-builder');
     else if (path === '/route-studio') setActivePage('route-studio');
+    else if (path === '/discover') setActivePage('discover');
     else if (path === '/smart-analysis') setActivePage('smart-analysis');
     else if (path === '/upload') setActivePage('upload');
     else if (path === '/strava') setActivePage('strava');
+    else if (path === '/help') setActivePage('help');
     else if (path.startsWith('/training')) setActivePage('training');
   }, [location]);
+
+  // Check if user should see onboarding
+  useEffect(() => {
+    if (user) {
+      const onboardingCompleted = localStorage.getItem('tribos_onboarding_completed');
+      if (!onboardingCompleted) {
+        // Show onboarding after a short delay
+        const timer = setTimeout(() => setShowOnboarding(true), 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [user]);
 
   // Handle OAuth callback routes (no layout needed)
   if (location.pathname === '/strava/callback') {
@@ -67,21 +85,26 @@ const AppContent = () => {
 
   const renderContent = () => {
     if (!user) return <Auth />;
-    
+
     return (
-      <Routes>
-        <Route path="/" element={<AIRouteMap />} />
-        <Route path="/map" element={<Map />} />
-        <Route path="/route-builder" element={<RouteBuilder />} />
-        <Route path="/route-studio" element={<RouteStudio />} />
-        <Route path="/smart-analysis" element={<SmartRideAnalysis />} />
-        <Route path="/upload" element={<FileUpload />} />
-        <Route path="/strava" element={<StravaIntegration />} />
-        <Route path="/training" element={<TrainingDashboard />} />
-        <Route path="/training/plans/new" element={<TrainingPlanBuilder />} />
-        <Route path="/training/plans/:planId" element={<TrainingPlanView />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <>
+        <Routes>
+          <Route path="/" element={<AIRouteMap />} />
+          <Route path="/map" element={<Map />} />
+          <Route path="/route-builder" element={<RouteBuilder />} />
+          <Route path="/route-studio" element={<RouteStudio />} />
+          <Route path="/discover" element={<RouteDiscovery />} />
+          <Route path="/smart-analysis" element={<SmartRideAnalysis />} />
+          <Route path="/upload" element={<FileUpload />} />
+          <Route path="/strava" element={<StravaIntegration />} />
+          <Route path="/help" element={<HelpCenter />} />
+          <Route path="/training" element={<TrainingDashboard />} />
+          <Route path="/training/plans/new" element={<TrainingPlanBuilder />} />
+          <Route path="/training/plans/:planId" element={<TrainingPlanView />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <Onboarding opened={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      </>
     );
   };
 

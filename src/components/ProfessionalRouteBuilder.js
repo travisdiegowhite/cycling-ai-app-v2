@@ -82,6 +82,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useUnits } from '../utils/units';
 import { useRouteManipulation } from '../hooks/useRouteManipulation';
 import { EnhancedContextCollector } from '../utils/enhancedContext';
+import ShareRouteDialog from './ShareRouteDialog';
 
 /**
  * Interactive SVG Elevation Chart Component with route location highlighting
@@ -541,14 +542,18 @@ const ProfessionalRouteBuilder = forwardRef(({
   const [showElevationChart, setShowElevationChart] = useState(false);
   const [showSavedRoutes, setShowSavedRoutes] = useState(true);
   const [colorRouteByGrade, setColorRouteByGrade] = useState(false);
-  
+
   // === History for Undo/Redo ===
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  
+
   // === Saved Routes ===
   const [savedRoutes, setSavedRoutes] = useState([]);
   const [loadingSavedRoutes, setLoadingSavedRoutes] = useState(false);
+
+  // === Share Dialog ===
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [lastSavedRoute, setLastSavedRoute] = useState(null);
   
   // === Map Styles Configuration ===
   const mapStyles = [
@@ -880,18 +885,23 @@ const ProfessionalRouteBuilder = forwardRef(({
       };
       
       const { data, error } = await supabase.from('user_routes').insert([routeData]).select();
-      
+
       if (error) throw error;
-      
+
+      // Store the saved route for sharing
+      if (data && data[0]) {
+        setLastSavedRoute(data[0]);
+      }
+
       toast.success(`Route "${routeName}" saved successfully!`);
-      
+
       // Refresh saved routes
       fetchSavedRoutes();
-      
+
       // Clear form
       setRouteName('');
       setRouteDescription('');
-      
+
       // Don't clear the route - keep it visible after saving
       // Don't call parent callback to prevent redirect
       
@@ -903,14 +913,10 @@ const ProfessionalRouteBuilder = forwardRef(({
       setSaving(false);
     }
   }, [routeName, routeDescription, waypoints, snappedRoute, routeStats, elevationProfile, elevationStats, routingProfile, autoRoute, user.id, fetchSavedRoutes]);
-  
-  // === Share Route ===
-  const shareRoute = useCallback(() => {
-    const shareUrl = `${window.location.origin}/route/${Date.now()}`;
-    navigator.clipboard.writeText(shareUrl);
-    toast.success('Share link copied to clipboard!');
-  }, []);
-  
+
+  // === Share Route (removed - now using ShareRouteDialog) ===
+  // Old implementation removed to prevent conflicts
+
   // === Expose methods to parent ===
   useImperativeHandle(ref, () => ({
     addPoint: addWaypoint,
@@ -1848,20 +1854,8 @@ const ProfessionalRouteBuilder = forwardRef(({
                       </Menu.Item>
                     </Menu.Dropdown>
                   </Menu>
-                  
-                  <Tooltip label="Share route">
-                    <Button
-                      variant="default"
-                      leftSection={<Share2 size={16} />}
-                      onClick={shareRoute}
-                      disabled={waypoints.length < 2}
-                      size="sm"
-                    >
-                      Share
-                    </Button>
-                  </Tooltip>
                 </Group>
-                
+
                 <Button
                   fullWidth
                   leftSection={<Save size={16} />}
@@ -2487,6 +2481,18 @@ const ProfessionalRouteBuilder = forwardRef(({
                     >
                       Save Route
                     </Button>
+
+                    {lastSavedRoute && (
+                      <Button
+                        fullWidth
+                        size="md"
+                        variant="light"
+                        leftSection={<Share2 size={18} />}
+                        onClick={() => setShareDialogOpen(true)}
+                      >
+                        Share Route
+                      </Button>
+                    )}
                   </>
                 )}
 
@@ -2763,6 +2769,15 @@ const ProfessionalRouteBuilder = forwardRef(({
       </div>
 
       </div>
+
+      {/* Share Route Dialog */}
+      {lastSavedRoute && (
+        <ShareRouteDialog
+          opened={shareDialogOpen}
+          onClose={() => setShareDialogOpen(false)}
+          route={lastSavedRoute}
+        />
+      )}
     </>
   );
 });

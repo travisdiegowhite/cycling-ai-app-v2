@@ -30,45 +30,49 @@ import {
   Smartphone,
   ChevronRight,
   Star,
+  Plus,
+  Sparkles,
+  Users,
+  HelpCircle,
 } from 'lucide-react';
 
 const LandingPage = ({ onGetStarted }) => {
   const features = [
     {
       icon: Brain,
-      title: 'AI-Powered Route Generation',
-      description: 'Claude AI analyzes your riding patterns to create personalized routes tailored to your training goals.',
-      color: 'blue',
+      title: 'AI Route Generator',
+      description: 'Claude AI creates personalized routes based on your time, goals, and preferences. From recovery rides to hill training.',
+      color: 'teal',
     },
     {
-      icon: TrendingUp,
-      title: 'Smart Performance Analysis',
-      description: 'Deep insights into your cycling data with trend analysis and personalized recommendations.',
-      color: 'green',
-    },
-    {
-      icon: Activity,
-      title: 'Strava Integration',
-      description: 'Seamlessly import your cycling history to enhance AI learning and route personalization.',
-      color: 'orange',
-    },
-    {
-      icon: Target,
-      title: 'Training-Focused Routes',
-      description: 'Routes designed for specific goals: recovery rides, interval training, climbing, or endurance.',
-      color: 'purple',
-    },
-    {
-      icon: MapPin,
-      title: 'Advanced Route Builder',
-      description: 'Professional-grade route creation with AI enhancements and real-time elevation profiles.',
+      icon: Plus,
+      title: 'Route Builder & Studio',
+      description: 'Build custom routes manually or edit with professional tools. Includes gravel profiles and smart cycling-focused routing.',
       color: 'cyan',
     },
     {
-      icon: Globe,
-      title: 'Weather-Aware Planning',
-      description: 'Routes adapted to current conditions with safety considerations for optimal training.',
-      color: 'teal',
+      icon: Sparkles,
+      title: 'Smart Analysis & Training',
+      description: 'Upload ride data for AI-powered insights. Create personalized training plans and track your progress over time.',
+      color: 'blue',
+    },
+    {
+      icon: Users,
+      title: 'Community Routes',
+      description: 'Discover and share routes with other cyclists. Privacy-first design with optional route sharing and comments.',
+      color: 'purple',
+    },
+    {
+      icon: Activity,
+      title: 'Fitness App Integration',
+      description: 'Connect Strava, Wahoo, or Garmin to import activities and sync routes to your bike computer automatically.',
+      color: 'orange',
+    },
+    {
+      icon: HelpCircle,
+      title: 'Guided Experience',
+      description: 'Interactive onboarding, contextual help, and comprehensive guides to help you master every feature quickly.',
+      color: 'green',
     },
   ];
 
@@ -88,23 +92,31 @@ const LandingPage = ({ onGetStarted }) => {
         <Center>
           <Stack align="center" spacing="xl" maw={700}>
             <Group spacing="md" align="center">
-              <ThemeIcon size={60} variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
-                <Route size={32} />
-              </ThemeIcon>
-              <Title order={1} size={48} fw={700} c="blue">
-                Cycling AI
+              <Route size={48} color="#10b981" style={{ filter: 'drop-shadow(0 0 8px rgba(16, 185, 129, 0.5))' }} />
+              <Title
+                order={1}
+                size={48}
+                fw={800}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 50%, #fbbf24 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  letterSpacing: '-0.05em',
+                }}
+              >
+                tribos.studio
               </Title>
             </Group>
 
             <Title order={2} size={36} fw={600} ta="center" lh={1.3}>
-              Intelligent Route Planning for
-              <Text component="span" c="blue" inherit> Serious Cyclists</Text>
+              AI-powered cycling route intelligence
             </Title>
 
             <Text size="xl" c="dimmed" ta="center" lh={1.6} maw={600}>
-              Stop riding the same routes. Let AI create personalized cycling routes
-              that learn from your riding patterns, adapt to weather conditions,
-              and help you achieve your training goals.
+              Discover new routes with AI, build custom routes with professional tools,
+              analyze your performance, and connect with a community of cyclists.
+              Everything you need for smarter cycling in one place.
             </Text>
 
             <Group spacing="md" mt="xl">
@@ -112,19 +124,27 @@ const LandingPage = ({ onGetStarted }) => {
                 size="lg"
                 onClick={onGetStarted}
                 rightSection={<ChevronRight size={20} />}
-                variant="gradient"
-                gradient={{ from: 'blue', to: 'cyan' }}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
+                }}
               >
-                Start Planning Routes
+                Get Started Free
               </Button>
               <Button
                 size="lg"
                 variant="outline"
+                style={{
+                  borderColor: '#10b981',
+                  color: '#10b981',
+                }}
                 onClick={() => document.getElementById('features').scrollIntoView({ behavior: 'smooth' })}
               >
-                See How It Works
+                Explore Features
               </Button>
             </Group>
+            <Text size="sm" c="dimmed" mt="md">
+              Free to use • Interactive onboarding • No credit card required
+            </Text>
           </Stack>
         </Center>
       </Container>
@@ -137,11 +157,12 @@ const LandingPage = ({ onGetStarted }) => {
           <Center>
             <Stack align="center" spacing="md">
               <Title order={2} size={32} ta="center">
-                Beyond Basic Route Planning
+                Everything You Need for Smarter Cycling
               </Title>
               <Text size="lg" c="dimmed" ta="center" maw={600}>
-                Traditional route planners just connect points. We use AI to understand
-                how you ride and create routes that make you a better cyclist.
+                From AI-powered route generation to professional editing tools,
+                performance analysis, and community features—all designed to help you
+                discover better routes and ride with purpose.
               </Text>
             </Stack>
           </Center>
@@ -320,8 +341,9 @@ const LandingPage = ({ onGetStarted }) => {
               size="xl"
               onClick={onGetStarted}
               rightSection={<ChevronRight size={24} />}
-              variant="gradient"
-              gradient={{ from: 'blue', to: 'cyan' }}
+              style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
+              }}
             >
               Create Your Account
             </Button>
@@ -338,11 +360,16 @@ const LandingPage = ({ onGetStarted }) => {
           <Stack spacing="md">
             <Center>
               <Group spacing="md">
-                <Route size={24} color="#2196f3" />
+                <Route size={24} color="#10b981" style={{ filter: 'drop-shadow(0 0 4px rgba(16, 185, 129, 0.3))' }} />
                 <Text size="sm" c="dimmed">
-                  © 2024 Cycling AI. Intelligent route planning for serious cyclists.
+                  © 2024 tribos.studio
                 </Text>
               </Group>
+            </Center>
+            <Center>
+              <Text size="xs" c="dimmed">
+                AI-powered cycling route intelligence
+              </Text>
             </Center>
             <Center>
               <Group spacing="lg">

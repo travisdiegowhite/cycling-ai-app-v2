@@ -13,7 +13,7 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus, Zap, FileText, Scale, TrendingUp } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus, Zap, FileText, Scale, TrendingUp, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -55,10 +55,10 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" />
             <Group gap="xs" visibleFrom="xs">
               <Route size={28} color="#10b981" style={{ filter: 'drop-shadow(0 0 6px rgba(16, 185, 129, 0.4))' }} />
-              <Text 
-                size={{ base: 'xl', sm: '2xl' }} 
-                fw={800} 
-                style={{ 
+              <Text
+                size={{ base: 'xl', sm: '2xl' }}
+                fw={800}
+                style={{
                   background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 50%, #fbbf24 100%)',
                   backgroundClip: 'text',
                   WebkitBackgroundClip: 'text',
@@ -67,7 +67,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
                   textShadow: '0 0 30px rgba(16, 185, 129, 0.3)'
                 }}
               >
-                Cycling AI
+                tribos.studio
               </Text>
             </Group>
           </Group>
@@ -132,33 +132,13 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             justify="flex-start"
             fullWidth
             style={{
-              background: activePage === 'route-studio' 
+              background: activePage === 'route-studio'
                 ? 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)'
                 : undefined,
               color: activePage === 'route-studio' ? 'white' : undefined
             }}
           >
             Route Studio
-          </Button>
-
-          <Button
-            variant={activePage === 'upload' ? 'filled' : 'subtle'}
-            leftSection={<Upload size={18} />}
-            onClick={() => handleNavigation('upload', '/upload')}
-            justify="flex-start"
-            fullWidth
-          >
-            Upload Routes
-          </Button>
-          
-          <Button
-            variant={activePage === 'map' ? 'filled' : 'subtle'}
-            leftSection={<Map size={18} />}
-            onClick={() => handleNavigation('map', '/map')}
-            justify="flex-start"
-            fullWidth
-          >
-            View Routes
           </Button>
 
           <Button
@@ -170,16 +150,6 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           >
             Smart Analysis
           </Button>
-          
-          <Button
-            variant={activePage === 'strava' ? 'filled' : 'subtle'}
-            leftSection={<Activity size={18} />}
-            onClick={() => handleNavigation('strava', '/strava')}
-            justify="flex-start"
-            fullWidth
-          >
-            Strava Integration
-          </Button>
 
           <Button
             variant={activePage === 'training' ? 'filled' : 'subtle'}
@@ -189,6 +159,46 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             fullWidth
           >
             Training Dashboard
+          </Button>
+
+          <Button
+            variant={activePage === 'map' ? 'filled' : 'subtle'}
+            leftSection={<Map size={18} />}
+            onClick={() => handleNavigation('map', '/map')}
+            justify="flex-start"
+            fullWidth
+          >
+            View Routes
+          </Button>
+
+          <Button
+            variant={activePage === 'discover' ? 'filled' : 'subtle'}
+            leftSection={<Globe size={18} />}
+            onClick={() => handleNavigation('discover', '/discover')}
+            justify="flex-start"
+            fullWidth
+          >
+            Discover Routes
+          </Button>
+
+          <Button
+            variant={activePage === 'upload' ? 'filled' : 'subtle'}
+            leftSection={<Upload size={18} />}
+            onClick={() => handleNavigation('upload', '/upload')}
+            justify="flex-start"
+            fullWidth
+          >
+            Upload Routes
+          </Button>
+
+          <Button
+            variant={activePage === 'strava' ? 'filled' : 'subtle'}
+            leftSection={<Activity size={18} />}
+            onClick={() => handleNavigation('strava', '/strava')}
+            justify="flex-start"
+            fullWidth
+          >
+            Import from Fitness Apps
           </Button>
         </Flex>
 
@@ -217,8 +227,11 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
               Terms of Service
             </Button>
           </Flex>
+          <Text size="xs" c="dimmed" ta="center" mb="xs">
+            tribos.studio
+          </Text>
           <Text size="xs" c="dimmed" ta="center">
-            Built with React and powered by AI for smarter cycling experiences.
+            AI-powered cycling route intelligence
           </Text>
         </Container>
       </AppShell.Navbar>
