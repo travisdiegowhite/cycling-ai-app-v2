@@ -329,7 +329,7 @@ const ViewRoutes = () => {
             <StatItem
               icon={<Activity size={14} />}
               label="Distance"
-              value={formatDistance((route.distance_km || 0) * 1000)}
+              value={formatDistance(route.distance_km || 0)}
             />
             <StatItem
               icon={<Mountain size={14} />}
@@ -430,7 +430,7 @@ const ViewRoutes = () => {
             <StatItem
               icon={<Activity size={16} />}
               label="Distance"
-              value={formatDistance((route.distance_km || 0) * 1000)}
+              value={formatDistance(route.distance_km || 0)}
             />
             <StatItem
               icon={<Mountain size={16} />}
@@ -544,7 +544,7 @@ const ViewRoutes = () => {
         <Paper withBorder p="md" radius="md">
           <Text size="xs" c="dimmed" mb={4}>Total Distance</Text>
           <Text size="xl" fw={700}>
-            {formatDistance(routes.reduce((sum, r) => sum + (r.distance_km || 0) * 1000, 0))}
+            {formatDistance(routes.reduce((sum, r) => sum + (r.distance_km || 0), 0))}
           </Text>
         </Paper>
         <Paper withBorder p="md" radius="md">
