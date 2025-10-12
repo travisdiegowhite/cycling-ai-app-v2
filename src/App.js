@@ -20,6 +20,7 @@ import AppLayout from './components/AppLayout';
 import RouteBuilder from './components/RouteBuilder';
 import RouteStudio from './components/RouteStudio';
 import RouteDiscovery from './components/RouteDiscovery';
+import ViewRoutes from './components/ViewRoutes';
 import TrainingDashboard from './components/TrainingDashboard';
 import TrainingPlanBuilder from './components/TrainingPlanBuilder';
 import TrainingPlanView from './components/TrainingPlanView';
@@ -44,6 +45,7 @@ const AppContent = () => {
     else if (path === '/map') setActivePage('map');
     else if (path === '/route-builder') setActivePage('route-builder');
     else if (path === '/route-studio') setActivePage('route-studio');
+    else if (path === '/routes') setActivePage('routes');
     else if (path === '/discover') setActivePage('discover');
     else if (path === '/smart-analysis') setActivePage('smart-analysis');
     else if (path === '/upload') setActivePage('upload');
@@ -93,6 +95,7 @@ const AppContent = () => {
           <Route path="/map" element={<Map />} />
           <Route path="/route-builder" element={<RouteBuilder />} />
           <Route path="/route-studio" element={<RouteStudio />} />
+          <Route path="/routes" element={<ViewRoutes />} />
           <Route path="/discover" element={<RouteDiscovery />} />
           <Route path="/smart-analysis" element={<SmartRideAnalysis />} />
           <Route path="/upload" element={<FileUpload />} />
