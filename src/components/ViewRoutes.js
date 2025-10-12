@@ -151,12 +151,14 @@ const ViewRoutes = () => {
     if (user?.id) {
       loadRoutes();
     }
-  }, [user?.id, loadRoutes]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Apply filters when data or filters change
   useEffect(() => {
     applyFilters();
-  }, [applyFilters]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routes, viewMode, searchQuery, sortBy, filterType]);
 
   const handleDeleteRoute = async () => {
     if (!routeToDelete) return;
