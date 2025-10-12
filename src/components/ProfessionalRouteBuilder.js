@@ -2637,10 +2637,19 @@ const ProfessionalRouteBuilder = forwardRef(({
             left: '50%',
             transform: 'translate(-50%, -50%)',
             zIndex: 1,
+            pointerEvents: 'none', // Allow clicking through the card
           }}>
-            <Card withBorder p="xl">
+            <Card
+              withBorder
+              p="xl"
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.85)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+              }}
+            >
               <Stack align="center">
-                <ThemeIcon size={60} variant="light" radius="xl">
+                <ThemeIcon size={60} variant="light" radius="xl" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
                   <MapPin size={30} />
                 </ThemeIcon>
                 <Text size="lg" fw={500}>Start Building Your Route</Text>
