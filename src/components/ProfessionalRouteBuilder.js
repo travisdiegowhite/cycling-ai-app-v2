@@ -32,7 +32,7 @@ import {
   RingProgress,
   Tabs,
 } from '@mantine/core';
-import { useHotkeys } from '@mantine/hooks';
+import { useHotkeys, useMediaQuery } from '@mantine/hooks';
 import {
   Navigation2,
   Undo2,
@@ -438,6 +438,14 @@ const ProfessionalRouteBuilder = forwardRef(({
   const [cyclingData, setCyclingData] = useState(null);
   const [fetchTimeout, setFetchTimeout] = useState(null);
   const [loadingCyclingData, setLoadingCyclingData] = useState(false);
+
+  // === Responsive Breakpoints ===
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  const isTablet = useMediaQuery('(min-width: 768px) and (max-width: 1023px)');
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+
+  // Mobile-specific state
+  const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
 
   // Fetch cycling infrastructure data from OpenStreetMap (optimized)
   const fetchCyclingData = useCallback(async (bounds, zoom) => {
@@ -1291,14 +1299,15 @@ const ProfessionalRouteBuilder = forwardRef(({
           >
             <div
               style={{
-                width: 28,
-                height: 28,
+                // Touch-friendly size on mobile (44x44px), smaller on desktop
+                width: isMobile ? 44 : 28,
+                height: isMobile ? 44 : 28,
                 borderRadius: '50%',
-                background: waypoint.type === 'start' ? '#4a7c7e' : 
+                background: waypoint.type === 'start' ? '#4a7c7e' :
                             waypoint.type === 'end' ? '#ff6b35' : '#6b5b95',
                 border: selectedWaypoint === waypoint.id ? '3px solid #ff6b35' : '3px solid rgba(255, 255, 255, 0.8)',
                 cursor: activeMode === 'edit' ? 'move' : 'pointer',
-                boxShadow: hoveredWaypoint === waypoint.id ? 
+                boxShadow: hoveredWaypoint === waypoint.id ?
                   '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
                 display: 'flex',
                 alignItems: 'center',
@@ -1309,11 +1318,13 @@ const ProfessionalRouteBuilder = forwardRef(({
               onClick={() => setSelectedWaypoint(waypoint.id)}
               onMouseEnter={() => setHoveredWaypoint(waypoint.id)}
               onMouseLeave={() => setHoveredWaypoint(null)}
+              onTouchStart={() => setHoveredWaypoint(waypoint.id)}
+              onTouchEnd={() => setHoveredWaypoint(null)}
             >
-              {waypoint.type === 'start' && <Flag size={14} color="white" />}
-              {waypoint.type === 'end' && <Target size={14} color="white" />}
+              {waypoint.type === 'start' && <Flag size={isMobile ? 20 : 14} color="white" />}
+              {waypoint.type === 'end' && <Target size={isMobile ? 20 : 14} color="white" />}
               {waypoint.type === 'waypoint' && (
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white' }} />
+                <div style={{ width: isMobile ? 12 : 8, height: isMobile ? 12 : 8, borderRadius: '50%', background: 'white' }} />
               )}
             </div>
           </Marker>
@@ -1400,21 +1411,22 @@ const ProfessionalRouteBuilder = forwardRef(({
         </HoverCard.Dropdown>
       </HoverCard>
       
-      {/* Left Sidebar */}
-      <Transition mounted={!sidebarCollapsed} transition="slide-right" duration={300}>
-        {(styles) => (
-          <Paper
-            shadow="sm"
-            style={{
-              ...styles,
-              width: 400,
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              borderRadius: 0,
-              zIndex: 10,
-            }}
-          >
+      {/* Left Sidebar - Desktop/Tablet Only */}
+      {!isMobile && (
+        <Transition mounted={!sidebarCollapsed} transition="slide-right" duration={300}>
+          {(styles) => (
+            <Paper
+              shadow="sm"
+              style={{
+                ...styles,
+                width: isTablet ? 320 : 400,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                borderRadius: 0,
+                zIndex: 10,
+              }}
+            >
             {/* Header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #e9ecef' }}>
               <Group justify="space-between" mb="md">
@@ -1866,9 +1878,10 @@ const ProfessionalRouteBuilder = forwardRef(({
           </Paper>
         )}
       </Transition>
+      )}
 
-      {/* Collapsed Sidebar Toggle */}
-      {sidebarCollapsed && (
+      {/* Collapsed Sidebar Toggle - Desktop/Tablet Only */}
+      {!isMobile && sidebarCollapsed && (
         <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10 }}>
           <Button
             leftSection={<ChevronUp size={16} style={{ transform: 'rotate(-90deg)' }} />}
@@ -2101,12 +2114,13 @@ const ProfessionalRouteBuilder = forwardRef(({
         <div
           style={{
             position: 'absolute',
-            top: 20,
+            top: isMobile ? 10 : 20,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 1000,
             display: 'flex',
             justifyContent: 'center',
+            maxWidth: isMobile ? '95vw' : 'auto',
           }}
         >
           <Paper
@@ -2114,10 +2128,11 @@ const ProfessionalRouteBuilder = forwardRef(({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
-              padding: '8px',
+              gap: isMobile ? 4 : 8,
+              padding: isMobile ? '6px' : '8px',
               backgroundColor: 'white',
               borderRadius: '8px',
+              flexWrap: isMobile ? 'wrap' : 'nowrap',
             }}
           >
             <Tooltip label="Undo - Undo last action (Ctrl+Z)" position="bottom" zIndex={9999}>
@@ -2229,74 +2244,80 @@ const ProfessionalRouteBuilder = forwardRef(({
               </ActionIcon>
             </Tooltip>
             
-            <Divider orientation="vertical" />
-            
-            {/* Display Options */}
-            <Tooltip label="Grid Overlay" position="bottom" zIndex={9999}>
-              <ActionIcon 
-                onClick={() => setShowGrid(!showGrid)}
-                variant={showGrid ? "filled" : "light"}
-                color={showGrid ? "blue" : "gray"}
-                size="md"
-              >
-                <Grid3x3 size={18} />
-              </ActionIcon>
-            </Tooltip>
-            
-            <Tooltip label="Cycling Infrastructure - Highlight dedicated bike lanes, paths, and cycling routes" position="bottom" zIndex={9999}>
-              <ActionIcon 
-                onClick={() => setShowCyclingOverlay(!showCyclingOverlay)}
-                variant={showCyclingOverlay ? "filled" : "light"}
-                color={showCyclingOverlay ? "blue" : "gray"}
-                loading={loadingCyclingData}
-                disabled={loadingCyclingData}
-              >
-                <Bike size={18} />
-              </ActionIcon>
-            </Tooltip>
-            
-            
-            <Divider orientation="vertical" />
-            
-            <Menu position="bottom-end">
-              <Menu.Target>
-                <ActionIcon variant="default">
-                  <Layers size={18} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Label>Map Style</Menu.Label>
-                {mapStyles.map(style => (
-                  <Menu.Item
-                    key={style.value}
-                    onClick={() => setMapStyle(style.value)}
-                    leftSection={mapStyle === style.value && <Check size={14} />}
+            {/* Display Options - Hide on mobile to simplify */}
+            {!isMobile && (
+              <>
+                <Divider orientation="vertical" />
+
+                <Tooltip label="Grid Overlay" position="bottom" zIndex={9999}>
+                  <ActionIcon
+                    onClick={() => setShowGrid(!showGrid)}
+                    variant={showGrid ? "filled" : "light"}
+                    color={showGrid ? "blue" : "gray"}
+                    size="md"
                   >
-                    {style.label}
-                  </Menu.Item>
-                ))}
-              </Menu.Dropdown>
-            </Menu>
+                    <Grid3x3 size={18} />
+                  </ActionIcon>
+                </Tooltip>
+
+                <Tooltip label="Cycling Infrastructure - Highlight dedicated bike lanes, paths, and cycling routes" position="bottom" zIndex={9999}>
+                  <ActionIcon
+                    onClick={() => setShowCyclingOverlay(!showCyclingOverlay)}
+                    variant={showCyclingOverlay ? "filled" : "light"}
+                    color={showCyclingOverlay ? "blue" : "gray"}
+                    loading={loadingCyclingData}
+                    disabled={loadingCyclingData}
+                  >
+                    <Bike size={18} />
+                  </ActionIcon>
+                </Tooltip>
+
+
+                <Divider orientation="vertical" />
+
+                <Menu position="bottom-end">
+                  <Menu.Target>
+                    <ActionIcon variant="default">
+                      <Layers size={18} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Label>Map Style</Menu.Label>
+                    {mapStyles.map(style => (
+                      <Menu.Item
+                        key={style.value}
+                        onClick={() => setMapStyle(style.value)}
+                        leftSection={mapStyle === style.value && <Check size={14} />}
+                      >
+                        {style.label}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Dropdown>
+                </Menu>
+              </>
+            )}
             
-            {/* Routing Profile Selector */}
-            <Select
-              value={routingProfile}
-              onChange={(value) => {
-                console.log('Profile changed to:', value);
-                setRoutingProfile(value);
-              }}
-              data={[
-                { value: 'road', label: '🚴 Road' },
-                { value: 'gravel', label: '🌾 Gravel' },
-                { value: 'mountain', label: '⛰️ Mountain (Coming Soon)', disabled: true },
-                { value: 'commuting', label: '🚲 Commuting (Coming Soon)', disabled: true },
-              ]}
-              size="sm"
-              style={{ width: 180 }}
-              placeholder="Select Profile"
-              allowDeselect={false}
-              comboboxProps={{ zIndex: 10000 }}
-            />
+            {/* Routing Profile Selector - Desktop/Tablet Only (on mobile it's in bottom sheet) */}
+            {!isMobile && (
+              <Select
+                value={routingProfile}
+                onChange={(value) => {
+                  console.log('Profile changed to:', value);
+                  setRoutingProfile(value);
+                }}
+                data={[
+                  { value: 'road', label: '🚴 Road' },
+                  { value: 'gravel', label: '🌾 Gravel' },
+                  { value: 'mountain', label: '⛰️ Mountain (Coming Soon)', disabled: true },
+                  { value: 'commuting', label: '🚲 Commuting (Coming Soon)', disabled: true },
+                ]}
+                size="sm"
+                style={{ width: isTablet ? 150 : 180 }}
+                placeholder="Select Profile"
+                allowDeselect={false}
+                comboboxProps={{ zIndex: 10000 }}
+              />
+            )}
 
             <Divider orientation="vertical" />
 
@@ -2327,6 +2348,173 @@ const ProfessionalRouteBuilder = forwardRef(({
             </Menu>
           </Paper>
         </div>
+
+        {/* Mobile Bottom Sheet */}
+        {isMobile && (
+          <Paper
+            shadow="xl"
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: mobileSheetExpanded ? '80vh' : '40vh',
+              borderTopLeftRadius: '20px',
+              borderTopRightRadius: '20px',
+              zIndex: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              transition: 'height 0.3s ease',
+            }}
+          >
+            {/* Drag Handle */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                padding: '12px',
+                cursor: 'pointer',
+                borderBottom: '1px solid #e9ecef',
+              }}
+              onClick={() => setMobileSheetExpanded(!mobileSheetExpanded)}
+            >
+              <div
+                style={{
+                  width: '40px',
+                  height: '4px',
+                  backgroundColor: '#dee2e6',
+                  borderRadius: '2px',
+                }}
+              />
+            </div>
+
+            {/* Mobile Content */}
+            <ScrollArea style={{ flex: 1 }} p="md">
+              <Stack gap="md">
+                {/* Routing Profile - Full Width */}
+                <Select
+                  value={routingProfile}
+                  onChange={(value) => {
+                    console.log('Profile changed to:', value);
+                    setRoutingProfile(value);
+                  }}
+                  data={[
+                    { value: 'road', label: '🚴 Road' },
+                    { value: 'gravel', label: '🌾 Gravel' },
+                    { value: 'mountain', label: '⛰️ Mountain (Coming Soon)', disabled: true },
+                    { value: 'commuting', label: '🚲 Commuting (Coming Soon)', disabled: true },
+                  ]}
+                  size="md"
+                  label="Routing Profile"
+                  allowDeselect={false}
+                />
+
+                {/* Quick Actions */}
+                <Group grow>
+                  <Button
+                    variant="light"
+                    leftSection={<Undo2 size={16} />}
+                    onClick={undo}
+                    disabled={historyIndex <= 0}
+                    size="md"
+                  >
+                    Undo
+                  </Button>
+                  <Button
+                    variant="light"
+                    leftSection={<Redo2 size={16} />}
+                    onClick={redo}
+                    disabled={historyIndex >= history.length - 1}
+                    size="md"
+                  >
+                    Redo
+                  </Button>
+                </Group>
+
+                {/* Route Info */}
+                {waypoints.length > 0 && (
+                  <Card withBorder>
+                    <Group justify="space-between" mb="sm">
+                      <Text fw={500} size="sm">Route Stats</Text>
+                      <Badge size="sm" variant="light" color={
+                        routingProfile === 'road' ? 'blue' :
+                        routingProfile === 'gravel' ? 'brown' :
+                        routingProfile === 'mountain' ? 'grape' : 'cyan'
+                      }>
+                        {routingProfile === 'road' && <Bike size={12} />}
+                        {routingProfile === 'gravel' && '🌾'}
+                        {routingProfile === 'mountain' && '⛰️'}
+                        {routingProfile === 'commuting' && '🚲'}
+                      </Badge>
+                    </Group>
+
+                    <Stack gap="xs">
+                      <Group justify="apart">
+                        <Text size="sm" c="dimmed">Distance</Text>
+                        <Text size="sm" fw={500}>{formatDistance(routeStats.distance)}</Text>
+                      </Group>
+                      <Group justify="apart">
+                        <Text size="sm" c="dimmed">Elevation Gain</Text>
+                        <Text size="sm" fw={500}>{formatElevation(routeStats.elevationGain)}</Text>
+                      </Group>
+                      <Group justify="apart">
+                        <Text size="sm" c="dimmed">Duration</Text>
+                        <Text size="sm" fw={500}>
+                          {Math.floor(routeStats.duration / 3600)}h {Math.floor((routeStats.duration % 3600) / 60)}m
+                        </Text>
+                      </Group>
+                    </Stack>
+                  </Card>
+                )}
+
+                {/* Save Button */}
+                {waypoints.length > 0 && (
+                  <>
+                    <TextInput
+                      label="Route Name"
+                      placeholder="Enter route name..."
+                      value={routeName}
+                      onChange={(e) => setRouteName(e.target.value)}
+                      size="md"
+                    />
+                    <Button
+                      fullWidth
+                      size="lg"
+                      leftSection={<Save size={18} />}
+                      onClick={saveRoute}
+                      loading={saving}
+                      disabled={!routeName.trim() || waypoints.length < 2}
+                    >
+                      Save Route
+                    </Button>
+                  </>
+                )}
+
+                {/* Settings */}
+                <Card withBorder>
+                  <Text fw={500} size="sm" mb="sm">Settings</Text>
+                  <Stack gap="md">
+                    <Switch
+                      label="Auto-route"
+                      description="Automatically snap to roads"
+                      checked={autoRoute}
+                      onChange={(e) => setAutoRoute(e.currentTarget.checked)}
+                      size="md"
+                    />
+                    <Switch
+                      label={smartRoutingConfig.label}
+                      description={smartRoutingConfig.description}
+                      checked={useSmartRouting}
+                      onChange={(e) => setUseSmartRouting(e.currentTarget.checked)}
+                      disabled={!['road', 'gravel', 'mountain', 'commuting'].includes(routingProfile)}
+                      size="md"
+                    />
+                  </Stack>
+                </Card>
+              </Stack>
+            </ScrollArea>
+          </Paper>
+        )}
 
         {/* Mode Badge */}
         <Badge
