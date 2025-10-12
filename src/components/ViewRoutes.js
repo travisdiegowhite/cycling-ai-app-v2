@@ -47,6 +47,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
 import { useUnits } from '../utils/units';
 import { notifications } from '@mantine/notifications';
+import RouteMap from './RouteMap';
 
 /**
  * ViewRoutes Component
@@ -68,6 +69,9 @@ const ViewRoutes = () => {
   const [filterType, setFilterType] = useState('all');
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [routeToDelete, setRouteToDelete] = useState(null);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [routeToView, setRouteToView] = useState(null);
+  const [viewRouteDetails, setViewRouteDetails] = useState(null);
 
   const loadRoutes = useCallback(async () => {
     try {
@@ -160,6 +164,49 @@ const ViewRoutes = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routes, viewMode, searchQuery, sortBy, filterType]);
 
+  const handleViewRoute = async (route) => {
+    try {
+      // Fetch route with track points
+      const { data, error } = await supabase
+        .from('routes')
+        .select(`
+          *,
+          track_points(
+            latitude,
+            longitude,
+            elevation,
+            time_seconds,
+            distance_m,
+            point_index
+          )
+        `)
+        .eq('id', route.id)
+        .single();
+
+      if (error) throw error;
+
+      // Process track points to format expected by RouteMap
+      const trackPoints = data.track_points
+        ?.sort((a, b) => a.point_index - b.point_index)
+        .map(point => ({
+          lat: point.latitude,
+          lng: point.longitude,
+          elevation: point.elevation,
+        })) || [];
+
+      setRouteToView(route);
+      setViewRouteDetails({ ...data, trackPoints });
+      setViewModalOpen(true);
+    } catch (error) {
+      console.error('Error loading route details:', error);
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to load route details',
+        color: 'red',
+      });
+    }
+  };
+
   const handleDeleteRoute = async () => {
     if (!routeToDelete) return;
 
@@ -207,6 +254,17 @@ const ViewRoutes = () => {
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
+  };
+
+  // Helper function to handle speed values that may be in m/s instead of km/h
+  const normalizeSpeed = (speed) => {
+    if (!speed) return null;
+    // If speed is less than 15, it's likely in m/s (typical cycling speed is 15-40 km/h)
+    // Convert m/s to km/h by multiplying by 3.6
+    if (speed < 15) {
+      return speed * 3.6;
+    }
+    return speed;
   };
 
   const estimateTSS = (route) => {
@@ -269,9 +327,9 @@ const ViewRoutes = () => {
               <Menu.Dropdown>
                 <Menu.Item
                   leftSection={<Eye size={14} />}
-                  onClick={() => navigate(`/map?routeId=${route.id}`)}
+                  onClick={() => handleViewRoute(route)}
                 >
-                  View on Map
+                  View Details
                 </Menu.Item>
                 <Menu.Item
                   leftSection={<Edit size={14} />}
@@ -347,7 +405,7 @@ const ViewRoutes = () => {
               <StatItem
                 icon={<TrendingUp size={14} />}
                 label="Avg Speed"
-                value={formatSpeed(route.average_speed)}
+                value={formatSpeed(normalizeSpeed(route.average_speed))}
               />
             )}
             {!route.duration_seconds && !route.average_speed && (
@@ -448,16 +506,16 @@ const ViewRoutes = () => {
               <StatItem
                 icon={<TrendingUp size={16} />}
                 label="Avg Speed"
-                value={formatSpeed(route.average_speed)}
+                value={formatSpeed(normalizeSpeed(route.average_speed))}
               />
             )}
           </Group>
 
           <Group gap="xs">
-            <Tooltip label="View on map">
+            <Tooltip label="View details">
               <ActionIcon
                 variant="light"
-                onClick={() => navigate(`/map?routeId=${route.id}`)}
+                onClick={() => handleViewRoute(route)}
               >
                 <Eye size={16} />
               </ActionIcon>
@@ -696,6 +754,82 @@ const ViewRoutes = () => {
             </Button>
           </Group>
         </Stack>
+      </Modal>
+
+      {/* View Route Details Modal */}
+      <Modal
+        opened={viewModalOpen}
+        onClose={() => {
+          setViewModalOpen(false);
+          setRouteToView(null);
+          setViewRouteDetails(null);
+        }}
+        title={routeToView?.name || 'Route Details'}
+        size="xl"
+        centered
+      >
+        {viewRouteDetails ? (
+          <Stack gap="md">
+            {/* Route Stats */}
+            <SimpleGrid cols={3} spacing="xs">
+              <Paper withBorder p="sm">
+                <Text size="xs" c="dimmed">Distance</Text>
+                <Text size="lg" fw={600}>{formatDistance(viewRouteDetails.distance_km || 0)}</Text>
+              </Paper>
+              <Paper withBorder p="sm">
+                <Text size="xs" c="dimmed">Elevation</Text>
+                <Text size="lg" fw={600}>+{formatElevation(viewRouteDetails.elevation_gain_m || 0)}</Text>
+              </Paper>
+              <Paper withBorder p="sm">
+                <Text size="xs" c="dimmed">Duration</Text>
+                <Text size="lg" fw={600}>{formatDuration(viewRouteDetails.duration_seconds)}</Text>
+              </Paper>
+            </SimpleGrid>
+
+            {viewRouteDetails.average_speed && (
+              <Paper withBorder p="sm">
+                <Text size="xs" c="dimmed">Average Speed</Text>
+                <Text size="lg" fw={600}>{formatSpeed(normalizeSpeed(viewRouteDetails.average_speed))}</Text>
+              </Paper>
+            )}
+
+            {/* Map */}
+            <Box>
+              <Text size="sm" fw={500} mb="xs">Route Map</Text>
+              <RouteMap trackPoints={viewRouteDetails.trackPoints} mapHeight={400} />
+            </Box>
+
+            {/* Additional Info */}
+            {viewRouteDetails.description && (
+              <Box>
+                <Text size="sm" fw={500} mb="xs">Description</Text>
+                <Text size="sm" c="dimmed">{viewRouteDetails.description}</Text>
+              </Box>
+            )}
+
+            <Group gap="xs">
+              {viewRouteDetails.recorded_at && (
+                <Badge color="green">
+                  Completed: {formatDate(viewRouteDetails.recorded_at)}
+                </Badge>
+              )}
+              {viewRouteDetails.route_type && (
+                <Badge color={getRouteTypeColor(viewRouteDetails.route_type)}>
+                  {viewRouteDetails.route_type.replace('_', ' ')}
+                </Badge>
+              )}
+              {viewRouteDetails.imported_from && (
+                <Badge color={getSourceBadge(viewRouteDetails).color}>
+                  {getSourceBadge(viewRouteDetails).label}
+                </Badge>
+              )}
+            </Group>
+          </Stack>
+        ) : (
+          <Center p="xl">
+            <Loader />
+          </Center>
+        )}
       </Modal>
     </Container>
   );
