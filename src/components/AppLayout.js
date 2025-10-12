@@ -162,13 +162,23 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           </Button>
 
           <Button
+            variant={activePage === 'routes' ? 'filled' : 'subtle'}
+            leftSection={<Route size={18} />}
+            onClick={() => handleNavigation('routes', '/routes')}
+            justify="flex-start"
+            fullWidth
+          >
+            View Routes
+          </Button>
+
+          <Button
             variant={activePage === 'map' ? 'filled' : 'subtle'}
             leftSection={<Map size={18} />}
             onClick={() => handleNavigation('map', '/map')}
             justify="flex-start"
             fullWidth
           >
-            View Routes
+            Map View
           </Button>
 
           <Button
