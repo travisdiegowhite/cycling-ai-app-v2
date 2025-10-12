@@ -2643,9 +2643,10 @@ const ProfessionalRouteBuilder = forwardRef(({
               withBorder
               p="xl"
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.85)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
+                backgroundColor: 'rgba(255, 255, 255, 0.3)', // Much more transparent
+                backdropFilter: 'blur(20px)', // Stronger blur
+                border: '1px solid rgba(255, 255, 255, 0.5)',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
               }}
             >
               <Stack align="center">
