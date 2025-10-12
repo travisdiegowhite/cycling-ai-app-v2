@@ -168,17 +168,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             justify="flex-start"
             fullWidth
           >
-            View Routes
-          </Button>
-
-          <Button
-            variant={activePage === 'map' ? 'filled' : 'subtle'}
-            leftSection={<Map size={18} />}
-            onClick={() => handleNavigation('map', '/map')}
-            justify="flex-start"
-            fullWidth
-          >
-            Map View
+            My Routes
           </Button>
 
           <Button
