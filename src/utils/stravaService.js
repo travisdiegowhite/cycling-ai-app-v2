@@ -390,8 +390,8 @@ export class StravaService {
       duration_seconds: stravaActivity.moving_time,
       elevation_gain_m: stravaActivity.total_elevation_gain,
       elevation_loss_m: stravaActivity.total_elevation_gain, // Approximate
-      average_speed: stravaActivity.average_speed,
-      max_speed: stravaActivity.max_speed,
+      average_speed: stravaActivity.average_speed ? stravaActivity.average_speed * 3.6 : null, // Convert m/s to km/h
+      max_speed: stravaActivity.max_speed ? stravaActivity.max_speed * 3.6 : null, // Convert m/s to km/h
       average_heartrate: stravaActivity.average_heartrate,
       max_heartrate: stravaActivity.max_heartrate,
       average_watts: stravaActivity.average_watts,

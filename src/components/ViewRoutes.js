@@ -269,9 +269,9 @@ const ViewRoutes = () => {
               <Menu.Dropdown>
                 <Menu.Item
                   leftSection={<Eye size={14} />}
-                  onClick={() => navigate(`/routes/${route.id}`)}
+                  onClick={() => navigate(`/map?routeId=${route.id}`)}
                 >
-                  View Details
+                  View on Map
                 </Menu.Item>
                 <Menu.Item
                   leftSection={<Edit size={14} />}
@@ -454,10 +454,10 @@ const ViewRoutes = () => {
           </Group>
 
           <Group gap="xs">
-            <Tooltip label="View details">
+            <Tooltip label="View on map">
               <ActionIcon
                 variant="light"
-                onClick={() => navigate(`/routes/${route.id}`)}
+                onClick={() => navigate(`/map?routeId=${route.id}`)}
               >
                 <Eye size={16} />
               </ActionIcon>
