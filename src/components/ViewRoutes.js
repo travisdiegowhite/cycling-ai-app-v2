@@ -90,18 +90,40 @@ const ViewRoutes = () => {
   // Load overall stats without loading all route data
   const loadOverallStats = useCallback(async () => {
     try {
-      // Get total count and aggregated stats
-      const { data: statsData, error: statsError } = await supabase
-        .from('routes')
-        .select('distance_km, elevation_gain_m, recorded_at')
-        .eq('user_id', user.id);
+      // Supabase has a default limit of 1000 rows, so we need to fetch all data in batches
+      let allRoutes = [];
+      let from = 0;
+      const batchSize = 1000;
+      let hasMore = true;
 
-      if (statsError) throw statsError;
+      while (hasMore) {
+        const { data: batch, error } = await supabase
+          .from('routes')
+          .select('distance_km, elevation_gain_m, recorded_at')
+          .eq('user_id', user.id)
+          .range(from, from + batchSize - 1);
 
-      const totalRoutes = statsData.length;
-      const completedRides = statsData.filter(r => r.recorded_at).length;
-      const totalDistance = statsData.reduce((sum, r) => sum + (r.distance_km || 0), 0);
-      const totalElevation = statsData.reduce((sum, r) => sum + (r.elevation_gain_m || 0), 0);
+        if (error) throw error;
+
+        if (batch && batch.length > 0) {
+          allRoutes = [...allRoutes, ...batch];
+          from += batchSize;
+
+          // If we got less than batchSize, we've reached the end
+          if (batch.length < batchSize) {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      console.log(`📊 Loaded stats for ${allRoutes.length} total routes`);
+
+      const totalRoutes = allRoutes.length;
+      const completedRides = allRoutes.filter(r => r.recorded_at).length;
+      const totalDistance = allRoutes.reduce((sum, r) => sum + (r.distance_km || 0), 0);
+      const totalElevation = allRoutes.reduce((sum, r) => sum + (r.elevation_gain_m || 0), 0);
 
       setOverallStats({
         totalRoutes,
@@ -320,6 +342,12 @@ const ViewRoutes = () => {
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
+  };
+
+  // Format number with commas (e.g., 1234 -> 1,234)
+  const formatNumber = (num) => {
+    if (num == null) return '0';
+    return Math.round(num).toLocaleString('en-US');
   };
 
   // Helper function to handle speed values that may be in m/s instead of km/h
@@ -679,12 +707,12 @@ const ViewRoutes = () => {
       <SimpleGrid cols={{ base: 2, sm: 4 }} mb="xl">
         <Paper withBorder p="md" radius="md">
           <Text size="xs" c="dimmed" mb={4}>Total Routes</Text>
-          <Text size="xl" fw={700}>{overallStats.totalRoutes}</Text>
+          <Text size="xl" fw={700}>{formatNumber(overallStats.totalRoutes)}</Text>
         </Paper>
         <Paper withBorder p="md" radius="md">
           <Text size="xs" c="dimmed" mb={4}>Completed Rides</Text>
           <Text size="xl" fw={700}>
-            {overallStats.completedRides}
+            {formatNumber(overallStats.completedRides)}
           </Text>
         </Paper>
         <Paper withBorder p="md" radius="md">
@@ -709,9 +737,9 @@ const ViewRoutes = () => {
             value={viewMode}
             onChange={setViewMode}
             data={[
-              { label: `All (${overallStats.totalRoutes})`, value: 'all' },
-              { label: `Planned Routes (${overallStats.totalRoutes - overallStats.completedRides})`, value: 'planned' },
-              { label: `Completed Rides (${overallStats.completedRides})`, value: 'completed' },
+              { label: `All (${formatNumber(overallStats.totalRoutes)})`, value: 'all' },
+              { label: `Planned Routes (${formatNumber(overallStats.totalRoutes - overallStats.completedRides)})`, value: 'planned' },
+              { label: `Completed Rides (${formatNumber(overallStats.completedRides)})`, value: 'completed' },
             ]}
             fullWidth
           />
