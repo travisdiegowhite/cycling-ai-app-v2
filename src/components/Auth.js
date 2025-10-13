@@ -23,8 +23,13 @@ const Auth = () => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [isDemoLogin, setIsDemoLogin] = useState(false);
 
   const { signIn, signUp } = useAuth();
+
+  // Demo account credentials (read-only)
+  const DEMO_EMAIL = 'demo@tribos.studio';
+  const DEMO_PASSWORD = 'demo2024tribos';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -46,9 +51,31 @@ const Auth = () => {
     }
   };
 
+  const handleDemoLogin = async () => {
+    setError(null);
+    setLoading(true);
+    setIsDemoLogin(true);
+
+    try {
+      const { error } = await signIn(DEMO_EMAIL, DEMO_PASSWORD);
+      if (error) throw error;
+    } catch (error) {
+      setError('Failed to sign in to demo account. Please try again.');
+      console.error('Demo login error:', error);
+    } finally {
+      setLoading(false);
+      setIsDemoLogin(false);
+    }
+  };
+
   // Show landing page by default, auth form when requested
   if (!showAuth) {
-    return <LandingPage onGetStarted={() => setShowAuth(true)} />;
+    return (
+      <LandingPage
+        onGetStarted={() => setShowAuth(true)}
+        onTryDemo={handleDemoLogin}
+      />
+    );
   }
 
   return (

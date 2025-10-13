@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Container,
   Title,
@@ -16,6 +16,7 @@ import {
   Anchor,
   List,
   Flex,
+  Badge,
 } from '@mantine/core';
 import {
   Route,
@@ -33,9 +34,13 @@ import {
   Plus,
   Users,
   HelpCircle,
+  Rocket,
+  Play,
 } from 'lucide-react';
+import BetaSignup from './BetaSignup';
 
-const LandingPage = ({ onGetStarted }) => {
+const LandingPage = ({ onGetStarted, onTryDemo }) => {
+  const [betaModalOpened, setBetaModalOpened] = useState(false);
   const features = [
     {
       icon: Brain,
@@ -121,28 +126,32 @@ const LandingPage = ({ onGetStarted }) => {
             <Group spacing="md" mt="xl">
               <Button
                 size="lg"
-                onClick={onGetStarted}
-                rightSection={<ChevronRight size={20} />}
+                onClick={onTryDemo}
+                leftSection={<Play size={20} />}
                 style={{
                   background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
                 }}
               >
-                Get Started Free
+                Try Demo
               </Button>
               <Button
                 size="lg"
                 variant="outline"
+                onClick={() => setBetaModalOpened(true)}
+                leftSection={<Rocket size={20} />}
                 style={{
                   borderColor: '#10b981',
                   color: '#10b981',
                 }}
-                onClick={() => document.getElementById('features').scrollIntoView({ behavior: 'smooth' })}
               >
-                Explore Features
+                Join Beta
               </Button>
             </Group>
-            <Text size="sm" c="dimmed" mt="md">
-              Free to use • Interactive onboarding • No credit card required
+            <Badge size="lg" variant="gradient" gradient={{ from: 'teal', to: 'cyan' }} mt="md">
+              Beta Launch: December 25, 2025
+            </Badge>
+            <Text size="sm" c="dimmed" mt="xs">
+              No credit card required • Full feature access in demo
             </Text>
           </Stack>
         </Center>
@@ -219,13 +228,23 @@ const LandingPage = ({ onGetStarted }) => {
                   <List.Item key={index}>{benefit}</List.Item>
                 ))}
               </List>
-              <Button
-                size="md"
-                onClick={onGetStarted}
-                rightSection={<ChevronRight size={18} />}
-              >
-                Get Started Free
-              </Button>
+              <Group>
+                <Button
+                  size="md"
+                  onClick={onTryDemo}
+                  leftSection={<Play size={18} />}
+                >
+                  Try Demo
+                </Button>
+                <Button
+                  size="md"
+                  variant="outline"
+                  onClick={() => setBetaModalOpened(true)}
+                  leftSection={<Rocket size={18} />}
+                >
+                  Join Beta
+                </Button>
+              </Group>
             </Stack>
           </Grid.Col>
 
@@ -336,18 +355,32 @@ const LandingPage = ({ onGetStarted }) => {
               Join cyclists who are discovering new routes, improving their training,
               and riding with purpose. Get started in less than 2 minutes.
             </Text>
-            <Button
-              size="xl"
-              onClick={onGetStarted}
-              rightSection={<ChevronRight size={24} />}
-              style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
-              }}
-            >
-              Create Your Account
-            </Button>
+            <Group>
+              <Button
+                size="xl"
+                onClick={onTryDemo}
+                leftSection={<Play size={24} />}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
+                }}
+              >
+                Try Demo Now
+              </Button>
+              <Button
+                size="xl"
+                variant="outline"
+                onClick={() => setBetaModalOpened(true)}
+                leftSection={<Rocket size={24} />}
+                style={{
+                  borderColor: '#10b981',
+                  color: '#10b981',
+                }}
+              >
+                Join Beta
+              </Button>
+            </Group>
             <Text size="sm" c="dimmed">
-              Free to start • No credit card required
+              Free demo access • Beta launching Dec 25, 2025
             </Text>
           </Stack>
         </Center>
@@ -386,6 +419,9 @@ const LandingPage = ({ onGetStarted }) => {
           </Stack>
         </Container>
       </Box>
+
+      {/* Beta Signup Modal */}
+      <BetaSignup opened={betaModalOpened} onClose={() => setBetaModalOpened(false)} />
     </Box>
   );
 };
