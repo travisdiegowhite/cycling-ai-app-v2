@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container,
   Grid,
@@ -20,6 +20,7 @@ import {
   ActionIcon,
   Tooltip,
   Center,
+  Progress,
 } from '@mantine/core';
 import {
   TrendingUp,
