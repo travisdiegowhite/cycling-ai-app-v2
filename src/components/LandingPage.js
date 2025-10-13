@@ -148,7 +148,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
               </Button>
             </Group>
             <Badge size="lg" variant="gradient" gradient={{ from: 'teal', to: 'cyan' }} mt="md">
-              Beta Launch: December 25, 2025
+              Beta Launch: December 1, 2024
             </Badge>
             <Text size="sm" c="dimmed" mt="xs">
               No credit card required • Full feature access in demo
@@ -380,7 +380,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
               </Button>
             </Group>
             <Text size="sm" c="dimmed">
-              Free demo access • Beta launching Dec 25, 2025
+              Free demo access • Beta launching Dec 1, 2024
             </Text>
           </Stack>
         </Center>
