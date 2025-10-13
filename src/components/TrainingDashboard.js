@@ -80,6 +80,7 @@ const TrainingDashboard = () => {
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [allRoutes, setAllRoutes] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [trendsTimeRange, setTrendsTimeRange] = useState('all'); // all, 12, 18 months
 
   // Calculate comprehensive stats from all routes
   const stats = useMemo(() => {
@@ -87,6 +88,23 @@ const TrainingDashboard = () => {
     const routesWithSpeed = stravaRoutes.filter(r => r.average_speed && r.average_speed > 0);
     const routesWithHR = stravaRoutes.filter(r => r.average_heartrate && r.average_heartrate > 0);
     const routesWithPower = stravaRoutes.filter(r => r.average_watts && r.average_watts > 0);
+
+    // Calculate actual time span for accurate weekly/monthly averages
+    let actualWeeks = 1;
+    let actualDays = 1;
+    if (allRoutes.length > 0) {
+      const dates = allRoutes
+        .map(r => new Date(r.recorded_at || r.created_at))
+        .filter(d => !isNaN(d.getTime()))
+        .sort((a, b) => a - b);
+
+      if (dates.length > 1) {
+        const firstDate = dates[0];
+        const lastDate = dates[dates.length - 1];
+        actualDays = Math.max(1, (lastDate - firstDate) / (1000 * 60 * 60 * 24));
+        actualWeeks = Math.max(1, actualDays / 7);
+      }
+    }
 
     return {
       totalRoutes: allRoutes.length,
@@ -107,8 +125,64 @@ const TrainingDashboard = () => {
         ? routesWithPower.reduce((sum, r) => sum + (r.average_watts || 0), 0) / routesWithPower.length
         : null,
       maxPower: Math.max(...stravaRoutes.map(r => r.max_watts || 0), 0) || null,
+      // Time-based metrics
+      actualWeeks,
+      actualDays,
+      weeklyDistance: allRoutes.reduce((sum, r) => sum + (r.distance_km || 0), 0) / actualWeeks,
+      monthlyDistance: allRoutes.reduce((sum, r) => sum + (r.distance_km || 0), 0) / (actualDays / 30),
+      ridesPerWeek: allRoutes.length / actualWeeks,
     };
   }, [allRoutes]);
+
+  // Calculate filtered stats for trends tab based on time range
+  const trendsStats = useMemo(() => {
+    let filteredRoutes = allRoutes;
+
+    // Filter by time range if not "all"
+    if (trendsTimeRange !== 'all') {
+      const monthsBack = parseInt(trendsTimeRange);
+      const cutoffDate = new Date();
+      cutoffDate.setMonth(cutoffDate.getMonth() - monthsBack);
+
+      filteredRoutes = allRoutes.filter(r => {
+        const rideDate = new Date(r.recorded_at || r.created_at);
+        return rideDate >= cutoffDate;
+      });
+    }
+
+    // Calculate actual time span for filtered routes
+    let actualWeeks = 1;
+    let actualDays = 1;
+    if (filteredRoutes.length > 0) {
+      const dates = filteredRoutes
+        .map(r => new Date(r.recorded_at || r.created_at))
+        .filter(d => !isNaN(d.getTime()))
+        .sort((a, b) => a - b);
+
+      if (dates.length > 1) {
+        const firstDate = dates[0];
+        const lastDate = dates[dates.length - 1];
+        actualDays = Math.max(1, (lastDate - firstDate) / (1000 * 60 * 60 * 24));
+        actualWeeks = Math.max(1, actualDays / 7);
+      }
+    }
+
+    const totalDistance = filteredRoutes.reduce((sum, r) => sum + (r.distance_km || 0), 0);
+    const totalElevation = filteredRoutes.reduce((sum, r) => sum + (r.elevation_gain_m || 0), 0);
+    const totalTime = filteredRoutes.reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+
+    return {
+      totalRoutes: filteredRoutes.length,
+      totalDistance,
+      totalElevation,
+      totalTime,
+      actualWeeks,
+      actualDays,
+      weeklyDistance: totalDistance / actualWeeks,
+      monthlyDistance: totalDistance / (actualDays / 30),
+      ridesPerWeek: filteredRoutes.length / actualWeeks,
+    };
+  }, [allRoutes, trendsTimeRange]);
 
   // Load training data
   useEffect(() => {
@@ -670,12 +744,32 @@ const TrainingDashboard = () => {
         {/* Trends Tab */}
         <Tabs.Panel value="trends" pt="md">
           <Stack gap="lg">
+            {/* Time Range Filter */}
+            <Card withBorder p="md">
+              <Group justify="space-between" align="center">
+                <div>
+                  <Text fw={600} size="sm">Time Period</Text>
+                  <Text size="xs" c="dimmed">Select the time range for trend analysis</Text>
+                </div>
+                <Select
+                  value={trendsTimeRange}
+                  onChange={setTrendsTimeRange}
+                  data={[
+                    { value: 'all', label: 'All Time' },
+                    { value: '12', label: 'Last 12 Months' },
+                    { value: '18', label: 'Last 18 Months' },
+                  ]}
+                  w={180}
+                />
+              </Group>
+            </Card>
+
             {/* Summary Cards */}
             <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
               <Card withBorder>
                 <Stack gap="xs">
                   <Text size="xs" c="dimmed" tt="uppercase">Weekly Avg</Text>
-                  <Text fw={700} size="lg">{formatDistance(stats.totalDistance / Math.max(1, allRoutes.length / 7))}</Text>
+                  <Text fw={700} size="lg">{formatDistance(trendsStats.weeklyDistance)}</Text>
                   <Text size="xs" c="dimmed">Distance</Text>
                 </Stack>
               </Card>
@@ -683,7 +777,7 @@ const TrainingDashboard = () => {
               <Card withBorder>
                 <Stack gap="xs">
                   <Text size="xs" c="dimmed" tt="uppercase">Monthly Avg</Text>
-                  <Text fw={700} size="lg">{formatDistance(stats.totalDistance / Math.max(1, allRoutes.length / 30))}</Text>
+                  <Text fw={700} size="lg">{formatDistance(trendsStats.monthlyDistance)}</Text>
                   <Text size="xs" c="dimmed">Distance</Text>
                 </Stack>
               </Card>
@@ -691,7 +785,7 @@ const TrainingDashboard = () => {
               <Card withBorder>
                 <Stack gap="xs">
                   <Text size="xs" c="dimmed" tt="uppercase">Rides/Week</Text>
-                  <Text fw={700} size="lg">{(allRoutes.length / Math.max(1, allRoutes.length / 7)).toFixed(1)}</Text>
+                  <Text fw={700} size="lg">{trendsStats.ridesPerWeek.toFixed(1)}</Text>
                   <Text size="xs" c="dimmed">Frequency</Text>
                 </Stack>
               </Card>
@@ -699,7 +793,7 @@ const TrainingDashboard = () => {
               <Card withBorder>
                 <Stack gap="xs">
                   <Text size="xs" c="dimmed" tt="uppercase">Total Weeks</Text>
-                  <Text fw={700} size="lg">{Math.ceil(allRoutes.length / 7)}</Text>
+                  <Text fw={700} size="lg">{Math.ceil(trendsStats.actualWeeks)}</Text>
                   <Text size="xs" c="dimmed">Active</Text>
                 </Stack>
               </Card>
@@ -712,45 +806,45 @@ const TrainingDashboard = () => {
                 <div>
                   <Group justify="space-between" mb="xs">
                     <Text size="sm">Total Distance Progress</Text>
-                    <Text fw={600}>{formatDistance(stats.totalDistance)}</Text>
+                    <Text fw={600}>{formatDistance(trendsStats.totalDistance)}</Text>
                   </Group>
                   <Progress
-                    value={Math.min(100, (stats.totalDistance / 10000) * 100)}
+                    value={Math.min(100, (trendsStats.totalDistance / 10000) * 100)}
                     color="blue"
                     size="lg"
                   />
                   <Text size="xs" c="dimmed" mt="xs">
-                    {Math.round((stats.totalDistance / 10000) * 100)}% towards 10,000 km goal
+                    {Math.round((trendsStats.totalDistance / 10000) * 100)}% towards 10,000 km goal
                   </Text>
                 </div>
 
                 <div>
                   <Group justify="space-between" mb="xs">
                     <Text size="sm">Total Elevation Progress</Text>
-                    <Text fw={600}>{formatElevation(stats.totalElevation)}</Text>
+                    <Text fw={600}>{formatElevation(trendsStats.totalElevation)}</Text>
                   </Group>
                   <Progress
-                    value={Math.min(100, (stats.totalElevation / 100000) * 100)}
+                    value={Math.min(100, (trendsStats.totalElevation / 100000) * 100)}
                     color="orange"
                     size="lg"
                   />
                   <Text size="xs" c="dimmed" mt="xs">
-                    {Math.round((stats.totalElevation / 100000) * 100)}% towards 100,000 m goal
+                    {Math.round((trendsStats.totalElevation / 100000) * 100)}% towards 100,000 m goal
                   </Text>
                 </div>
 
                 <div>
                   <Group justify="space-between" mb="xs">
                     <Text size="sm">Ride Count Progress</Text>
-                    <Text fw={600}>{stats.totalRoutes} rides</Text>
+                    <Text fw={600}>{trendsStats.totalRoutes} rides</Text>
                   </Group>
                   <Progress
-                    value={Math.min(100, (stats.totalRoutes / 1000) * 100)}
+                    value={Math.min(100, (trendsStats.totalRoutes / 1000) * 100)}
                     color="green"
                     size="lg"
                   />
                   <Text size="xs" c="dimmed" mt="xs">
-                    {Math.round((stats.totalRoutes / 1000) * 100)}% towards 1,000 rides goal
+                    {Math.round((trendsStats.totalRoutes / 1000) * 100)}% towards 1,000 rides goal
                   </Text>
                 </div>
               </Stack>
