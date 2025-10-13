@@ -10,6 +10,7 @@ import Auth from './components/Auth';
 import Map from './components/Map';
 import AIRouteMap from './components/AIRouteMap';
 import StravaIntegration from './components/StravaIntegration';
+import FitnessIntegrations from './components/FitnessIntegrations';
 import StravaCallback from './components/StravaCallback';
 import WahooCallback from './components/WahooCallback';
 import GarminCallback from './components/GarminCallback';
@@ -96,7 +97,7 @@ const AppContent = () => {
           <Route path="/routes" element={<ViewRoutes />} />
           <Route path="/discover" element={<RouteDiscovery />} />
           <Route path="/upload" element={<FileUpload />} />
-          <Route path="/strava" element={<StravaIntegration />} />
+          <Route path="/strava" element={<FitnessIntegrations />} />
           <Route path="/help" element={<HelpCenter />} />
           <Route path="/training" element={<TrainingDashboard />} />
           <Route path="/training/plans/new" element={<TrainingPlanBuilder />} />
