@@ -22,7 +22,6 @@ import {
   Plus,
   Zap,
   Upload,
-  Sparkles,
   Activity,
   TrendingUp,
   Search,
@@ -172,23 +171,17 @@ const HelpCenter = () => {
       ],
     },
     {
-      category: 'Smart Analysis',
-      icon: Sparkles,
-      questions: [
-        {
-          q: 'What is Smart Analysis?',
-          a: 'Smart Analysis uses AI to analyze your uploaded rides and provide insights about your performance, effort distribution, pacing, and areas for improvement. It learns your riding patterns to give personalized recommendations.',
-        },
-        {
-          q: 'What metrics does it analyze?',
-          a: 'We analyze speed, elevation gain, power output (if available), heart rate zones, pacing consistency, and effort distribution. The AI provides context-aware insights specific to your training goals.',
-        },
-      ],
-    },
-    {
       category: 'Training Dashboard',
       icon: TrendingUp,
       questions: [
+        {
+          q: 'What is the Training Dashboard?',
+          a: 'The Training Dashboard is a comprehensive training hub that combines AI-powered ride analysis, performance analytics, and personalized training plans. It tracks your progress, analyzes your rides, and provides insights about your performance, effort distribution, pacing, and areas for improvement.',
+        },
+        {
+          q: 'What metrics does it analyze?',
+          a: 'We analyze speed, elevation gain, power output (if available), heart rate zones, pacing consistency, effort distribution, training load (CTL/ATL/TSB), and weekly/monthly trends. The AI provides context-aware insights specific to your training goals.',
+        },
         {
           q: 'How do I create a training plan?',
           a: 'Go to Training Dashboard and click "Create New Plan". Choose your goal (race, event, or fitness), set your target date, and specify your current fitness level. The AI will generate a personalized training plan with progressive workouts.',
@@ -196,6 +189,10 @@ const HelpCenter = () => {
         {
           q: 'Can I modify training plans?',
           a: 'Yes! Training plans are fully customizable. You can adjust individual workouts, move rest days, change intensity levels, and adapt the plan as your fitness improves or circumstances change.',
+        },
+        {
+          q: 'How do I view trends over different time periods?',
+          a: 'The Trends tab in the Training Dashboard lets you filter data by All Time, Last 12 Months, or Last 18 Months. This helps you analyze recent performance trends versus your overall riding history.',
         },
       ],
     },

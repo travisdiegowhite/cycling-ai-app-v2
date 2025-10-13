@@ -9,7 +9,6 @@ import FileUpload from './components/FileUpload';
 import Auth from './components/Auth';
 import Map from './components/Map';
 import AIRouteMap from './components/AIRouteMap';
-import SmartRideAnalysis from './components/SmartRideAnalysis';
 import StravaIntegration from './components/StravaIntegration';
 import StravaCallback from './components/StravaCallback';
 import WahooCallback from './components/WahooCallback';
@@ -47,7 +46,6 @@ const AppContent = () => {
     else if (path === '/route-studio') setActivePage('route-studio');
     else if (path === '/routes') setActivePage('routes');
     else if (path === '/discover') setActivePage('discover');
-    else if (path === '/smart-analysis') setActivePage('smart-analysis');
     else if (path === '/upload') setActivePage('upload');
     else if (path === '/strava') setActivePage('strava');
     else if (path === '/help') setActivePage('help');
@@ -97,7 +95,6 @@ const AppContent = () => {
           <Route path="/route-studio" element={<RouteStudio />} />
           <Route path="/routes" element={<ViewRoutes />} />
           <Route path="/discover" element={<RouteDiscovery />} />
-          <Route path="/smart-analysis" element={<SmartRideAnalysis />} />
           <Route path="/upload" element={<FileUpload />} />
           <Route path="/strava" element={<StravaIntegration />} />
           <Route path="/help" element={<HelpCenter />} />

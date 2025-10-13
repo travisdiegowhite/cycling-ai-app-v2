@@ -31,7 +31,6 @@ import {
   ChevronRight,
   Star,
   Plus,
-  Sparkles,
   Users,
   HelpCircle,
 } from 'lucide-react';
@@ -51,9 +50,9 @@ const LandingPage = ({ onGetStarted }) => {
       color: 'cyan',
     },
     {
-      icon: Sparkles,
-      title: 'Smart Analysis & Training',
-      description: 'Upload ride data for AI-powered insights. Create personalized training plans and track your progress over time.',
+      icon: TrendingUp,
+      title: 'Training Dashboard',
+      description: 'Comprehensive training hub with AI-powered insights, performance analytics, and personalized training plans to track your progress.',
       color: 'blue',
     },
     {

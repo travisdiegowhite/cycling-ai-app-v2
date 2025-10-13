@@ -13,7 +13,7 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, Activity, Sparkles, Plus, Zap, FileText, Scale, TrendingUp, Globe } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, Activity, Plus, Zap, FileText, Scale, TrendingUp, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -139,16 +139,6 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             }}
           >
             Route Studio
-          </Button>
-
-          <Button
-            variant={activePage === 'smart-analysis' ? 'filled' : 'subtle'}
-            leftSection={<Sparkles size={18} />}
-            onClick={() => handleNavigation('smart-analysis', '/smart-analysis')}
-            justify="flex-start"
-            fullWidth
-          >
-            Smart Analysis
           </Button>
 
           <Button

@@ -17,7 +17,6 @@ import {
   Brain,
   Plus,
   Zap,
-  Sparkles,
   Map,
   Upload,
   Activity,
@@ -83,21 +82,21 @@ const Onboarding = ({ opened, onClose }) => {
       },
     },
     {
-      label: 'Analysis',
-      icon: Sparkles,
+      label: 'Training',
+      icon: TrendingUp,
       content: {
-        title: 'Smart Analysis & Training',
-        subtitle: 'Get AI-powered insights from your rides',
+        title: 'Training Dashboard',
+        subtitle: 'Track your progress and optimize your training',
         description:
-          'Upload your ride data and get personalized insights. Create training plans tailored to your goals and track your progress over time.',
+          'Comprehensive training hub with AI-powered insights, performance analytics, and personalized training plans to help you reach your cycling goals.',
         features: [
-          'Upload GPX or FIT files from your bike computer',
+          'View comprehensive ride statistics and trends',
           'Get AI-powered performance insights',
           'Create personalized training plans',
-          'Track your progress over time',
+          'Track training load and fitness progression',
           'Connect Strava, Wahoo, or Garmin for automatic imports',
         ],
-        tip: 'Pro tip: Regular uploads help the AI provide better insights and route recommendations!',
+        tip: 'Pro tip: The Training Dashboard consolidates all your riding data into actionable insights!',
       },
     },
     {

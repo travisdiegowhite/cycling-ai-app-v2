@@ -57,23 +57,6 @@ const FeatureTour = ({ page, onDismiss }) => {
         },
       ],
     },
-    'smart-analysis': {
-      title: 'Smart Analysis',
-      tips: [
-        {
-          text: 'Upload a GPX or FIT file to get AI-powered insights about your ride',
-          importance: 'high',
-        },
-        {
-          text: 'The more rides you upload, the better recommendations you\'ll get',
-          importance: 'medium',
-        },
-        {
-          text: 'Connect your fitness apps for automatic analysis of all your rides',
-          importance: 'medium',
-        },
-      ],
-    },
     'upload': {
       title: 'Upload Routes',
       tips: [
