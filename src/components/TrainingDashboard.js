@@ -448,7 +448,7 @@ const TrainingDashboard = () => {
               {allRoutes && allRoutes.length > 0 && (
                 <Card withBorder>
                   <Title order={4} mb="md">Activity Heatmap</Title>
-                  <ActivityHeatmap routes={allRoutes} />
+                  <ActivityHeatmap routes={allRoutes} formatDistance={formatDistance} />
                 </Card>
               )}
             </Stack>
