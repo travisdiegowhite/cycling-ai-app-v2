@@ -115,6 +115,7 @@ const TrainingDashboard = () => {
         .limit(1000); // Limit to recent 1000 rides for performance
 
       if (rides) {
+        console.log('📊 Training Dashboard loaded', rides.length, 'rides');
         setRecentRides(rides);
         setAllRoutes(rides); // Store for analysis tabs
 
@@ -187,9 +188,11 @@ const TrainingDashboard = () => {
   // Trigger pattern analysis when switching to Insights tab
   useEffect(() => {
     if (activeTab === 'insights' && !ridingPatterns && allRoutes.length > 0) {
+      console.log('Loading riding patterns for', allRoutes.length, 'routes');
       loadRidingPatterns();
     }
-  }, [activeTab, allRoutes]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, allRoutes.length]);
 
   // Helper: Estimate TSS from ride data
   const estimateTSSFromRide = (ride) => {
@@ -389,7 +392,15 @@ const TrainingDashboard = () => {
 
         {/* Insights Tab - AI Patterns & Recommendations */}
         <Tabs.Panel value="insights" pt="md">
-          {patternsLoading ? (
+          {allRoutes.length === 0 ? (
+            <Card withBorder p="xl">
+              <Stack align="center">
+                <Brain size={48} color="gray" />
+                <Title order={4}>No Ride Data</Title>
+                <Text c="dimmed" ta="center">Complete rides to unlock AI insights and pattern analysis</Text>
+              </Stack>
+            </Card>
+          ) : patternsLoading ? (
             <Center py="xl">
               <Stack align="center">
                 <Text c="dimmed">Analyzing your riding patterns...</Text>
@@ -443,10 +454,16 @@ const TrainingDashboard = () => {
             </Stack>
           ) : (
             <Card withBorder p="xl">
-              <Stack align="center">
+              <Stack align="center" gap="md">
                 <Brain size={48} color="gray" />
                 <Title order={4}>AI Insights</Title>
-                <Text c="dimmed" ta="center">Complete more rides to unlock intelligent pattern analysis</Text>
+                <Text c="dimmed" ta="center">Click below to analyze your riding patterns</Text>
+                <Button onClick={loadRidingPatterns} disabled={allRoutes.length === 0}>
+                  Analyze Patterns
+                </Button>
+                {allRoutes.length > 0 && (
+                  <Text size="xs" c="dimmed">{allRoutes.length} rides available for analysis</Text>
+                )}
               </Stack>
             </Card>
           )}
