@@ -36,6 +36,9 @@ import {
   LineChart,
   Brain,
   Route as RouteIcon,
+  MapPin,
+  Mountain,
+  Heart,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
@@ -76,6 +79,35 @@ const TrainingDashboard = () => {
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [allRoutes, setAllRoutes] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Calculate comprehensive stats from all routes
+  const stats = useMemo(() => {
+    const stravaRoutes = allRoutes.filter(r => r.imported_from === 'strava');
+    const routesWithSpeed = stravaRoutes.filter(r => r.average_speed && r.average_speed > 0);
+    const routesWithHR = stravaRoutes.filter(r => r.average_heartrate && r.average_heartrate > 0);
+    const routesWithPower = stravaRoutes.filter(r => r.average_watts && r.average_watts > 0);
+
+    return {
+      totalRoutes: allRoutes.length,
+      stravaRoutes: stravaRoutes.length,
+      totalDistance: allRoutes.reduce((sum, r) => sum + (r.distance_km || 0), 0),
+      totalElevation: allRoutes.reduce((sum, r) => sum + (r.elevation_gain_m || 0), 0),
+      totalTime: allRoutes.reduce((sum, r) => sum + (r.duration_seconds || 0), 0),
+      longestRide: Math.max(...allRoutes.map(r => r.distance_km || 0), 0),
+      highestElevation: Math.max(...allRoutes.map(r => r.elevation_gain_m || 0), 0),
+      avgDistance: allRoutes.length > 0 ? allRoutes.reduce((sum, r) => sum + (r.distance_km || 0), 0) / allRoutes.length : 0,
+      avgSpeed: routesWithSpeed.length > 0
+        ? routesWithSpeed.reduce((sum, r) => sum + (r.average_speed || 0), 0) / routesWithSpeed.length
+        : null,
+      avgHeartRate: routesWithHR.length > 0
+        ? routesWithHR.reduce((sum, r) => sum + (r.average_heartrate || 0), 0) / routesWithHR.length
+        : null,
+      avgPower: routesWithPower.length > 0
+        ? routesWithPower.reduce((sum, r) => sum + (r.average_watts || 0), 0) / routesWithPower.length
+        : null,
+      maxPower: Math.max(...stravaRoutes.map(r => r.max_watts || 0), 0) || null,
+    };
+  }, [allRoutes]);
 
   // Load training data
   useEffect(() => {
@@ -192,6 +224,17 @@ const TrainingDashboard = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, allRoutes.length]);
+
+  // Helper: Format duration
+  const formatDuration = (seconds) => {
+    if (!seconds) return '0h';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  };
 
   // Helper: Estimate TSS from ride data
   const estimateTSSFromRide = (ride) => {
