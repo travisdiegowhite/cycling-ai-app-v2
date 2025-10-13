@@ -33,6 +33,8 @@ import {
   Info,
   BarChart3,
   LineChart,
+  Brain,
+  Route as RouteIcon,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
@@ -48,14 +50,18 @@ import {
 import TrainingLoadChart from './TrainingLoadChart';
 import RideHistoryTable from './RideHistoryTable';
 import TrainingCalendar from './TrainingCalendar';
+import { analyzeRidingPatterns } from '../utils/rideAnalysis';
+import ActivityHeatmap from './ActivityHeatmap';
+import { useUnits } from '../utils/units';
 
 /**
- * Training Dashboard - Phase 2
- * Displays training metrics, load charts, and ride history
+ * Training Dashboard - Comprehensive Training Hub
+ * Combines training metrics, AI insights, performance analysis, and ride history
  */
 const TrainingDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { formatDistance, formatElevation, formatSpeed } = useUnits();
 
   // State
   const [loading, setLoading] = useState(true);
@@ -64,6 +70,12 @@ const TrainingDashboard = () => {
   const [dailyTSS, setDailyTSS] = useState([]);
   const [activePlan, setActivePlan] = useState(null);
   const [timeRange, setTimeRange] = useState('30'); // days
+
+  // Smart Analysis State
+  const [ridingPatterns, setRidingPatterns] = useState(null);
+  const [patternsLoading, setPatternsLoading] = useState(false);
+  const [allRoutes, setAllRoutes] = useState([]);
+  const [activeTab, setActiveTab] = useState('overview');
 
   // Load training data
   useEffect(() => {
@@ -103,6 +115,7 @@ const TrainingDashboard = () => {
 
       if (rides) {
         setRecentRides(rides);
+        setAllRoutes(rides); // Store for analysis tabs
 
         // Calculate daily TSS
         const tssMap = {};
@@ -155,6 +168,28 @@ const TrainingDashboard = () => {
     }
   };
 
+  // Load riding patterns for Insights tab
+  const loadRidingPatterns = async () => {
+    if (ridingPatterns || patternsLoading || allRoutes.length === 0) return;
+
+    try {
+      setPatternsLoading(true);
+      const patterns = await analyzeRidingPatterns(allRoutes);
+      setRidingPatterns(patterns);
+    } catch (error) {
+      console.error('Failed to analyze riding patterns:', error);
+    } finally {
+      setPatternsLoading(false);
+    }
+  };
+
+  // Trigger pattern analysis when switching to Insights tab
+  useEffect(() => {
+    if (activeTab === 'insights' && !ridingPatterns && allRoutes.length > 0) {
+      loadRidingPatterns();
+    }
+  }, [activeTab, allRoutes]);
+
   // Helper: Estimate TSS from ride data
   const estimateTSSFromRide = (ride) => {
     // If we have actual training_stress_score, use it
@@ -186,9 +221,9 @@ const TrainingDashboard = () => {
       {/* Header */}
       <Group justify="space-between" mb="xl">
         <div>
-          <Title order={2}>Training Dashboard</Title>
+          <Title order={2}>Training Hub</Title>
           <Text size="sm" c="dimmed">
-            Track your fitness, analyze your training load, and plan your workouts
+            Fitness tracking, AI insights, performance analysis & training planning
           </Text>
         </div>
         <Group>
@@ -324,10 +359,19 @@ const TrainingDashboard = () => {
       )}
 
       {/* Tabs for different views */}
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List mb="md">
           <Tabs.Tab value="overview" leftSection={<BarChart3 size={16} />}>
             Overview
+          </Tabs.Tab>
+          <Tabs.Tab value="insights" leftSection={<Brain size={16} />}>
+            Insights
+          </Tabs.Tab>
+          <Tabs.Tab value="performance" leftSection={<Zap size={16} />}>
+            Performance
+          </Tabs.Tab>
+          <Tabs.Tab value="trends" leftSection={<TrendingUp size={16} />}>
+            Trends
           </Tabs.Tab>
           <Tabs.Tab value="history" leftSection={<Activity size={16} />}>
             Ride History
@@ -337,14 +381,135 @@ const TrainingDashboard = () => {
           </Tabs.Tab>
         </Tabs.List>
 
+        {/* Overview Tab - Training Load */}
         <Tabs.Panel value="overview">
           <TrainingLoadChart data={dailyTSS} metrics={trainingMetrics} />
         </Tabs.Panel>
 
+        {/* Insights Tab - AI Patterns & Recommendations */}
+        <Tabs.Panel value="insights" pt="md">
+          {patternsLoading ? (
+            <Center py="xl">
+              <Stack align="center">
+                <Text c="dimmed">Analyzing your riding patterns...</Text>
+              </Stack>
+            </Center>
+          ) : ridingPatterns ? (
+            <Stack gap="lg">
+              {/* Riding Intelligence Card */}
+              <Card withBorder>
+                <Group justify="space-between" mb="md">
+                  <Title order={3}>Riding Intelligence</Title>
+                  <Badge color="blue" variant="light">AI Powered</Badge>
+                </Group>
+
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                  <Stack gap="xs">
+                    <Text size="sm" fw={600} c="dimmed">RIDING STYLE</Text>
+                    <Text size="lg" fw={700}>{ridingPatterns.ridingStyle?.style || 'Balanced'}</Text>
+                    <Text size="sm" c="dimmed">{ridingPatterns.ridingStyle?.description}</Text>
+                  </Stack>
+
+                  <Stack gap="xs">
+                    <Text size="sm" fw={600} c="dimmed">FAVORITE TERRAIN</Text>
+                    <Text size="lg" fw={700}>{ridingPatterns.terrainPreference?.type || 'Mixed'}</Text>
+                    <Text size="sm" c="dimmed">{ridingPatterns.terrainPreference?.description}</Text>
+                  </Stack>
+                </SimpleGrid>
+
+                {ridingPatterns.recommendations && ridingPatterns.recommendations.length > 0 && (
+                  <>
+                    <Divider my="md" />
+                    <Stack gap="xs">
+                      <Text size="sm" fw={600} c="dimmed">RECOMMENDATIONS</Text>
+                      {ridingPatterns.recommendations.slice(0, 3).map((rec, idx) => (
+                        <Alert key={idx} color="blue" variant="light">
+                          {rec}
+                        </Alert>
+                      ))}
+                    </Stack>
+                  </>
+                )}
+              </Card>
+
+              {/* Activity Heatmap */}
+              {allRoutes && allRoutes.length > 0 && (
+                <Card withBorder>
+                  <Title order={4} mb="md">Activity Heatmap</Title>
+                  <ActivityHeatmap routes={allRoutes} />
+                </Card>
+              )}
+            </Stack>
+          ) : (
+            <Card withBorder p="xl">
+              <Stack align="center">
+                <Brain size={48} color="gray" />
+                <Title order={4}>AI Insights</Title>
+                <Text c="dimmed" ta="center">Complete more rides to unlock intelligent pattern analysis</Text>
+              </Stack>
+            </Card>
+          )}
+        </Tabs.Panel>
+
+        {/* Performance Tab */}
+        <Tabs.Panel value="performance" pt="md">
+          <Stack gap="lg">
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+              <Card withBorder>
+                <Stack gap="xs">
+                  <Text size="sm" c="dimmed">Average Speed</Text>
+                  <Text size="xl" fw={700}>
+                    {allRoutes.length > 0
+                      ? formatSpeed(allRoutes.reduce((sum, r) => sum + (r.average_speed || 0), 0) / allRoutes.length)
+                      : '-'}
+                  </Text>
+                </Stack>
+              </Card>
+
+              <Card withBorder>
+                <Stack gap="xs">
+                  <Text size="sm" c="dimmed">Avg Elevation/Ride</Text>
+                  <Text size="xl" fw={700}>
+                    {allRoutes.length > 0
+                      ? formatElevation(allRoutes.reduce((sum, r) => sum + (r.elevation_gain_m || 0), 0) / allRoutes.length)
+                      : '-'}
+                  </Text>
+                </Stack>
+              </Card>
+
+              <Card withBorder>
+                <Stack gap="xs">
+                  <Text size="sm" c="dimmed">Avg Distance/Ride</Text>
+                  <Text size="xl" fw={700}>
+                    {allRoutes.length > 0
+                      ? formatDistance(allRoutes.reduce((sum, r) => sum + (r.distance_km || 0), 0) / allRoutes.length)
+                      : '-'}
+                  </Text>
+                </Stack>
+              </Card>
+            </SimpleGrid>
+
+            <Card withBorder>
+              <Title order={4} mb="md">Performance Metrics</Title>
+              <Text c="dimmed">Detailed performance analytics coming soon</Text>
+            </Card>
+          </Stack>
+        </Tabs.Panel>
+
+        {/* Trends Tab */}
+        <Tabs.Panel value="trends" pt="md">
+          <Card withBorder>
+            <Title order={4} mb="md">Training Trends</Title>
+            <Text c="dimmed">Trend analysis visualization coming soon</Text>
+          </Card>
+        </Tabs.Panel>
+
+        {/* Ride History Tab */}
         <Tabs.Panel value="history">
           <RideHistoryTable rides={recentRides} />
         </Tabs.Panel>
 
+        {/* Calendar Tab */}
         <Tabs.Panel value="calendar">
           <TrainingCalendar activePlan={activePlan} />
         </Tabs.Panel>
