@@ -41,6 +41,7 @@ import {
   Route as RouteIcon,
   Bike,
   SortDesc,
+  RefreshCw,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -73,18 +74,78 @@ const ViewRoutes = () => {
   const [routeToView, setRouteToView] = useState(null);
   const [viewRouteDetails, setViewRouteDetails] = useState(null);
 
-  const loadRoutes = useCallback(async () => {
+  // Pagination state
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const ROUTES_PER_PAGE = 50;
+
+  // Overall stats (separate from displayed routes)
+  const [overallStats, setOverallStats] = useState({
+    totalRoutes: 0,
+    completedRides: 0,
+    totalDistance: 0,
+    totalElevation: 0
+  });
+
+  // Load overall stats without loading all route data
+  const loadOverallStats = useCallback(async () => {
     try {
-      setLoading(true);
-      const { data, error } = await supabase
+      // Get total count and aggregated stats
+      const { data: statsData, error: statsError } = await supabase
         .from('routes')
-        .select('*')
+        .select('distance_km, elevation_gain_m, recorded_at')
+        .eq('user_id', user.id);
+
+      if (statsError) throw statsError;
+
+      const totalRoutes = statsData.length;
+      const completedRides = statsData.filter(r => r.recorded_at).length;
+      const totalDistance = statsData.reduce((sum, r) => sum + (r.distance_km || 0), 0);
+      const totalElevation = statsData.reduce((sum, r) => sum + (r.elevation_gain_m || 0), 0);
+
+      setOverallStats({
+        totalRoutes,
+        completedRides,
+        totalDistance,
+        totalElevation
+      });
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  }, [user.id]);
+
+  const loadRoutes = useCallback(async (reset = false) => {
+    try {
+      if (reset) {
+        setLoading(true);
+        setRoutes([]);
+        setHasMore(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      // Calculate date for 3-4 weeks ago
+      const fourWeeksAgo = new Date();
+      fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+
+      const startIndex = reset ? 0 : routes.length;
+
+      // Load only essential fields, not all data
+      const { data, error, count } = await supabase
+        .from('routes')
+        .select('id, user_id, name, description, route_type, strava_id, imported_from, distance_km, duration_seconds, elevation_gain_m, average_speed, recorded_at, created_at, has_gps_data, track_points_count, has_power_data, training_stress_score, average_heartrate', { count: 'exact' })
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(startIndex, startIndex + ROUTES_PER_PAGE - 1);
 
       if (error) throw error;
 
-      setRoutes(data || []);
+      const newRoutes = reset ? (data || []) : [...routes, ...(data || [])];
+      setRoutes(newRoutes);
+
+      // Check if there are more routes to load
+      setHasMore(data && data.length === ROUTES_PER_PAGE);
+
     } catch (error) {
       console.error('Error loading routes:', error);
       notifications.show({
@@ -94,8 +155,9 @@ const ViewRoutes = () => {
       });
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [user]);
+  }, [user, routes, ROUTES_PER_PAGE]);
 
   const applyFilters = useCallback(() => {
     let filtered = [...routes];
@@ -150,10 +212,11 @@ const ViewRoutes = () => {
     setFilteredRoutes(filtered);
   }, [routes, viewMode, searchQuery, sortBy, filterType]);
 
-  // Load routes on mount
+  // Load routes and stats on mount
   useEffect(() => {
     if (user?.id) {
-      loadRoutes();
+      loadOverallStats();
+      loadRoutes(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -227,6 +290,9 @@ const ViewRoutes = () => {
       setRoutes(routes.filter(r => r.id !== routeToDelete.id));
       setDeleteModalOpen(false);
       setRouteToDelete(null);
+
+      // Refresh overall stats after deletion
+      loadOverallStats();
     } catch (error) {
       console.error('Error deleting route:', error);
       notifications.show({
@@ -370,6 +436,28 @@ const ViewRoutes = () => {
               <Badge size="xs" color={getRouteTypeColor(route.route_type)} variant="light">
                 {route.route_type.replace('_', ' ')}
               </Badge>
+            )}
+            {/* GPS Data Status Badge */}
+            {route.imported_from === 'strava' && !isPlanned && (
+              route.has_gps_data ? (
+                route.track_points_count > 100 ? (
+                  <Badge size="xs" color="green" variant="light">
+                    Full GPS
+                  </Badge>
+                ) : (
+                  <Tooltip label={`Only ${route.track_points_count} GPS points`}>
+                    <Badge size="xs" color="yellow" variant="light">
+                      Partial GPS
+                    </Badge>
+                  </Tooltip>
+                )
+              ) : (
+                <Tooltip label="GPS data not available - re-import to fix">
+                  <Badge size="xs" color="red" variant="light">
+                    No GPS
+                  </Badge>
+                </Tooltip>
+              )
             )}
           </Group>
 
@@ -591,24 +679,24 @@ const ViewRoutes = () => {
       <SimpleGrid cols={{ base: 2, sm: 4 }} mb="xl">
         <Paper withBorder p="md" radius="md">
           <Text size="xs" c="dimmed" mb={4}>Total Routes</Text>
-          <Text size="xl" fw={700}>{routes.length}</Text>
+          <Text size="xl" fw={700}>{overallStats.totalRoutes}</Text>
         </Paper>
         <Paper withBorder p="md" radius="md">
           <Text size="xs" c="dimmed" mb={4}>Completed Rides</Text>
           <Text size="xl" fw={700}>
-            {routes.filter(r => r.recorded_at).length}
+            {overallStats.completedRides}
           </Text>
         </Paper>
         <Paper withBorder p="md" radius="md">
           <Text size="xs" c="dimmed" mb={4}>Total Distance</Text>
           <Text size="xl" fw={700}>
-            {formatDistance(routes.reduce((sum, r) => sum + (r.distance_km || 0), 0))}
+            {formatDistance(overallStats.totalDistance)}
           </Text>
         </Paper>
         <Paper withBorder p="md" radius="md">
           <Text size="xs" c="dimmed" mb={4}>Total Elevation</Text>
           <Text size="xl" fw={700}>
-            +{formatElevation(routes.reduce((sum, r) => sum + (r.elevation_gain_m || 0), 0))}
+            +{formatElevation(overallStats.totalElevation)}
           </Text>
         </Paper>
       </SimpleGrid>
@@ -621,9 +709,9 @@ const ViewRoutes = () => {
             value={viewMode}
             onChange={setViewMode}
             data={[
-              { label: `All (${routes.length})`, value: 'all' },
-              { label: `Planned Routes (${routes.filter(r => !r.recorded_at || r.imported_from === 'manual').length})`, value: 'planned' },
-              { label: `Completed Rides (${routes.filter(r => r.recorded_at).length})`, value: 'completed' },
+              { label: `All (${overallStats.totalRoutes})`, value: 'all' },
+              { label: `Planned Routes (${overallStats.totalRoutes - overallStats.completedRides})`, value: 'planned' },
+              { label: `Completed Rides (${overallStats.completedRides})`, value: 'completed' },
             ]}
             fullWidth
           />
@@ -710,18 +798,45 @@ const ViewRoutes = () => {
             )}
           </Stack>
         </Paper>
-      ) : viewType === 'grid' ? (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
-          {filteredRoutes.map(route => (
-            <RouteCard key={route.id} route={route} />
-          ))}
-        </SimpleGrid>
       ) : (
-        <Stack gap="md">
-          {filteredRoutes.map(route => (
-            <RouteListItem key={route.id} route={route} />
-          ))}
-        </Stack>
+        <>
+          {viewType === 'grid' ? (
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+              {filteredRoutes.map(route => (
+                <RouteCard key={route.id} route={route} />
+              ))}
+            </SimpleGrid>
+          ) : (
+            <Stack gap="md">
+              {filteredRoutes.map(route => (
+                <RouteListItem key={route.id} route={route} />
+              ))}
+            </Stack>
+          )}
+
+          {/* Load More Button */}
+          {hasMore && !searchQuery && filterType === 'all' && (
+            <Center mt="xl">
+              <Button
+                variant="light"
+                size="lg"
+                loading={loadingMore}
+                onClick={() => loadRoutes(false)}
+                leftSection={<RefreshCw size={16} />}
+              >
+                Load More Routes
+              </Button>
+            </Center>
+          )}
+
+          {!hasMore && routes.length > ROUTES_PER_PAGE && (
+            <Center mt="lg">
+              <Text size="sm" c="dimmed">
+                All {routes.length} routes loaded
+              </Text>
+            </Center>
+          )}
+        </>
       )}
 
       {/* Delete Confirmation Modal */}

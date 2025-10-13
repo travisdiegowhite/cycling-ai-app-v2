@@ -187,8 +187,8 @@ const StravaIntegration = () => {
       setImportProgress(30);
 
       // Process all the fetched activities
-      const { imported, skipped, replaced } = await processActivities(allActivities, importType, existingStravaIds, overrideExisting);
-      
+      const { imported, skipped, replaced, gpsFailures, partialGPS } = await processActivities(allActivities, importType, existingStravaIds, overrideExisting);
+
       // Record the import
       const { error: importRecordError } = await supabase
         .from('strava_imports')
@@ -204,7 +204,7 @@ const StravaIntegration = () => {
       }
 
       setImportProgress(100);
-      
+
       if (imported === 0 && skipped === 0 && (replaced || 0) === 0) {
         toast.info('No new activities found to import');
       } else {
@@ -220,6 +220,25 @@ const StravaIntegration = () => {
         }
 
         toast.success(message);
+
+        // Show GPS import warnings if there were issues
+        if (gpsFailures && gpsFailures.length > 0) {
+          setTimeout(() => {
+            toast.error(
+              `Warning: ${gpsFailures.length} activities failed to import GPS data. Check console for details.`,
+              { duration: 8000 }
+            );
+          }, 2000);
+        }
+
+        if (partialGPS && partialGPS.length > 0) {
+          setTimeout(() => {
+            toast.warning(
+              `Note: ${partialGPS.length} activities have incomplete GPS data. You may want to re-import these.`,
+              { duration: 6000 }
+            );
+          }, 3000);
+        }
       }
       
       await checkLastImport();
@@ -413,6 +432,8 @@ const StravaIntegration = () => {
     let imported = 0;
     let skipped = 0;
     let replaced = 0;
+    let gpsFailures = []; // Track activities that failed GPS import
+    let partialGPS = []; // Track activities with incomplete GPS
     const baseProgress = importType === 'all' ? 30 : 30; // Account for fetching progress
 
     for (let i = 0; i < cyclingActivities.length; i++) {
@@ -468,36 +489,143 @@ const StravaIntegration = () => {
           start_date: activity.start_date
         });
 
-        // Fetch GPS track points if available
+        // Fetch GPS track points if available WITH RETRY LOGIC
         let trackPoints = [];
         let actualHasGpsData = false;
-        try {
-          if (activity.start_latlng && activity.start_latlng.length === 2) {
-            console.log(`📍 Fetching GPS streams for activity ${activity.id}...`);
-            const streams = await stravaService.getActivityStreams(activity.id, ['latlng', 'time', 'altitude']);
+        let gpsImportStatus = 'no_gps'; // no_gps, partial, complete, failed
 
-            if (streams && streams.latlng && streams.latlng.data && streams.latlng.data.length > 0) {
-              console.log(`✅ Got ${streams.latlng.data.length} GPS points for activity ${activity.id}`);
+        // Check if activity should have GPS data
+        const shouldHaveGPS = activity.start_latlng &&
+                             activity.start_latlng.length === 2 &&
+                             activity.type !== 'VirtualRide' && // Virtual rides don't have real GPS
+                             activity.distance > 100; // Activities > 100m should have GPS
 
-              // Convert Strava streams to our track points format
-              trackPoints = streams.latlng.data.map((latLng, index) => ({
-                latitude: latLng[0],
-                longitude: latLng[1],
-                elevation: streams.altitude?.data?.[index] || null,
-                time_seconds: streams.time?.data?.[index] || index,
-                point_index: index
-              }));
+        if (shouldHaveGPS) {
+          console.log(`📍 Fetching GPS streams for activity ${activity.id}...`);
 
-              actualHasGpsData = true;
-            } else {
-              console.log(`⚠️ No GPS data in streams for activity ${activity.id}`);
+          // Retry logic for GPS stream fetching
+          const maxRetries = 3;
+          let retryCount = 0;
+          let lastError = null;
+
+          while (retryCount < maxRetries && !actualHasGpsData) {
+            try {
+              if (retryCount > 0) {
+                console.log(`🔄 Retry ${retryCount}/${maxRetries} for GPS streams of activity ${activity.id}`);
+                // Exponential backoff: 1s, 2s, 4s
+                await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+              }
+
+              const streams = await stravaService.getActivityStreams(
+                activity.id,
+                ['latlng', 'time', 'altitude', 'distance']
+              );
+
+              if (streams && streams.latlng && streams.latlng.data && streams.latlng.data.length > 0) {
+                const pointCount = streams.latlng.data.length;
+                console.log(`✅ Got ${pointCount} GPS points for activity ${activity.id}`);
+
+                // VALIDATION: Check if we got reasonable GPS data
+                const expectedPointCount = Math.floor(activity.moving_time / 5); // ~1 point per 5 seconds
+                const pointRatio = pointCount / expectedPointCount;
+
+                if (pointCount < 10) {
+                  console.warn(`⚠️ Very few GPS points (${pointCount}) for activity ${activity.id} - may be incomplete`);
+                  gpsImportStatus = 'partial';
+                } else if (pointRatio < 0.5) {
+                  console.warn(`⚠️ GPS point count (${pointCount}) seems low for duration (${activity.moving_time}s) - expected ~${expectedPointCount}`);
+                  gpsImportStatus = 'partial';
+                } else {
+                  gpsImportStatus = 'complete';
+                }
+
+                // Convert Strava streams to our track points format
+                trackPoints = streams.latlng.data.map((latLng, index) => ({
+                  latitude: latLng[0],
+                  longitude: latLng[1],
+                  elevation: streams.altitude?.data?.[index] || null,
+                  time_seconds: streams.time?.data?.[index] || index,
+                  distance_m: streams.distance?.data?.[index] || null,
+                  point_index: index
+                }));
+
+                // VALIDATION: Check for GPS coordinate validity
+                const invalidPoints = trackPoints.filter(p =>
+                  !p.latitude || !p.longitude ||
+                  Math.abs(p.latitude) > 90 ||
+                  Math.abs(p.longitude) > 180
+                );
+
+                if (invalidPoints.length > 0) {
+                  console.warn(`⚠️ Found ${invalidPoints.length} invalid GPS points in activity ${activity.id}`);
+                  // Filter out invalid points
+                  trackPoints = trackPoints.filter(p =>
+                    p.latitude && p.longitude &&
+                    Math.abs(p.latitude) <= 90 &&
+                    Math.abs(p.longitude) <= 180
+                  );
+                }
+
+                actualHasGpsData = true;
+                console.log(`✅ GPS validation passed for activity ${activity.id}: ${gpsImportStatus}`);
+                break; // Success, exit retry loop
+              } else {
+                console.warn(`⚠️ No GPS data in streams for activity ${activity.id}`);
+                gpsImportStatus = 'no_gps';
+                lastError = 'Empty streams response';
+              }
+
+            } catch (streamError) {
+              lastError = streamError;
+              console.warn(`❌ Failed to fetch GPS streams for activity ${activity.id} (attempt ${retryCount + 1}/${maxRetries}):`, streamError.message);
+              retryCount++;
+
+              // Don't retry on certain errors
+              if (streamError.message.includes('404') || streamError.message.includes('not found')) {
+                console.log(`⚠️ Activity ${activity.id} has no GPS streams available from Strava`);
+                gpsImportStatus = 'no_gps';
+                break;
+              }
             }
-          } else {
-            console.log(`⚠️ Activity ${activity.id} has no start coordinates, skipping GPS fetch`);
+
+            retryCount++;
           }
-        } catch (streamError) {
-          console.warn(`Failed to fetch GPS streams for activity ${activity.id}:`, streamError.message);
-          // Continue with import even if streams fail
+
+          // Log final status
+          if (!actualHasGpsData && shouldHaveGPS) {
+            gpsImportStatus = 'failed';
+            console.error(`❌ FAILED to import GPS data for activity ${activity.id} after ${maxRetries} attempts`);
+            console.error(`   Activity: ${activity.name}`);
+            console.error(`   Distance: ${(activity.distance / 1000).toFixed(2)} km`);
+            console.error(`   Duration: ${Math.floor(activity.moving_time / 60)} minutes`);
+            console.error(`   Last error: ${lastError?.message || 'Unknown'}`);
+
+            // Store failed activity ID for later retry
+            toast.error(`Failed to import GPS data for: ${activity.name}`, { duration: 5000 });
+          }
+        } else {
+          if (activity.type === 'VirtualRide') {
+            console.log(`🏠 Virtual ride detected for activity ${activity.id} - no real GPS data expected`);
+            gpsImportStatus = 'no_gps';
+          } else {
+            console.log(`⚠️ Activity ${activity.id} has no start coordinates or is too short, skipping GPS fetch`);
+            gpsImportStatus = 'no_gps';
+          }
+        }
+
+        // Track GPS import issues
+        if (gpsImportStatus === 'failed') {
+          gpsFailures.push({
+            id: activity.id,
+            name: activity.name,
+            distance_km: (activity.distance / 1000).toFixed(2)
+          });
+        } else if (gpsImportStatus === 'partial') {
+          partialGPS.push({
+            id: activity.id,
+            name: activity.name,
+            points: trackPoints.length
+          });
         }
 
         // Prepare data for database insertion with new schema
@@ -546,6 +674,13 @@ const StravaIntegration = () => {
           track_points_count: trackPoints.length,
           has_heart_rate_data: !!convertedActivity.average_heartrate,
           has_power_data: !!convertedActivity.average_watts,
+
+          // Store GPS import status in analysis_results for tracking
+          analysis_results: {
+            gps_import_status: gpsImportStatus,
+            gps_import_timestamp: new Date().toISOString(),
+            expected_gps: shouldHaveGPS
+          },
           
           // Timing
           recorded_at: convertedActivity.start_date,
@@ -660,8 +795,30 @@ const StravaIntegration = () => {
       // Longer delay to avoid rate limiting (streams requests are more intensive)
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    
-    return { imported, skipped, replaced };
+
+    // Log GPS import summary
+    if (gpsFailures.length > 0 || partialGPS.length > 0) {
+      console.log('\n📊 GPS IMPORT SUMMARY:');
+      console.log(`   ✅ Complete GPS: ${imported + replaced - gpsFailures.length - partialGPS.length}`);
+      console.log(`   ⚠️  Partial GPS: ${partialGPS.length}`);
+      console.log(`   ❌ Failed GPS: ${gpsFailures.length}`);
+
+      if (gpsFailures.length > 0) {
+        console.log('\n❌ Activities with failed GPS imports:');
+        gpsFailures.forEach(act => {
+          console.log(`   - ${act.name} (${act.distance_km} km) - ID: ${act.id}`);
+        });
+      }
+
+      if (partialGPS.length > 0) {
+        console.log('\n⚠️  Activities with partial GPS data:');
+        partialGPS.forEach(act => {
+          console.log(`   - ${act.name} (${act.points} points) - ID: ${act.id}`);
+        });
+      }
+    }
+
+    return { imported, skipped, replaced, gpsFailures, partialGPS };
   };
 
   if (loading) {
