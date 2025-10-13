@@ -92,12 +92,14 @@ const TrainingDashboard = () => {
       const daysAgo = new Date();
       daysAgo.setDate(daysAgo.getDate() - 90);
 
+      // Load only essential fields to avoid memory issues and use correct field names
       const { data: rides } = await supabase
         .from('routes')
-        .select('*')
+        .select('id, name, distance_km, elevation_gain_m, duration_seconds, recorded_at, created_at, route_type, training_stress_score, has_power_data')
         .eq('user_id', user.id)
         .gte('recorded_at', daysAgo.toISOString())
-        .order('recorded_at', { ascending: false });
+        .order('recorded_at', { ascending: false })
+        .limit(1000); // Limit to recent 1000 rides for performance
 
       if (rides) {
         setRecentRides(rides);
@@ -155,13 +157,19 @@ const TrainingDashboard = () => {
 
   // Helper: Estimate TSS from ride data
   const estimateTSSFromRide = (ride) => {
-    const distance = ride.distance || 0;
-    const elevation = ride.total_elevation_gain || 0;
-    const duration = ride.duration || 60; // Default 60 min if not available
+    // If we have actual training_stress_score, use it
+    if (ride.training_stress_score && ride.training_stress_score > 0) {
+      return ride.training_stress_score;
+    }
+
+    // Otherwise estimate from ride metrics using correct field names
+    const distanceKm = ride.distance_km || 0;
+    const elevationM = ride.elevation_gain_m || 0;
+    const durationSeconds = ride.duration_seconds || 3600; // Default 1 hour if not available
 
     // Simple estimation: 50 TSS/hour base + elevation factor
-    const baseTSS = (duration / 60) * 50;
-    const elevationFactor = (elevation / 300) * 10;
+    const baseTSS = (durationSeconds / 3600) * 50;
+    const elevationFactor = (elevationM / 300) * 10;
     return Math.round(baseTSS + elevationFactor);
   };
 

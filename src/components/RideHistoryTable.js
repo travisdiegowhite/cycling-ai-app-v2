@@ -40,12 +40,13 @@ const RideHistoryTable = ({ rides }) => {
 
   // Estimate TSS (simple approximation)
   const estimateTSS = (ride) => {
-    const distance = ride.distance || 0;
-    const elevation = ride.total_elevation_gain || 0;
-    const duration = ride.duration || 3600; // Default 1 hour
+    // Use correct database field names
+    const distanceKm = ride.distance_km || 0;
+    const elevationM = ride.elevation_gain_m || 0;
+    const durationSeconds = ride.duration_seconds || 3600; // Default 1 hour
 
-    const baseTSS = (duration / 3600) * 50;
-    const elevationFactor = (elevation / 300) * 10;
+    const baseTSS = (durationSeconds / 3600) * 50;
+    const elevationFactor = (elevationM / 300) * 10;
     return Math.round(baseTSS + elevationFactor);
   };
 
@@ -99,13 +100,13 @@ const RideHistoryTable = ({ rides }) => {
                   <Text size="sm" fw={500}>{ride.name || 'Untitled Route'}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{formatDistance(ride.distance || 0)}</Text>
+                  <Text size="sm">{formatDistance(ride.distance_km || 0)}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">+{formatElevation(ride.total_elevation_gain || 0)}</Text>
+                  <Text size="sm">+{formatElevation(ride.elevation_gain_m || 0)}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{formatDuration(ride.duration)}</Text>
+                  <Text size="sm">{formatDuration(ride.duration_seconds)}</Text>
                 </Table.Td>
                 <Table.Td>
                   <Badge color="blue" variant="light" size="sm">
