@@ -52,7 +52,6 @@ import TrainingLoadChart from './TrainingLoadChart';
 import RideHistoryTable from './RideHistoryTable';
 import TrainingCalendar from './TrainingCalendar';
 import { analyzeRidingPatterns } from '../utils/rideAnalysis';
-import ActivityHeatmap from './ActivityHeatmap';
 import { useUnits } from '../utils/units';
 
 /**
@@ -443,14 +442,6 @@ const TrainingDashboard = () => {
                   </>
                 )}
               </Card>
-
-              {/* Activity Heatmap */}
-              {allRoutes && allRoutes.length > 0 && (
-                <Card withBorder>
-                  <Title order={4} mb="md">Activity Heatmap</Title>
-                  <ActivityHeatmap routes={allRoutes} formatDistance={formatDistance} />
-                </Card>
-              )}
             </Stack>
           ) : (
             <Card withBorder p="xl">
