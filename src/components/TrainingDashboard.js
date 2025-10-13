@@ -19,6 +19,7 @@ import {
   SimpleGrid,
   ActionIcon,
   Tooltip,
+  Center,
 } from '@mantine/core';
 import {
   TrendingUp,
