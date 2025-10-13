@@ -450,6 +450,53 @@ const TrainingDashboard = () => {
             </Center>
           ) : ridingPatterns ? (
             <Stack gap="lg">
+              {/* Key Metrics Grid */}
+              <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+                <Card withBorder>
+                  <Stack gap="xs">
+                    <ThemeIcon size={38} variant="light" color="blue">
+                      <RouteIcon size={20} />
+                    </ThemeIcon>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Rides</Text>
+                    <Text fw={700} size="xl">{stats.totalRoutes}</Text>
+                    <Text size="xs" c="blue">{stats.stravaRoutes} from Strava</Text>
+                  </Stack>
+                </Card>
+
+                <Card withBorder>
+                  <Stack gap="xs">
+                    <ThemeIcon size={38} variant="light" color="green">
+                      <MapPin size={20} />
+                    </ThemeIcon>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Distance</Text>
+                    <Text fw={700} size="xl">{formatDistance(stats.totalDistance)}</Text>
+                    <Text size="xs" c="green">Avg: {formatDistance(stats.avgDistance)}</Text>
+                  </Stack>
+                </Card>
+
+                <Card withBorder>
+                  <Stack gap="xs">
+                    <ThemeIcon size={38} variant="light" color="orange">
+                      <Mountain size={20} />
+                    </ThemeIcon>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Elevation</Text>
+                    <Text fw={700} size="xl">{formatElevation(stats.totalElevation)}</Text>
+                    <Text size="xs" c="orange">Max: {formatElevation(stats.highestElevation)}</Text>
+                  </Stack>
+                </Card>
+
+                <Card withBorder>
+                  <Stack gap="xs">
+                    <ThemeIcon size={38} variant="light" color="violet">
+                      <Clock size={20} />
+                    </ThemeIcon>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Time</Text>
+                    <Text fw={700} size="xl">{formatDuration(stats.totalTime)}</Text>
+                    <Text size="xs" c="violet">Longest: {formatDistance(stats.longestRide)}</Text>
+                  </Stack>
+                </Card>
+              </SimpleGrid>
+
               {/* Riding Intelligence Card */}
               <Card withBorder>
                 <Group justify="space-between" mb="md">
@@ -505,55 +552,217 @@ const TrainingDashboard = () => {
 
         {/* Performance Tab */}
         <Tabs.Panel value="performance" pt="md">
-          <Stack gap="lg">
-            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-              <Card withBorder>
-                <Stack gap="xs">
-                  <Text size="sm" c="dimmed">Average Speed</Text>
-                  <Text size="xl" fw={700}>
-                    {allRoutes.length > 0
-                      ? formatSpeed(allRoutes.reduce((sum, r) => sum + (r.average_speed || 0), 0) / allRoutes.length)
-                      : '-'}
-                  </Text>
-                </Stack>
-              </Card>
-
-              <Card withBorder>
-                <Stack gap="xs">
-                  <Text size="sm" c="dimmed">Avg Elevation/Ride</Text>
-                  <Text size="xl" fw={700}>
-                    {allRoutes.length > 0
-                      ? formatElevation(allRoutes.reduce((sum, r) => sum + (r.elevation_gain_m || 0), 0) / allRoutes.length)
-                      : '-'}
-                  </Text>
-                </Stack>
-              </Card>
-
-              <Card withBorder>
-                <Stack gap="xs">
-                  <Text size="sm" c="dimmed">Avg Distance/Ride</Text>
-                  <Text size="xl" fw={700}>
-                    {allRoutes.length > 0
-                      ? formatDistance(allRoutes.reduce((sum, r) => sum + (r.distance_km || 0), 0) / allRoutes.length)
-                      : '-'}
-                  </Text>
-                </Stack>
-              </Card>
-            </SimpleGrid>
-
-            <Card withBorder>
-              <Title order={4} mb="md">Performance Metrics</Title>
-              <Text c="dimmed">Detailed performance analytics coming soon</Text>
+          {stats.stravaRoutes === 0 ? (
+            <Card withBorder p="xl">
+              <Stack align="center">
+                <Zap size={48} color="gray" />
+                <Title order={4}>Enhanced Performance Data Unavailable</Title>
+                <Text c="dimmed" ta="center">
+                  Import rides from Strava with performance data (heart rate, power, speed) to unlock detailed analysis and advanced metrics.
+                </Text>
+              </Stack>
             </Card>
-          </Stack>
+          ) : (
+            <Stack gap="lg">
+              {/* Performance Overview Cards */}
+              <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="md">
+                {stats.avgSpeed && (
+                  <Card withBorder>
+                    <Stack gap="xs">
+                      <ThemeIcon size={38} variant="light" color="blue">
+                        <TrendingUp size={20} />
+                      </ThemeIcon>
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Avg Speed</Text>
+                      <Text fw={700} size="xl">{formatSpeed(stats.avgSpeed)}</Text>
+                      <Text size="xs" c="blue">{stats.stravaRoutes} rides</Text>
+                    </Stack>
+                  </Card>
+                )}
+
+                {stats.avgHeartRate && (
+                  <Card withBorder>
+                    <Stack gap="xs">
+                      <ThemeIcon size={38} variant="light" color="red">
+                        <Heart size={20} />
+                      </ThemeIcon>
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Avg Heart Rate</Text>
+                      <Text fw={700} size="xl">{Math.round(stats.avgHeartRate)} bpm</Text>
+                      <Text size="xs" c="red">Cardiovascular data</Text>
+                    </Stack>
+                  </Card>
+                )}
+
+                {stats.avgPower && (
+                  <Card withBorder>
+                    <Stack gap="xs">
+                      <ThemeIcon size={38} variant="light" color="orange">
+                        <Zap size={20} />
+                      </ThemeIcon>
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Avg Power</Text>
+                      <Text fw={700} size="xl">{Math.round(stats.avgPower)} W</Text>
+                      {stats.maxPower && (
+                        <Text size="xs" c="orange">Max: {Math.round(stats.maxPower)} W</Text>
+                      )}
+                    </Stack>
+                  </Card>
+                )}
+
+                <Card withBorder>
+                  <Stack gap="xs">
+                    <ThemeIcon size={38} variant="light" color="green">
+                      <Activity size={20} />
+                    </ThemeIcon>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Avg Distance</Text>
+                    <Text fw={700} size="xl">{formatDistance(stats.avgDistance)}</Text>
+                    <Text size="xs" c="green">Per ride</Text>
+                  </Stack>
+                </Card>
+              </SimpleGrid>
+
+              {/* Detailed Metrics Card */}
+              <Card withBorder>
+                <Title order={4} mb="md">Performance Details</Title>
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                  <Stack gap="sm">
+                    <Group justify="space-between">
+                      <Text size="sm">Total Routes</Text>
+                      <Text fw={600}>{stats.totalRoutes}</Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm">With Strava Data</Text>
+                      <Text fw={600}>{stats.stravaRoutes}</Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm">Longest Ride</Text>
+                      <Text fw={600}>{formatDistance(stats.longestRide)}</Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm">Highest Climb</Text>
+                      <Text fw={600}>{formatElevation(stats.highestElevation)}</Text>
+                    </Group>
+                  </Stack>
+
+                  <Stack gap="sm">
+                    <Group justify="space-between">
+                      <Text size="sm">Total Distance</Text>
+                      <Text fw={600}>{formatDistance(stats.totalDistance)}</Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm">Total Elevation</Text>
+                      <Text fw={600}>{formatElevation(stats.totalElevation)}</Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm">Total Time</Text>
+                      <Text fw={600}>{formatDuration(stats.totalTime)}</Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm">Avg Elevation/Ride</Text>
+                      <Text fw={600}>{formatElevation(stats.totalElevation / stats.totalRoutes)}</Text>
+                    </Group>
+                  </Stack>
+                </SimpleGrid>
+              </Card>
+            </Stack>
+          )}
         </Tabs.Panel>
 
         {/* Trends Tab */}
         <Tabs.Panel value="trends" pt="md">
-          <Card withBorder>
-            <Title order={4} mb="md">Training Trends</Title>
-            <Text c="dimmed">Trend analysis visualization coming soon</Text>
-          </Card>
+          <Stack gap="lg">
+            {/* Summary Cards */}
+            <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+              <Card withBorder>
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed" tt="uppercase">Weekly Avg</Text>
+                  <Text fw={700} size="lg">{formatDistance(stats.totalDistance / Math.max(1, allRoutes.length / 7))}</Text>
+                  <Text size="xs" c="dimmed">Distance</Text>
+                </Stack>
+              </Card>
+
+              <Card withBorder>
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed" tt="uppercase">Monthly Avg</Text>
+                  <Text fw={700} size="lg">{formatDistance(stats.totalDistance / Math.max(1, allRoutes.length / 30))}</Text>
+                  <Text size="xs" c="dimmed">Distance</Text>
+                </Stack>
+              </Card>
+
+              <Card withBorder>
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed" tt="uppercase">Rides/Week</Text>
+                  <Text fw={700} size="lg">{(allRoutes.length / Math.max(1, allRoutes.length / 7)).toFixed(1)}</Text>
+                  <Text size="xs" c="dimmed">Frequency</Text>
+                </Stack>
+              </Card>
+
+              <Card withBorder>
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed" tt="uppercase">Total Weeks</Text>
+                  <Text fw={700} size="lg">{Math.ceil(allRoutes.length / 7)}</Text>
+                  <Text size="xs" c="dimmed">Active</Text>
+                </Stack>
+              </Card>
+            </SimpleGrid>
+
+            {/* Trends Overview */}
+            <Card withBorder>
+              <Title order={4} mb="md">Riding Trends</Title>
+              <Stack gap="md">
+                <div>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm">Total Distance Progress</Text>
+                    <Text fw={600}>{formatDistance(stats.totalDistance)}</Text>
+                  </Group>
+                  <Progress
+                    value={Math.min(100, (stats.totalDistance / 10000) * 100)}
+                    color="blue"
+                    size="lg"
+                  />
+                  <Text size="xs" c="dimmed" mt="xs">
+                    {Math.round((stats.totalDistance / 10000) * 100)}% towards 10,000 km goal
+                  </Text>
+                </div>
+
+                <div>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm">Total Elevation Progress</Text>
+                    <Text fw={600}>{formatElevation(stats.totalElevation)}</Text>
+                  </Group>
+                  <Progress
+                    value={Math.min(100, (stats.totalElevation / 100000) * 100)}
+                    color="orange"
+                    size="lg"
+                  />
+                  <Text size="xs" c="dimmed" mt="xs">
+                    {Math.round((stats.totalElevation / 100000) * 100)}% towards 100,000 m goal
+                  </Text>
+                </div>
+
+                <div>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm">Ride Count Progress</Text>
+                    <Text fw={600}>{stats.totalRoutes} rides</Text>
+                  </Group>
+                  <Progress
+                    value={Math.min(100, (stats.totalRoutes / 1000) * 100)}
+                    color="green"
+                    size="lg"
+                  />
+                  <Text size="xs" c="dimmed" mt="xs">
+                    {Math.round((stats.totalRoutes / 1000) * 100)}% towards 1,000 rides goal
+                  </Text>
+                </div>
+              </Stack>
+            </Card>
+
+            {/* Monthly breakdown placeholder */}
+            <Card withBorder>
+              <Title order={4} mb="md">Monthly Breakdown</Title>
+              <Text c="dimmed" ta="center" py="xl">
+                Detailed monthly trend charts coming soon with visualizations for distance, elevation, and ride frequency over time.
+              </Text>
+            </Card>
+          </Stack>
         </Tabs.Panel>
 
         {/* Ride History Tab */}
