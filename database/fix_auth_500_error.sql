@@ -1,4 +1,4 @@
--- Fix for "Database error querying schema" 500 error
+--- Fix for "Database error querying schema" 500 error
 -- This error usually means auth.users triggers are failing due to missing tables or functions
 
 -- =============================================
