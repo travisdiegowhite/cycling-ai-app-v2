@@ -1,7 +1,7 @@
 # Demo Account & Beta Launch Setup
 
 ## Overview
-This document explains the demo account and beta signup system for tribos.studio, with a planned beta launch on **December 1, 2024**.
+This document explains the demo account and beta signup system for tribos.studio, with a planned beta launch on **December 1, 2025**.
 
 ## Features Implemented
 
@@ -19,7 +19,7 @@ A fully functional demo account that allows anyone to try the platform without s
 - No signup required
 
 ### 2. Beta Signup System ✅
-A waitlist/signup system for the December 1, 2024 beta launch.
+A waitlist/signup system for the December 1, 2025 beta launch.
 
 **Components:**
 - `BetaSignup.js` - Modal component for beta signups
@@ -232,7 +232,7 @@ Submits form
     ↓
 Stored in beta_signups table
     ↓
-Success message: "You're In! Beta launches Dec 1, 2024"
+Success message: "You're In! Beta launches Dec 1, 2025"
     ↓
 User receives confirmation (optional - requires email setup)
 ```
@@ -318,7 +318,7 @@ Deno.serve(async (req) => {
 
 ### Option 2: Manual Launch Email
 
-On December 1, 2024:
+On December 1, 2025:
 
 1. Export email list from database
 2. Use Mailchimp/SendGrid/similar
@@ -336,7 +336,7 @@ On December 1, 2024:
 1. **Hero Section:**
    - Replaced "Get Started Free" with "Try Demo"
    - Added "Join Beta" secondary button
-   - Added launch date badge: "Beta Launch: December 1, 2024"
+   - Added launch date badge: "Beta Launch: December 1, 2025"
    - Updated subtext to emphasize demo access
 
 2. **Benefits Section:**
@@ -380,7 +380,7 @@ On December 1, 2024:
    - Feature highlights
    - Launch reminder
 
-### Launch Day (Dec 1, 2024)
+### Launch Day (Dec 1, 2025)
 
 1. Send beta access emails
 2. Social media announcement
@@ -508,7 +508,7 @@ Paid Conversions
 3. **Add sample data** to demo account (Step 3 above)
 4. **Test both flows** end-to-end
 5. **Set up analytics** to track metrics
-6. **Plan launch campaign** for Dec 1, 2024
+6. **Plan launch campaign** for Dec 1, 2025
 7. **Start collecting signups** immediately
 
 ## Support
@@ -528,7 +528,7 @@ All code has been written and is ready for testing. Follow the setup instruction
 **Timeline:**
 - **Now:** Deploy and start collecting beta signups
 - **Oct 2024 - Dec 2024:** Build, test, gather waitlist
-- **Dec 1, 2024:** Beta Launch! 🚀
+- **Dec 1, 2025:** Beta Launch! 🚀
 
 ---
 

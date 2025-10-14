@@ -98,7 +98,7 @@ const BetaSignup = ({ opened, onClose }) => {
             <Alert color="teal" variant="light">
               <Stack gap="xs">
                 <Text size="sm" fw={600}>
-                  Beta Launch: December 1, 2024
+                  Beta Launch: December 1, 2025
                 </Text>
                 <Text size="sm">
                   Be among the first to experience AI-powered cycling route intelligence.
@@ -188,7 +188,7 @@ const BetaSignup = ({ opened, onClose }) => {
                   <Calendar size={14} />
                 </ThemeIcon>
                 <Text size="sm" fw={600}>
-                  Beta Launch: December 1, 2024
+                  Beta Launch: December 1, 2025
                 </Text>
               </Group>
               <Text size="sm" c="dimmed" pl={32}>

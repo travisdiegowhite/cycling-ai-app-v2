@@ -1,5 +1,5 @@
 -- Beta Signups Schema
--- Stores beta launch signups for December 1, 2024
+-- Stores beta launch signups for December 1, 2025
 
 -- Create beta_signups table
 CREATE TABLE IF NOT EXISTS beta_signups (
@@ -57,7 +57,7 @@ GRANT INSERT ON beta_signups TO anon;
 GRANT ALL ON beta_signups TO service_role;
 
 -- Add comments
-COMMENT ON TABLE beta_signups IS 'Beta launch signups for December 1, 2024';
+COMMENT ON TABLE beta_signups IS 'Beta launch signups for December 1, 2025';
 COMMENT ON COLUMN beta_signups.name IS 'User full name';
 COMMENT ON COLUMN beta_signups.email IS 'User email address (unique)';
 COMMENT ON COLUMN beta_signups.cycling_experience IS 'User cycling background and experience';
