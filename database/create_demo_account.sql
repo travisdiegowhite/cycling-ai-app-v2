@@ -1,61 +1,46 @@
 -- Create Demo Account for tribos.studio
--- Run this in Supabase SQL Editor to create the demo account
-
--- Demo credentials:
+-- IMPORTANT: This SQL won't work directly. Use the Supabase Dashboard instead!
+--
+-- Go to: Supabase Dashboard → Authentication → Users → Add User
+-- Then click "Create new user" and enter:
+--   Email: demo@tribos.studio
+--   Password: demo2024tribos
+--   ✅ Auto Confirm User: YES (IMPORTANT!)
+--
+-- Alternatively, use the Supabase Admin API or create via your app's signup.
+--
+-- Demo credentials (for reference):
 -- Email: demo@tribos.studio
 -- Password: demo2024tribos
 
--- Insert demo user into auth.users table
-INSERT INTO auth.users (
-  instance_id,
+-- To verify if demo account exists, run:
+SELECT
   id,
-  aud,
-  role,
   email,
-  encrypted_password,
   email_confirmed_at,
   created_at,
-  updated_at,
-  raw_app_meta_data,
-  raw_user_meta_data,
-  is_super_admin,
   last_sign_in_at
-)
-SELECT
-  '00000000-0000-0000-0000-000000000000',
-  gen_random_uuid(),
-  'authenticated',
-  'authenticated',
-  'demo@tribos.studio',
-  crypt('demo2024tribos', gen_salt('bf')),
-  now(),
-  now(),
-  now(),
-  '{"provider": "email", "providers": ["email"]}'::jsonb,
-  '{"name": "Demo User"}'::jsonb,
-  false,
-  now()
-WHERE NOT EXISTS (
-  SELECT 1 FROM auth.users WHERE email = 'demo@tribos.studio'
-);
-
--- Verify the demo account was created
-SELECT
-  id,
-  email,
-  email_confirmed_at,
-  created_at
 FROM auth.users
 WHERE email = 'demo@tribos.studio';
 
--- Success message
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM auth.users WHERE email = 'demo@tribos.studio') THEN
-    RAISE NOTICE '✅ Demo account created successfully!';
-    RAISE NOTICE 'Email: demo@tribos.studio';
-    RAISE NOTICE 'Password: demo2024tribos';
-  ELSE
-    RAISE NOTICE '❌ Failed to create demo account';
-  END IF;
-END $$;
+-- If you see a row with email_confirmed_at populated, the account is ready!
+-- If no rows, you need to create it via Dashboard (recommended) or use method below:
+
+/*
+ALTERNATIVE: Create via Edge Function (Advanced)
+Create a Supabase Edge Function that calls admin.createUser():
+
+const { createClient } = require('@supabase/supabase-js')
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
+
+await supabase.auth.admin.createUser({
+  email: 'demo@tribos.studio',
+  password: 'demo2024tribos',
+  email_confirm: true,
+  user_metadata: { name: 'Demo User' }
+})
+*/
