@@ -52,16 +52,24 @@ const Auth = () => {
   };
 
   const handleDemoLogin = async () => {
+    console.log('🎯 Demo login initiated');
     setError(null);
     setLoading(true);
     setIsDemoLogin(true);
 
     try {
+      console.log('🔐 Attempting to sign in with:', DEMO_EMAIL);
       const { error } = await signIn(DEMO_EMAIL, DEMO_PASSWORD);
-      if (error) throw error;
+
+      if (error) {
+        console.error('❌ Demo login error:', error);
+        throw error;
+      }
+
+      console.log('✅ Demo login successful!');
     } catch (error) {
-      setError('Failed to sign in to demo account. Please try again.');
-      console.error('Demo login error:', error);
+      console.error('❌ Demo login failed:', error);
+      setError(`Failed to sign in to demo account: ${error.message || 'Please ensure the demo account exists in Supabase.'}`);
     } finally {
       setLoading(false);
       setIsDemoLogin(false);

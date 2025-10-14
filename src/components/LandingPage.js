@@ -41,6 +41,7 @@ import BetaSignup from './BetaSignup';
 
 const LandingPage = ({ onGetStarted, onTryDemo }) => {
   const [betaModalOpened, setBetaModalOpened] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const features = [
     {
       icon: Brain,
@@ -126,13 +127,21 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
             <Group spacing="md" mt="xl">
               <Button
                 size="lg"
-                onClick={onTryDemo}
-                leftSection={<Play size={20} />}
+                onClick={async () => {
+                  setDemoLoading(true);
+                  try {
+                    await onTryDemo();
+                  } finally {
+                    setDemoLoading(false);
+                  }
+                }}
+                loading={demoLoading}
+                leftSection={!demoLoading && <Play size={20} />}
                 style={{
                   background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
                 }}
               >
-                Try Demo
+                {demoLoading ? 'Signing in...' : 'Try Demo'}
               </Button>
               <Button
                 size="lg"
