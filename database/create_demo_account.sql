@@ -14,7 +14,6 @@ INSERT INTO auth.users (
   email,
   encrypted_password,
   email_confirmed_at,
-  confirmed_at,
   created_at,
   updated_at,
   raw_app_meta_data,
@@ -32,9 +31,8 @@ SELECT
   now(),
   now(),
   now(),
-  now(),
-  '{"provider": "email", "providers": ["email"]}',
-  '{"name": "Demo User"}',
+  '{"provider": "email", "providers": ["email"]}'::jsonb,
+  '{"name": "Demo User"}'::jsonb,
   false,
   now()
 WHERE NOT EXISTS (
