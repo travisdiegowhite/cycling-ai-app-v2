@@ -59,17 +59,40 @@ const Auth = () => {
 
     try {
       console.log('🔐 Attempting to sign in with:', DEMO_EMAIL);
-      const { error } = await signIn(DEMO_EMAIL, DEMO_PASSWORD);
+      console.log('Supabase URL:', process.env.REACT_APP_SUPABASE_URL);
+
+      const { data, error } = await signIn(DEMO_EMAIL, DEMO_PASSWORD);
 
       if (error) {
         console.error('❌ Demo login error:', error);
+        console.error('Error details:', {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+          code: error.code
+        });
         throw error;
       }
 
-      console.log('✅ Demo login successful!');
+      console.log('✅ Demo login successful!', data);
     } catch (error) {
       console.error('❌ Demo login failed:', error);
-      setError(`Failed to sign in to demo account: ${error.message || 'Please ensure the demo account exists in Supabase.'}`);
+
+      // Provide specific error message based on error type
+      let errorMessage = 'Failed to sign in to demo account. ';
+
+      if (error.message && error.message.includes('Database error')) {
+        errorMessage += 'There is a database configuration issue in Supabase. Please check:\n' +
+                       '1. Run fix_auth_500_error.sql in Supabase SQL Editor\n' +
+                       '2. Check for custom triggers on auth.users table\n' +
+                       '3. Verify all referenced tables exist';
+      } else if (error.status === 400) {
+        errorMessage += 'Invalid credentials or user not found.';
+      } else {
+        errorMessage += error.message || 'Unknown error occurred.';
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
       setIsDemoLogin(false);
