@@ -26,6 +26,7 @@ import TrainingPlanBuilder from './components/TrainingPlanBuilder';
 import TrainingPlanView from './components/TrainingPlanView';
 import HelpCenter from './components/HelpCenter';
 import Onboarding from './components/Onboarding';
+import DemoModeBanner from './components/DemoModeBanner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UnitPreferencesProvider } from './utils/units';
 import { theme } from './theme';
@@ -110,9 +111,12 @@ const AppContent = () => {
   };
 
   return (
-    <AppLayout activePage={activePage} setActivePage={setActivePage}>
-      {renderContent()}
-    </AppLayout>
+    <>
+      <DemoModeBanner />
+      <AppLayout activePage={activePage} setActivePage={setActivePage}>
+        {renderContent()}
+      </AppLayout>
+    </>
   );
 };
 

@@ -15,6 +15,7 @@ import {
 import { Route, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import LandingPage from './LandingPage';
+import { enableDemoMode } from '../utils/demoData';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
@@ -51,52 +52,18 @@ const Auth = () => {
     }
   };
 
-  const handleDemoLogin = async () => {
-    console.log('🎯 Demo login initiated');
-    setError(null);
+  const handleDemoLogin = () => {
+    console.log('🎯 Starting demo mode (no authentication required)');
     setLoading(true);
-    setIsDemoLogin(true);
 
-    try {
-      console.log('🔐 Attempting to sign in with:', DEMO_EMAIL);
-      console.log('Supabase URL:', process.env.REACT_APP_SUPABASE_URL);
+    // Enable demo mode - uses mock data instead of real authentication
+    enableDemoMode();
 
-      const { data, error } = await signIn(DEMO_EMAIL, DEMO_PASSWORD);
-
-      if (error) {
-        console.error('❌ Demo login error:', error);
-        console.error('Error details:', {
-          message: error.message,
-          status: error.status,
-          name: error.name,
-          code: error.code
-        });
-        throw error;
-      }
-
-      console.log('✅ Demo login successful!', data);
-    } catch (error) {
-      console.error('❌ Demo login failed:', error);
-
-      // Provide specific error message based on error type
-      let errorMessage = 'Failed to sign in to demo account. ';
-
-      if (error.message && error.message.includes('Database error')) {
-        errorMessage += 'There is a database configuration issue in Supabase. Please check:\n' +
-                       '1. Run fix_auth_500_error.sql in Supabase SQL Editor\n' +
-                       '2. Check for custom triggers on auth.users table\n' +
-                       '3. Verify all referenced tables exist';
-      } else if (error.status === 400) {
-        errorMessage += 'Invalid credentials or user not found.';
-      } else {
-        errorMessage += error.message || 'Unknown error occurred.';
-      }
-
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-      setIsDemoLogin(false);
-    }
+    // Trigger a page reload to activate demo mode
+    // The AuthContext will detect demo mode and provide mock session
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
   };
 
   // Show landing page by default, auth form when requested

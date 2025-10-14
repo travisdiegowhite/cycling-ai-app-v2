@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../supabase';
+import { isDemoMode, getDemoSession, demoUser, disableDemoMode } from '../utils/demoData';
 
 const AuthContext = createContext({});
 
@@ -8,7 +9,16 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check active sessions and sets the user
+    // Check if in demo mode first
+    if (isDemoMode()) {
+      console.log('✅ Demo mode active - using mock data');
+      const demoSession = getDemoSession();
+      setUser(demoSession?.user ?? null);
+      setLoading(false);
+      return;
+    }
+
+    // Normal authentication flow
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
@@ -37,6 +47,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signOut = () => {
+    // If in demo mode, just disable it and reload
+    if (isDemoMode()) {
+      disableDemoMode();
+      window.location.reload();
+      return Promise.resolve({ error: null });
+    }
+
     return supabase.auth.signOut();
   };
 
@@ -47,6 +64,7 @@ export const AuthProvider = ({ children }) => {
       signUp,
       signIn,
       signOut,
+      isDemoMode: isDemoMode(),
     }}>
       {!loading && children}
     </AuthContext.Provider>
