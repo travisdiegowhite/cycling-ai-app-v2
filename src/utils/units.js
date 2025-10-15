@@ -1,5 +1,5 @@
 // Unit conversion utilities and preferences
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
 
 // Unit conversion functions
 export const convertDistance = {
@@ -77,19 +77,29 @@ export function UnitPreferencesProvider({ children }) {
     localStorage.setItem('useFahrenheit', JSON.stringify(useFahrenheit));
   }, [useFahrenheit]);
 
-  const formatDistanceWithPrefs = (kilometers, precision = 1) => 
-    formatDistance(kilometers, useImperial, precision);
+  // Memoize format functions to prevent infinite re-renders in components
+  const formatDistanceWithPrefs = useCallback((kilometers, precision = 1) =>
+    formatDistance(kilometers, useImperial, precision),
+    [useImperial]
+  );
 
-  const formatElevationWithPrefs = (meters, precision = 0) => 
-    formatElevation(meters, useImperial, precision);
+  const formatElevationWithPrefs = useCallback((meters, precision = 0) =>
+    formatElevation(meters, useImperial, precision),
+    [useImperial]
+  );
 
-  const formatTemperatureWithPrefs = (celsius, precision = 0) => 
-    formatTemperature(celsius, useFahrenheit, precision);
+  const formatTemperatureWithPrefs = useCallback((celsius, precision = 0) =>
+    formatTemperature(celsius, useFahrenheit, precision),
+    [useFahrenheit]
+  );
 
-  const formatSpeedWithPrefs = (kmh, precision = 0) => 
-    formatSpeed(kmh, useImperial, precision);
+  const formatSpeedWithPrefs = useCallback((kmh, precision = 0) =>
+    formatSpeed(kmh, useImperial, precision),
+    [useImperial]
+  );
 
-  const value = {
+  // Memoize the entire context value to prevent unnecessary re-renders
+  const value = useMemo(() => ({
     useImperial,
     setUseImperial,
     useFahrenheit,
@@ -102,7 +112,16 @@ export function UnitPreferencesProvider({ children }) {
     elevationUnit: useImperial ? 'ft' : 'm',
     temperatureUnit: useFahrenheit ? '°F' : '°C',
     speedUnit: useImperial ? 'mph' : 'km/h'
-  };
+  }), [
+    useImperial,
+    setUseImperial,
+    useFahrenheit,
+    setUseFahrenheit,
+    formatDistanceWithPrefs,
+    formatElevationWithPrefs,
+    formatTemperatureWithPrefs,
+    formatSpeedWithPrefs
+  ]);
 
   return (
     <UnitPreferencesContext.Provider value={value}>

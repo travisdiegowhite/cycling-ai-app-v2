@@ -23,6 +23,12 @@ const AIRouteMap = () => {
   const [startLocation, setStartLocation] = useState(null);
   const mapRef = useRef(null);
 
+  // Memoize the routes array to prevent infinite re-renders
+  const routesArray = React.useMemo(() =>
+    selectedRoute ? [selectedRoute] : [],
+    [selectedRoute]
+  );
+
 
   const handleRouteGenerated = (route) => {
     console.log('Route generated with coordinates:', route.coordinates?.length || 0, 'points');
@@ -220,10 +226,10 @@ const AIRouteMap = () => {
 
         {/* Route Profile */}
         {selectedRoute && (
-          <RouteProfile 
+          <RouteProfile
             route={selectedRoute}
             selectedRouteIndex={0}
-            routes={selectedRoute ? [selectedRoute] : []}
+            routes={routesArray}
           />
         )}
       </div>
