@@ -29,6 +29,14 @@ const AIRouteMap = () => {
     [selectedRoute]
   );
 
+  // Memoize the GeoJSON data to prevent re-creating it on every map move
+  const routeGeoJSON = React.useMemo(() => {
+    if (!selectedRoute?.coordinates || selectedRoute.coordinates.length === 0) {
+      return null;
+    }
+    return buildLineString(selectedRoute.coordinates);
+  }, [selectedRoute]); // Use selectedRoute instead of coordinates to avoid reference issues
+
 
   const handleRouteGenerated = (route) => {
     console.log('Route generated with coordinates:', route.coordinates?.length || 0, 'points');
@@ -141,11 +149,11 @@ const AIRouteMap = () => {
           <NavigationControl position="top-right" />
           
           {/* Display generated route */}
-          {selectedRoute && selectedRoute.coordinates && selectedRoute.coordinates.length > 0 && (
-            <Source 
-              id="ai-generated-route" 
-              type="geojson" 
-              data={buildLineString(selectedRoute.coordinates)}
+          {routeGeoJSON && (
+            <Source
+              id="ai-generated-route"
+              type="geojson"
+              data={routeGeoJSON}
             >
               <Layer
                 id="ai-route-line"
