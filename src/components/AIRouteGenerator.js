@@ -278,18 +278,20 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     return () => map.off('click', handleMapClick);
   }, [mapRef, onStartLocationSet, reverseGeocode, fetchWeatherData]);
 
+  // Stabilize externalStartLocation handler to prevent re-render loops
+  const handleExternalLocationChange = useCallback(async (location) => {
+    setStartLocation(location);
+    const address = await reverseGeocode(location);
+    setCurrentAddress(address);
+    await fetchWeatherData(location);
+  }, [reverseGeocode, fetchWeatherData]);
+
   // Handle external location changes (e.g., from map marker dragging)
   useEffect(() => {
-    if (externalStartLocation && externalStartLocation !== startLocation) {
-      setStartLocation(externalStartLocation);
-      // Update address for the new location
-      reverseGeocode(externalStartLocation).then(address => {
-        setCurrentAddress(address);
-      });
-      // Fetch weather for new location
-      fetchWeatherData(externalStartLocation);
+    if (externalStartLocation && JSON.stringify(externalStartLocation) !== JSON.stringify(startLocation)) {
+      handleExternalLocationChange(externalStartLocation);
     }
-  }, [externalStartLocation, startLocation, reverseGeocode, fetchWeatherData]);
+  }, [externalStartLocation, startLocation, handleExternalLocationChange]);
 
   // Load user preferences for traffic avoidance
   useEffect(() => {
