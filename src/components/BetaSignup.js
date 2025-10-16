@@ -54,8 +54,33 @@ const BetaSignup = ({ opened, onClose }) => {
           throw error;
         }
       } else {
+        // Send welcome email via API
+        try {
+          const emailResponse = await fetch('/api/send-welcome-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              name: formData.name,
+              email: formData.email,
+            }),
+          });
+
+          if (!emailResponse.ok) {
+            console.error('Failed to send welcome email:', await emailResponse.text());
+            // Don't throw error - signup was successful even if email fails
+            toast.success('Successfully signed up for the beta!');
+          } else {
+            toast.success('Successfully signed up! Check your email for details.');
+          }
+        } catch (emailError) {
+          console.error('Error sending welcome email:', emailError);
+          // Don't throw error - signup was successful even if email fails
+          toast.success('Successfully signed up for the beta!');
+        }
+
         setSubmitted(true);
-        toast.success('Successfully signed up for the beta!');
       }
     } catch (error) {
       console.error('Beta signup error:', error);
