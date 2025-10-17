@@ -45,8 +45,8 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
   const features = [
     {
       icon: Brain,
-      title: 'AI Route Generator',
-      description: 'Claude AI creates personalized routes based on your time, goals, and preferences. From recovery rides to hill training.',
+      title: 'Smart Route Planner',
+      description: 'Intelligent route planning based on your time, goals, and preferences. From recovery rides to hill training—personalized for you.',
       color: 'teal',
     },
     {
@@ -58,7 +58,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
     {
       icon: TrendingUp,
       title: 'Training Dashboard',
-      description: 'Comprehensive training hub with AI-powered insights, performance analytics, and personalized training plans to track your progress.',
+      description: 'Comprehensive training hub with smart insights, performance analytics, and personalized training plans to track your progress.',
       color: 'blue',
     },
     {
@@ -83,7 +83,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
 
   const benefits = [
     'Discover new routes that match your riding style',
-    'Train smarter with AI-optimized workout routes',
+    'Train smarter with optimized workout routes',
     'Track progress with comprehensive analytics',
     'Export routes to any GPS device or app',
     'Learn from your actual riding patterns',
@@ -115,11 +115,11 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
             </Group>
 
             <Title order={2} size={36} fw={600} ta="center" lh={1.3}>
-              AI-powered cycling route intelligence
+              Intelligent cycling route planning & performance tracking
             </Title>
 
             <Text size="xl" c="dimmed" ta="center" lh={1.6} maw={600}>
-              Discover new routes with AI, build custom routes with professional tools,
+              Discover personalized routes, build custom paths with professional tools,
               analyze your performance, and connect with a community of cyclists.
               Everything you need for smarter cycling in one place.
             </Text>
@@ -177,7 +177,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
                 Everything You Need for Smarter Cycling
               </Title>
               <Text size="lg" c="dimmed" ta="center" maw={600}>
-                From AI-powered route generation to professional editing tools,
+                From intelligent route planning to professional editing tools,
                 performance analysis, and community features—all designed to help you
                 discover better routes and ride with purpose.
               </Text>
@@ -221,7 +221,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
               </Title>
               <Text size="lg" c="dimmed" lh={1.6}>
                 Whether you're training for an event, exploring new areas, or just
-                want better rides, our AI learns from your actual cycling data to
+                want better rides, our platform learns from your actual cycling data to
                 suggest routes that challenge and inspire you.
               </Text>
               <List
@@ -274,7 +274,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
                     <ThemeIcon size={32} color="blue" variant="filled">
                       <Text size="sm" fw={700}>2</Text>
                     </ThemeIcon>
-                    <Text size="sm">AI analyzes your patterns, preferences, and training data</Text>
+                    <Text size="sm">System analyzes your patterns, preferences, and training data</Text>
                   </Flex>
                   <Flex align="center" gap="md">
                     <ThemeIcon size={32} color="blue" variant="filled">
@@ -305,7 +305,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
               Built for Performance
             </Title>
             <Text size="lg" c="dimmed" ta="center" lh={1.6}>
-              Professional-grade tools powered by cutting-edge AI. No compromises on
+              Professional-grade tools powered by advanced algorithms. No compromises on
               data quality, route accuracy, or user experience.
             </Text>
 
@@ -315,8 +315,8 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
                   <ThemeIcon size={40} color="blue" variant="light">
                     <Brain size={20} />
                   </ThemeIcon>
-                  <Text fw={600}>Claude AI</Text>
-                  <Text size="xs" c="dimmed" ta="center">Advanced reasoning</Text>
+                  <Text fw={600}>Smart Planning</Text>
+                  <Text size="xs" c="dimmed" ta="center">Advanced algorithms</Text>
                 </Stack>
               </Grid.Col>
               <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
@@ -409,7 +409,7 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
             </Center>
             <Center>
               <Text size="xs" c="dimmed">
-                AI-powered cycling route intelligence
+                Intelligent cycling route planning & performance tracking
               </Text>
             </Center>
             <Center>

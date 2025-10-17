@@ -60,7 +60,7 @@ import { useUnits } from '../utils/units';
 
 /**
  * Training Dashboard - Comprehensive Training Hub
- * Combines training metrics, AI insights, performance analysis, and ride history
+ * Combines training metrics, smart insights, performance analysis, and ride history
  */
 const TrainingDashboard = () => {
   const { user } = useAuth();
@@ -344,7 +344,7 @@ const TrainingDashboard = () => {
         <div>
           <Title order={2}>Training Hub</Title>
           <Text size="sm" c="dimmed">
-            Fitness tracking, AI insights, performance analysis & training planning
+            Fitness tracking, smart insights, performance analysis & training planning
           </Text>
         </div>
         <Group>
@@ -507,14 +507,14 @@ const TrainingDashboard = () => {
           <TrainingLoadChart data={dailyTSS} metrics={trainingMetrics} />
         </Tabs.Panel>
 
-        {/* Insights Tab - AI Patterns & Recommendations */}
+        {/* Insights Tab - Smart Patterns & Recommendations */}
         <Tabs.Panel value="insights" pt="md">
           {allRoutes.length === 0 ? (
             <Card withBorder p="xl">
               <Stack align="center">
                 <Brain size={48} color="gray" />
                 <Title order={4}>No Ride Data</Title>
-                <Text c="dimmed" ta="center">Complete rides to unlock AI insights and pattern analysis</Text>
+                <Text c="dimmed" ta="center">Complete rides to unlock smart insights and pattern analysis</Text>
               </Stack>
             </Card>
           ) : patternsLoading ? (
@@ -576,7 +576,7 @@ const TrainingDashboard = () => {
               <Card withBorder>
                 <Group justify="space-between" mb="md">
                   <Title order={3}>Riding Intelligence</Title>
-                  <Badge color="blue" variant="light">AI Powered</Badge>
+                  <Badge color="blue" variant="light">Data-Driven</Badge>
                 </Group>
 
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
@@ -612,7 +612,7 @@ const TrainingDashboard = () => {
             <Card withBorder p="xl">
               <Stack align="center" gap="md">
                 <Brain size={48} color="gray" />
-                <Title order={4}>AI Insights</Title>
+                <Title order={4}>Smart Insights</Title>
                 <Text c="dimmed" ta="center">Click below to analyze your riding patterns</Text>
                 <Button onClick={loadRidingPatterns} disabled={allRoutes.length === 0}>
                   Analyze Patterns

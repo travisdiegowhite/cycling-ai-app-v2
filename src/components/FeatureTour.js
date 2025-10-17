@@ -7,14 +7,14 @@ const FeatureTour = ({ page, onDismiss }) => {
 
   const tourContent = {
     'ai-routes': {
-      title: 'AI Route Generator',
+      title: 'Smart Route Planner',
       tips: [
         {
           text: 'Click on the map to set your start location, or use your current location',
           importance: 'high',
         },
         {
-          text: 'The AI considers weather, elevation, and your past rides to create optimal routes',
+          text: 'The system considers weather, elevation, and your past rides to create optimal routes',
           importance: 'medium',
         },
         {
@@ -65,7 +65,7 @@ const FeatureTour = ({ page, onDismiss }) => {
           importance: 'high',
         },
         {
-          text: 'Uploaded routes help the AI understand your preferences and riding style',
+          text: 'Uploaded routes help the system understand your preferences and riding style',
           importance: 'medium',
         },
         {
@@ -82,7 +82,7 @@ const FeatureTour = ({ page, onDismiss }) => {
           importance: 'high',
         },
         {
-          text: 'The AI adapts your plan based on completed workouts and performance',
+          text: 'The system adapts your plan based on completed workouts and performance',
           importance: 'medium',
         },
         {

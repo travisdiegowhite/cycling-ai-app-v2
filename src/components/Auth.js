@@ -80,7 +80,7 @@ const Auth = () => {
     <Container size={420} my={40}>
       <Group justify="center" mb={30}>
         <Route size={32} color="#2196f3" />
-        <Title order={1} c="blue">Cycling AI</Title>
+        <Title order={1} c="blue">tribos.studio</Title>
       </Group>
 
       <Paper withBorder shadow="md" p={30} radius="md">

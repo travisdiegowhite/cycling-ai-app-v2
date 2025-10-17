@@ -38,14 +38,14 @@ const HelpCenter = () => {
   const quickStartGuides = [
     {
       icon: Brain,
-      title: 'Generate Your First AI Route',
-      description: 'Learn how to use AI to create personalized cycling routes',
+      title: 'Generate Your First Smart Route',
+      description: 'Learn how to create personalized cycling routes',
       time: '2 min',
       steps: [
-        'Click on "AI Route Generator" in the menu',
+        'Click on "Smart Route Planner" in the menu',
         'Set your start location by clicking on the map or using your current location',
         'Choose your available time and training goal',
-        'Click "Generate AI Routes" and explore the options',
+        'Click "Find My Routes" and explore the options',
       ],
     },
     {
@@ -82,11 +82,11 @@ const HelpCenter = () => {
       questions: [
         {
           q: 'What is tribos.studio?',
-          a: 'tribos.studio is an AI-powered cycling route intelligence platform that helps you generate personalized routes, analyze your performance, and discover new cycling adventures. It uses advanced AI to understand your preferences and create optimal routes for your training goals.',
+          a: 'tribos.studio is an intelligent cycling route planning platform that helps you generate personalized routes, analyze your performance, and discover new cycling adventures. It uses advanced algorithms to understand your preferences and create optimal routes for your training goals.',
         },
         {
           q: 'How do I create my first route?',
-          a: 'You have three options: 1) Use the AI Route Generator to automatically create routes based on your preferences, 2) Use Route Builder to manually create routes by clicking on the map, or 3) Upload existing routes from GPX or FIT files.',
+          a: 'You have three options: 1) Use the Smart Route Planner to automatically create routes based on your preferences, 2) Use Route Builder to manually create routes by clicking on the map, or 3) Upload existing routes from GPX or FIT files.',
         },
         {
           q: 'Is tribos.studio free to use?',
@@ -95,24 +95,24 @@ const HelpCenter = () => {
       ],
     },
     {
-      category: 'AI Route Generator',
+      category: 'Smart Route Planner',
       icon: Brain,
       questions: [
         {
-          q: 'How does the AI Route Generator work?',
-          a: 'Our AI analyzes your preferences, past rides, current weather conditions, and training goals to generate optimal cycling routes. It considers factors like elevation, road types, traffic patterns, and scenic value to create personalized routes just for you.',
+          q: 'How does the Smart Route Planner work?',
+          a: 'Our system analyzes your preferences, past rides, current weather conditions, and training goals to generate optimal cycling routes. It considers factors like elevation, road types, traffic patterns, and scenic value to create personalized routes just for you.',
         },
         {
           q: 'What training goals can I choose?',
-          a: 'You can select from Recovery (easy, flat routes), Endurance (steady, longer routes), Intervals (routes with varying intensity), or Hills (challenging climbs). The AI adjusts route characteristics based on your selection.',
+          a: 'You can select from Recovery (easy, flat routes), Endurance (steady, longer routes), Intervals (routes with varying intensity), or Hills (challenging climbs). The system adjusts route characteristics based on your selection.',
         },
         {
-          q: 'Can I save AI-generated routes?',
+          q: 'Can I save generated routes?',
           a: 'Yes! Once you generate routes, you can save any of them to your library for future reference. You can also download them as GPX files to use with your bike computer or GPS device.',
         },
         {
           q: 'Why are my routes different each time?',
-          a: 'The AI generates unique routes each time to provide variety and help you discover new roads. It considers real-time factors like weather and learns from your feedback to improve suggestions over time.',
+          a: 'The system generates unique routes each time to provide variety and help you discover new roads. It considers real-time factors like weather and learns from your feedback to improve suggestions over time.',
         },
       ],
     },
@@ -176,15 +176,15 @@ const HelpCenter = () => {
       questions: [
         {
           q: 'What is the Training Dashboard?',
-          a: 'The Training Dashboard is a comprehensive training hub that combines AI-powered ride analysis, performance analytics, and personalized training plans. It tracks your progress, analyzes your rides, and provides insights about your performance, effort distribution, pacing, and areas for improvement.',
+          a: 'The Training Dashboard is a comprehensive training hub that combines intelligent ride analysis, performance analytics, and personalized training plans. It tracks your progress, analyzes your rides, and provides insights about your performance, effort distribution, pacing, and areas for improvement.',
         },
         {
           q: 'What metrics does it analyze?',
-          a: 'We analyze speed, elevation gain, power output (if available), heart rate zones, pacing consistency, effort distribution, training load (CTL/ATL/TSB), and weekly/monthly trends. The AI provides context-aware insights specific to your training goals.',
+          a: 'We analyze speed, elevation gain, power output (if available), heart rate zones, pacing consistency, effort distribution, training load (CTL/ATL/TSB), and weekly/monthly trends. The system provides context-aware insights specific to your training goals.',
         },
         {
           q: 'How do I create a training plan?',
-          a: 'Go to Training Dashboard and click "Create New Plan". Choose your goal (race, event, or fitness), set your target date, and specify your current fitness level. The AI will generate a personalized training plan with progressive workouts.',
+          a: 'Go to Training Dashboard and click "Create New Plan". Choose your goal (race, event, or fitness), set your target date, and specify your current fitness level. The system will generate a personalized training plan with progressive workouts.',
         },
         {
           q: 'Can I modify training plans?',
@@ -233,7 +233,7 @@ const HelpCenter = () => {
       title: 'Analyzing Your Performance',
       duration: '4:10',
       thumbnail: 'analysis',
-      description: 'Get insights from your ride data with AI',
+      description: 'Get intelligent insights from your ride data',
     },
   ];
 

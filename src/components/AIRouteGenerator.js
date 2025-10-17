@@ -557,10 +557,10 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
           <div style={{ textAlign: 'center' }}>
             <Brain size={48} style={{ color: '#228be6', marginBottom: '1rem' }} />
             <Text size="xl" fw={600} mb="xs">
-              AI Training Route Generator
+              Smart Route Planner
             </Text>
             <Text size="sm" c="dimmed">
-              Smart routes optimized for your training goals and conditions
+              Personalized routes optimized for your training goals and conditions
             </Text>
           </div>
 
@@ -839,7 +839,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
           disabled={!startLocation || generating}
           fullWidth
         >
-          {generating ? 'Generating Smart Routes...' : 'Generate AI Routes'}
+          {generating ? 'Creating Your Routes...' : 'Find My Routes'}
         </Button>
 
         {/* Error Display */}
@@ -929,7 +929,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         {!generating && generatedRoutes.length === 0 && startLocation && (
           <Center p="xl">
             <Text size="sm" c="dimmed">
-              Click "Generate AI Routes" to create personalized training routes
+              Click "Find My Routes" to create personalized training routes
             </Text>
           </Center>
         )}

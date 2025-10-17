@@ -67,7 +67,7 @@ const PrivacyPolicy = () => {
               <List.Item>Analyzing your performance metrics (heart rate, power, cadence, speed, distance, elevation) to provide personalized route recommendations</List.Item>
               <List.Item>Understanding your training patterns and fitness level to suggest appropriate route difficulty and duration</List.Item>
               <List.Item>Synchronizing activity data to display your ride history and statistics within our application</List.Item>
-              <List.Item>Generating AI-powered insights based on your Garmin training data to improve route planning</List.Item>
+              <List.Item>Generating data-driven insights based on your Garmin training data to improve route planning</List.Item>
               <List.Item>Creating training plans that align with your Garmin-recorded fitness trends</List.Item>
             </List>
             <Text mt="sm">

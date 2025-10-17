@@ -130,7 +130,7 @@ const RouteStudio = () => {
   const [weatherData, setWeatherData] = useState(null);
   const [preferencesOpened, setPreferencesOpened] = useState(false);
   
-  // AI Enhancement state
+  // Smart Enhancement state
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState([]);
   const [loadingAISuggestions, setLoadingAISuggestions] = useState(false);
@@ -141,7 +141,7 @@ const RouteStudio = () => {
   const [originalRoute, setOriginalRoute] = useState(null);
   const [suggestedRoute, setSuggestedRoute] = useState(null);
   
-  // History for Undo/Redo (including AI suggestions)
+  // History for Undo/Redo (including smart suggestions)
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [aiSuggestionHistory, setAiSuggestionHistory] = useState([]);
@@ -199,7 +199,7 @@ const RouteStudio = () => {
     fetchWeather();
   }, [waypoints.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save state before AI suggestion for undo
+  // Save state before smart suggestion for undo
   const saveStateBeforeAISuggestion = useCallback(() => {
     const state = {
       waypoints: [...waypoints],
@@ -212,7 +212,7 @@ const RouteStudio = () => {
     return state;
   }, [waypoints, snappedRoute, elevationProfile, elevationStats]);
 
-  // Undo last AI suggestion
+  // Undo last smart suggestion
   const undoLastAISuggestion = useCallback(() => {
     if (aiSuggestionHistory.length > 0) {
       const lastState = aiSuggestionHistory[aiSuggestionHistory.length - 1];
@@ -222,7 +222,7 @@ const RouteStudio = () => {
       setElevationStats(lastState.elevationStats);
       setAiSuggestionHistory(prev => prev.slice(0, -1));
       setAppliedSuggestions(new Set()); // Reset applied suggestions
-      toast.success('Undid last AI suggestion');
+      toast.success('Undid last smart suggestion');
     }
   }, [aiSuggestionHistory]);
 
@@ -261,7 +261,7 @@ const RouteStudio = () => {
     useImperial,
   });
 
-  // Custom clear route that also clears AI-specific state
+  // Custom clear route that also clears smart suggestion-specific state
   const clearRoute = useCallback(() => {
     console.log('🗑️ Clearing route - resetting all state');
     baseClearRoute();
@@ -273,7 +273,7 @@ const RouteStudio = () => {
     setAiSuggestionHistory([]);
     setRouteName('');
     setRouteDescription('');
-    setShowAIPanel(false); // Close AI panel on clear
+    setShowAIPanel(false); // Close smart panel on clear
     console.log('✅ Route cleared - ready for new route');
   }, [baseClearRoute]);
 
@@ -308,7 +308,7 @@ const RouteStudio = () => {
     }
   }, [waypoints.length]); // Only trigger when waypoint count changes
 
-  // Real AI suggestion generation using aiRouteEnhancer
+  // Real smart suggestion generation using aiRouteEnhancer
   const generateAISuggestions = useCallback(async () => {
     if (waypoints.length < 2) {
       toast.error('Create a route with at least 2 waypoints first');
@@ -316,14 +316,14 @@ const RouteStudio = () => {
     }
 
     if (!snappedRoute || !snappedRoute.coordinates) {
-      toast.error('Please snap route to roads first to get AI suggestions');
+      toast.error('Please snap route to roads first to get smart suggestions');
       return;
     }
 
     setLoadingAISuggestions(true);
 
     try {
-      console.log('🤖 Generating AI-powered suggestions...');
+      console.log('🤖 Generating smart suggestions...');
 
       // Prepare route data for analysis
       const routeForAnalysis = {
@@ -341,7 +341,7 @@ const RouteStudio = () => {
         safetyPreferences: {}
       };
 
-      // Get AI-powered suggestions
+      // Get smart suggestions
       const suggestions = await analyzeAndEnhanceRoute(
         routeForAnalysis,
         prefs,
@@ -369,13 +369,13 @@ const RouteStudio = () => {
       setLoadingAISuggestions(false);
 
       if (suggestions.length > 0) {
-        toast.success(`Generated ${suggestions.length} AI-powered suggestions! 🎯`);
+        toast.success(`Generated ${suggestions.length} smart suggestions! 🎯`);
       } else {
         toast.success('Your route looks great! No major improvements needed.');
       }
     } catch (error) {
-      console.error('AI suggestion generation failed:', error);
-      toast.error('Failed to generate AI suggestions. Please try again.');
+      console.error('Smart suggestion generation failed:', error);
+      toast.error('Failed to generate smart suggestions. Please try again.');
       setLoadingAISuggestions(false);
     }
   }, [waypoints, snappedRoute, elevationProfile, userPreferences, trainingGoal, weatherData]);
@@ -728,9 +728,9 @@ const RouteStudio = () => {
     ['Space', (e) => { e.preventDefault(); toggleMode(); }],
     ['mod+R', (e) => { e.preventDefault(); snapToRoads(); }],
     ['mod+shift+R', (e) => { e.preventDefault(); reverseRoute(); }],
-    ['mod+A', (e) => { e.preventDefault(); setShowAIPanel(!showAIPanel); }], // Toggle AI panel
-    ['mod+G', (e) => { e.preventDefault(); generateAISuggestions(); }], // Generate AI suggestions
-    ['mod+U', (e) => { e.preventDefault(); undoLastAISuggestion(); }], // Undo AI suggestion
+    ['mod+A', (e) => { e.preventDefault(); setShowAIPanel(!showAIPanel); }], // Toggle smart panel
+    ['mod+G', (e) => { e.preventDefault(); generateAISuggestions(); }], // Generate smart suggestions
+    ['mod+U', (e) => { e.preventDefault(); undoLastAISuggestion(); }], // Undo smart suggestion
     ['Enter', (e) => { if (previewingSuggestion) { e.preventDefault(); acceptSuggestion(); } }], // Accept preview
     ['mod+Escape', (e) => { if (previewingSuggestion) { e.preventDefault(); cancelPreview(); } }], // Cancel preview
   ]);
@@ -771,7 +771,7 @@ const RouteStudio = () => {
         track_points: track_points,
         waypoints: waypoints,
         routing_profile: routingProfile,
-        auto_routed: false, // Route Studio is manual with AI assistance
+        auto_routed: false, // Route Studio is manual with smart assistance
         snapped: !!snappedRoute,
         confidence: snappedRoute?.confidence || null,
         distance_km: snappedRoute?.distance ? snappedRoute.distance / 1000 : 0,
@@ -943,7 +943,7 @@ const RouteStudio = () => {
                 { value: 'hills', label: '⛰️ Hills' },
               ]}
               size="sm"
-              description="AI suggestions optimized for your goal"
+              description="Smart suggestions optimized for your goal"
             />
 
             {/* Training Context */}
@@ -1274,9 +1274,9 @@ const RouteStudio = () => {
             
             <Divider orientation="vertical" />
             
-            {/* AI Enhancement Tools */}
-            <Tooltip label="Toggle AI Panel (Ctrl+A)">
-              <ActionIcon 
+            {/* Smart Enhancement Tools */}
+            <Tooltip label="Toggle Smart Panel (Ctrl+A)">
+              <ActionIcon
                 onClick={() => setShowAIPanel(!showAIPanel)}
                 variant={showAIPanel ? 'filled' : 'default'}
                 color={showAIPanel ? 'blue' : undefined}
@@ -1284,8 +1284,8 @@ const RouteStudio = () => {
                 <Brain size={18} />
               </ActionIcon>
             </Tooltip>
-            
-            <Tooltip label="Generate AI Suggestions (Ctrl+G)">
+
+            <Tooltip label="Generate Smart Suggestions (Ctrl+G)">
               <ActionIcon 
                 onClick={generateAISuggestions}
                 disabled={waypoints.length < 2 || loadingAISuggestions}
@@ -1332,9 +1332,9 @@ const RouteStudio = () => {
         </div>
       </div>
 
-      {/* Right AI Panel */}
+      {/* Right Smart Panel */}
       {showAIPanel && (
-        <div style={{ 
+        <div style={{
           width: '300px',
           height: '100vh',
           overflowY: 'auto',
@@ -1349,7 +1349,7 @@ const RouteStudio = () => {
             <Group justify="space-between" mb="md">
               <Group gap="xs">
                 <Brain size={18} />
-                <Text size="md" fw={600}>AI Assist</Text>
+                <Text size="md" fw={600}>Smart Assist</Text>
               </Group>
               <ActionIcon variant="subtle" onClick={() => setShowAIPanel(false)}>
                 <X size={16} />
@@ -1359,7 +1359,7 @@ const RouteStudio = () => {
             {waypoints.length < 2 ? (
               <Alert icon={<Info size={16} />} color="blue" variant="light">
                 <Text size="sm">
-                  Create a route with at least 2 waypoints to get AI suggestions
+                  Create a route with at least 2 waypoints to get smart suggestions
                 </Text>
               </Alert>
             ) : (
@@ -1372,10 +1372,10 @@ const RouteStudio = () => {
                     style={{ flex: 1 }}
                     variant="light"
                   >
-                    Get AI Suggestions
+                    Get Smart Suggestions
                   </Button>
                   {aiSuggestionHistory.length > 0 && (
-                    <Tooltip label="Undo Last AI Suggestion">
+                    <Tooltip label="Undo Last Smart Suggestion">
                       <ActionIcon
                         onClick={undoLastAISuggestion}
                         variant="light"
@@ -1573,7 +1573,7 @@ const RouteStudio = () => {
           onSave={(prefs) => {
             setUserPreferences(prefs);
             setPreferencesOpened(false);
-            toast.success('Preferences saved! AI suggestions will use your updated preferences.');
+            toast.success('Preferences saved! Smart suggestions will use your updated preferences.');
           }}
         />
       </Modal>

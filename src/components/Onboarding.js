@@ -33,34 +33,34 @@ const Onboarding = ({ opened, onClose }) => {
       icon: CheckCircle,
       content: {
         title: 'Welcome to tribos.studio',
-        subtitle: 'Your AI-powered cycling route intelligence platform',
+        subtitle: 'Your intelligent cycling route planning platform',
         description:
-          "We're excited to have you here! tribos.studio helps you discover new routes, analyze your performance, and achieve your cycling goals using advanced AI technology.",
+          "We're excited to have you here! tribos.studio helps you discover new routes, analyze your performance, and achieve your cycling goals using advanced algorithms and data-driven insights.",
         features: [
-          'Generate personalized routes with AI',
+          'Generate personalized routes instantly',
           'Build custom routes manually',
-          'Analyze your rides with AI insights',
+          'Analyze your rides with smart insights',
           'Train smarter with personalized plans',
           'Discover routes from the community',
         ],
       },
     },
     {
-      label: 'AI Routes',
+      label: 'Smart Routes',
       icon: Brain,
       content: {
-        title: 'AI Route Generator',
-        subtitle: 'Let AI create perfect routes for you',
+        title: 'Smart Route Planner',
+        subtitle: 'Personalized routes created for you',
         description:
-          'Our AI analyzes your preferences, training goals, and current conditions to generate optimal cycling routes. It considers elevation, road types, weather, and scenic value.',
+          'Our intelligent system analyzes your preferences, training goals, and current conditions to generate optimal cycling routes. It considers elevation, road types, weather, and scenic value.',
         features: [
           'Set your available time (15 min to 4 hours)',
           'Choose training goals: Recovery, Endurance, Intervals, or Hills',
           'Select route type: Loop, Out & Back, or Point-to-Point',
           'Get multiple route options to choose from',
-          'AI learns from your feedback over time',
+          'System learns from your feedback over time',
         ],
-        tip: 'Pro tip: The more rides you upload, the better the AI understands your preferences!',
+        tip: 'Pro tip: The more rides you upload, the better the system understands your preferences!',
       },
     },
     {
@@ -88,10 +88,10 @@ const Onboarding = ({ opened, onClose }) => {
         title: 'Training Dashboard',
         subtitle: 'Track your progress and optimize your training',
         description:
-          'Comprehensive training hub with AI-powered insights, performance analytics, and personalized training plans to help you reach your cycling goals.',
+          'Comprehensive training hub with smart insights, performance analytics, and personalized training plans to help you reach your cycling goals.',
         features: [
           'View comprehensive ride statistics and trends',
-          'Get AI-powered performance insights',
+          'Get intelligent performance insights',
           'Create personalized training plans',
           'Track training load and fitness progression',
           'Connect Strava, Wahoo, or Garmin for automatic imports',
@@ -108,7 +108,7 @@ const Onboarding = ({ opened, onClose }) => {
         description:
           'Ready to discover your next great ride? Here are some suggested first steps to get the most out of tribos.studio.',
         features: [
-          'Generate your first AI route to explore the area',
+          'Generate your first smart route to explore the area',
           'Upload a recent ride to get personalized recommendations',
           'Connect your fitness apps for automatic sync',
           'Explore community routes in Route Discovery',

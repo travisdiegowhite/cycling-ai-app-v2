@@ -112,7 +112,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             justify="flex-start"
             fullWidth
           >
-            AI Route Generator
+            Smart Route Planner
           </Button>
 
           <Button
@@ -221,7 +221,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             tribos.studio
           </Text>
           <Text size="xs" c="dimmed" ta="center">
-            AI-powered cycling route intelligence
+            Intelligent cycling route planning
           </Text>
         </Container>
       </AppShell.Navbar>

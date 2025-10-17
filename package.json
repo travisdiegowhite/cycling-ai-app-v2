@@ -1,7 +1,7 @@
 {
   "name": "tribos-studio-cycling-ai",
   "version": "1.0.0",
-  "description": "tribos.studio - AI-powered cycling route intelligence platform",
+  "description": "tribos.studio - Intelligent cycling route planning & performance tracking platform",
   "private": true,
   "dependencies": {
     "@mantine/core": "^8.2.4",

@@ -26,7 +26,7 @@ const TermsOfService = () => {
               Our Service provides:
             </Text>
             <List>
-              <List.Item>AI-powered cycling route generation and planning</List.Item>
+              <List.Item>Intelligent cycling route generation and planning</List.Item>
               <List.Item>Activity tracking and performance analysis</List.Item>
               <List.Item>Integration with third-party cycling platforms (Strava, Garmin, Wahoo)</List.Item>
               <List.Item>Route mapping and GPS navigation</List.Item>

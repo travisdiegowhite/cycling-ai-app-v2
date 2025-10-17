@@ -177,10 +177,10 @@ const PreferenceSettings = ({ opened, onClose }) => {
       <Stack>
         <Alert icon={<AlertCircle size={16} />} color="blue">
           <Text size="sm" mb="xs">
-            <strong>Smart Traffic Avoidance:</strong> Customize your route preferences to get more personalized AI-generated routes that match your riding style and goals.
+            <strong>Smart Traffic Avoidance:</strong> Customize your route preferences to get more personalized routes that match your riding style and goals.
           </Text>
           <Text size="xs">
-            The AI Route Builder now intelligently avoids heavy traffic based on your preferences, using advanced routing algorithms 
+            The Smart Route Planner now intelligently avoids heavy traffic based on your preferences, using advanced routing algorithms
             to find quiet roads, bike infrastructure, and peaceful routes when you prefer them.
           </Text>
         </Alert>
