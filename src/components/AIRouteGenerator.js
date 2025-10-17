@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Paper,
   Text,
@@ -85,6 +85,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   // Feature toggles for debugging
   const [usePastRides, setUsePastRides] = useState(false); // Default OFF to avoid junk routes
   const [useTrainingContext, setUseTrainingContext] = useState(true);
+
+  // Ref to track the last processed external location to prevent re-render loops
+  const lastExternalLocationRef = useRef(null);
 
   // Training goal options
   const trainingGoals = [
@@ -278,20 +281,36 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     return () => map.off('click', handleMapClick);
   }, [mapRef, onStartLocationSet, reverseGeocode, fetchWeatherData]);
 
-  // Stabilize externalStartLocation handler to prevent re-render loops
-  const handleExternalLocationChange = useCallback(async (location) => {
-    setStartLocation(location);
-    const address = await reverseGeocode(location);
-    setCurrentAddress(address);
-    await fetchWeatherData(location);
-  }, [reverseGeocode, fetchWeatherData]);
-
   // Handle external location changes (e.g., from map marker dragging)
+  // Uses a ref to track the last processed location and prevent infinite loops
   useEffect(() => {
-    if (externalStartLocation && JSON.stringify(externalStartLocation) !== JSON.stringify(startLocation)) {
-      handleExternalLocationChange(externalStartLocation);
+    if (!externalStartLocation) return;
+
+    // Create a stable string representation for comparison
+    const externalKey = `${externalStartLocation[0]},${externalStartLocation[1]}`;
+    const lastKey = lastExternalLocationRef.current;
+
+    // Only process if this is truly a new location
+    if (externalKey !== lastKey) {
+      lastExternalLocationRef.current = externalKey;
+
+      // Update the location without triggering circular updates
+      setStartLocation(externalStartLocation);
+
+      // Fetch address and weather in the background
+      // Using Promise.all to avoid blocking and potential race conditions
+      Promise.all([
+        reverseGeocode(externalStartLocation),
+        fetchWeatherData(externalStartLocation)
+      ]).then(([address]) => {
+        if (address) {
+          setCurrentAddress(address);
+        }
+      }).catch(error => {
+        console.warn('Failed to update location details:', error);
+      });
     }
-  }, [externalStartLocation, startLocation, handleExternalLocationChange]);
+  }, [externalStartLocation, reverseGeocode, fetchWeatherData]);
 
   // Load user preferences for traffic avoidance
   useEffect(() => {
@@ -643,7 +662,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
               onChange={(e) => setAddressInput(e.target.value)}
               leftSection={<MapPin size={16} />}
               style={{ flex: 1 }}
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   handleAddressSearch();
                 }

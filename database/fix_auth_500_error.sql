@@ -178,7 +178,7 @@ END $$;
 -- =============================================
 
 -- If still failing, uncomment this section to completely reset
-/*
+
 -- Remove ALL custom triggers on auth.users
 DO $$
 DECLARE

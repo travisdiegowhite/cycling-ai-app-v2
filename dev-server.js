@@ -238,7 +238,7 @@ app.post('/api/send-welcome-email', async (req, res) => {
                   <strong>Generate your first AI-powered route</strong> - just set your goal and time
                 </li>
                 <li style="margin-bottom: 10px;">
-                  <strong>Explore our professional route builder</strong> with elevation profiles
+                  <strong>Explore our professional route builder</strong> with elevation profiles and key metrics
                 </li>
                 <li style="margin-bottom: 10px;">
                   <strong>Optionally import your ride history</strong> for personalized recommendations
