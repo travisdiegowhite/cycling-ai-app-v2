@@ -123,11 +123,11 @@ const BetaSignup = ({ opened, onClose }) => {
             <Alert color="teal" variant="light">
               <Stack gap="xs">
                 <Text size="sm" fw={600}>
-                  Beta Launch: December 1, 2025
+                  🎉 Beta is Now Open!
                 </Text>
                 <Text size="sm">
-                  Be among the first to experience AI-powered cycling route intelligence.
-                  We'll notify you when beta access opens!
+                  Sign up now to get immediate access to AI-powered cycling route intelligence.
+                  Start creating smarter routes today!
                 </Text>
               </Stack>
             </Alert>
@@ -203,27 +203,27 @@ const BetaSignup = ({ opened, onClose }) => {
           </Title>
 
           <Text size="lg" ta="center" c="dimmed" maw={400}>
-            Thank you for signing up! We'll send you an email with beta access details as we get closer to launch.
+            Thank you for signing up! Check your email for your welcome message and start exploring Tribos.Studio right away.
           </Text>
 
           <Paper withBorder p="md" bg="teal.0" w="100%">
             <Stack gap="xs">
               <Group>
                 <ThemeIcon size={24} color="teal" variant="light">
-                  <Calendar size={14} />
+                  <CheckCircle size={14} />
                 </ThemeIcon>
                 <Text size="sm" fw={600}>
-                  Beta Launch: December 1, 2025
+                  Beta Access: Available Now
                 </Text>
               </Group>
               <Text size="sm" c="dimmed" pl={32}>
-                Mark your calendar! You'll receive access instructions closer to the date.
+                You can start creating AI-powered routes immediately!
               </Text>
             </Stack>
           </Paper>
 
           <Text size="sm" ta="center" c="dimmed">
-            In the meantime, try out the demo account to explore all features!
+            Ready to discover the road less traveled? Start exploring now!
           </Text>
 
           <Button onClick={handleClose} size="md" fullWidth>

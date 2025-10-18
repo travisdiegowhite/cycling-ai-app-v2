@@ -223,6 +223,17 @@ app.post('/api/send-welcome-email', async (req, res) => {
                 </tr>
               </table>
 
+              <!-- Beta Open Now section -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #d1fae5; border-left: 4px solid #10b981; margin: 0 0 25px 0; border-radius: 4px;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <p style="margin: 0; font-size: 16px; line-height: 1.7; color: #065f46; font-weight: 600;">
+                      🎉 The beta is now open! You can start using Tribos.Studio right away.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
               <h2 style="margin: 30px 0 15px; font-size: 20px; font-weight: 600; color: #111827;">
                 Our Mission
               </h2>
@@ -305,7 +316,7 @@ app.post('/api/send-welcome-email', async (req, res) => {
               </p>
 
               <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #374151;">
-                Travis White<br>
+                Travis<br>
                 <strong>Tribos.Studio</strong>
               </p>
             </td>
