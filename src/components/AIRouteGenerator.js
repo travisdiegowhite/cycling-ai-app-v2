@@ -18,6 +18,8 @@ import {
   Select,
   Divider,
   Switch,
+  Collapse,
+  Accordion,
 } from '@mantine/core';
 import {
   Brain,
@@ -43,6 +45,8 @@ import { EnhancedContextCollector } from '../utils/enhancedContext';
 import TrainingContextSelector from './TrainingContextSelector';
 import { estimateTSS, WORKOUT_TYPES } from '../utils/trainingPlans';
 import { supabase } from '../supabase';
+import { generateIntervalCues } from '../utils/intervalCues';
+import IntervalCues from './IntervalCues';
 
 const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, externalStartLocation }) => {
   const { user } = useAuth();
@@ -53,10 +57,12 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   // User inputs
   const [timeAvailable, setTimeAvailable] = useState(60); // minutes
   const [trainingGoal, setTrainingGoal] = useState('endurance');
+  const [recreationalStyle, setRecreationalStyle] = useState('scenic'); // For recreational mode
   const [routeType, setRouteType] = useState('loop');
   const [startLocation, setStartLocation] = useState(null);
   const [addressInput, setAddressInput] = useState('');
   const [currentAddress, setCurrentAddress] = useState('');
+  const [isTrainingMode, setIsTrainingMode] = useState(true); // Toggle between training and recreational
 
   // Training context state
   const [trainingContext, setTrainingContext] = useState({
@@ -66,6 +72,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     targetTSS: 75,
     primaryZone: 2
   });
+
+  // Track if training context has been manually modified
+  const [trainingContextManuallySet, setTrainingContextManuallySet] = useState(false);
 
   // Training plan integration
   const [activePlans, setActivePlans] = useState([]);
@@ -89,12 +98,43 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   // Ref to track the last processed external location to prevent re-render loops
   const lastExternalLocationRef = useRef(null);
 
+  // Handler to set training context and mark as manually set
+  const handleTrainingContextChange = useCallback((newContext) => {
+    setTrainingContext(newContext);
+    setTrainingContextManuallySet(true);
+  }, []);
+
+  // Sync training context with trainingGoal and timeAvailable (but only if not manually set)
+  useEffect(() => {
+    if (!trainingContextManuallySet && !selectedWorkout) {
+      // Get default values for this workout type from WORKOUT_TYPES
+      const workoutType = WORKOUT_TYPES[trainingGoal];
+
+      setTrainingContext(prev => ({
+        ...prev,
+        workoutType: trainingGoal,
+        targetDuration: timeAvailable,
+        // Update primaryZone and targetTSS based on workout type defaults
+        primaryZone: workoutType?.primaryZone || prev.primaryZone,
+        targetTSS: workoutType?.defaultTSS || prev.targetTSS
+      }));
+    }
+  }, [trainingGoal, timeAvailable, trainingContextManuallySet, selectedWorkout]);
+
   // Training goal options
   const trainingGoals = [
     { value: 'endurance', label: 'Endurance', icon: '🚴', description: 'Steady, sustained effort' },
     { value: 'intervals', label: 'Intervals', icon: '⚡', description: 'High intensity training' },
     { value: 'recovery', label: 'Recovery', icon: '😌', description: 'Easy, restorative ride' },
     { value: 'hills', label: 'Hill Training', icon: '⛰️', description: 'Climbing focused workout' },
+  ];
+
+  // Recreational ride style options
+  const recreationalStyles = [
+    { value: 'scenic', label: 'Scenic', icon: '🌄', description: 'Beautiful views and quiet roads' },
+    { value: 'urban', label: 'Urban Explorer', icon: '🏙️', description: 'City streets and neighborhoods' },
+    { value: 'coffee', label: 'Coffee Ride', icon: '☕', description: 'Relaxed pace with cafe stops' },
+    { value: 'social', label: 'Social Cruise', icon: '👥', description: 'Easy group-friendly route' },
   ];
 
   // Route type options
@@ -405,6 +445,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
         primaryZone: workout.target_zone,
       });
 
+      // Mark as not manually set since it's from a workout
+      setTrainingContextManuallySet(false);
+
       // Also update time available to match workout duration
       setTimeAvailable(workout.target_duration);
     }
@@ -504,12 +547,13 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       const routes = await generateAIRoutes({
         startLocation,
         timeAvailable,
-        trainingGoal,
+        trainingGoal: isTrainingMode ? trainingGoal : recreationalStyle, // Use training goal or recreational style
         routeType,
         weatherData,
         userId: usePastRides ? user?.id : null, // Only pass userId if usePastRides is enabled
         userPreferences: userPreferences,
-        trainingContext: useTrainingContext ? trainingContext : null, // Only pass training context if enabled
+        trainingContext: (useTrainingContext && isTrainingMode) ? trainingContext : null, // Only pass training context if enabled AND in training mode
+        isRecreational: !isTrainingMode, // Flag to indicate recreational mode
       });
       
       console.log('🎯 Generated routes:', routes);
@@ -583,71 +627,35 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
             </Text>
           </div>
 
-        {/* Route Preferences Button */}
+        {/* Route Preferences - Prominent at top */}
         <Button
           variant="gradient"
           gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
-          leftSection={<Settings size={20} />}
+          leftSection={<Settings size={18} />}
           onClick={() => setPreferencesOpened(true)}
           fullWidth
           size="md"
         >
-          Customize Route Preferences
+          Route Preferences
         </Button>
-        <Text size="xs" c="dimmed" mt="-8">
-          Set your safety, surface, scenic preferences and avoid specific areas
+        <Text size="xs" c="dimmed" mt="-8" mb="sm">
+          Set safety, surface, scenic preferences and areas to avoid
         </Text>
 
-        {/* Debug Toggles */}
-        <Card withBorder p="sm" style={{ backgroundColor: '#fff9db' }}>
-          <Text size="sm" fw={500} mb="sm">🔧 Route Generation Options</Text>
-          <Stack gap="sm">
-            <Switch
-              label="Use Past Rides"
-              description="Learn from your riding history (may include old/test routes)"
-              checked={usePastRides}
-              onChange={(e) => setUsePastRides(e.currentTarget.checked)}
-            />
-            <Switch
-              label="Use Training Context"
-              description="Match routes to your workout requirements"
-              checked={useTrainingContext}
-              onChange={(e) => setUseTrainingContext(e.currentTarget.checked)}
-            />
-          </Stack>
-          <Text size="xs" c="dimmed" mt="xs">
-            💡 If routes look incorrect, try disabling "Use Past Rides"
-          </Text>
-        </Card>
-
-        {/* Current Conditions */}
-        <Card withBorder p="sm" style={{ backgroundColor: '#f8f9fa' }}>
-          <Group justify="space-between">
+        {/* Current Conditions - Compact */}
+        <Card withBorder p="xs" style={{ backgroundColor: '#f8f9fa' }}>
+          <Group justify="space-between" gap="xs">
             <Group gap="xs">
-              <timeOfDay.icon size={16} />
-              <Text size="sm" fw={500}>{timeOfDay.label}</Text>
+              <timeOfDay.icon size={14} />
+              <Text size="xs" fw={500}>{timeOfDay.label}</Text>
             </Group>
-            {weatherData ? (
-              <Group gap="md">
-                <Group gap="xs">
-                  <Text size="sm" fw={500}>{formatTemperature(weatherData.temperature)}</Text>
-                </Group>
-                <Group gap="xs">
-                  <Wind size={16} />
-                  <Text size="sm">
-                    {formatSpeed(weatherData.windSpeed)} {weatherData.windDirection}
-                  </Text>
-                </Group>
+            {weatherData && (
+              <Group gap="sm">
+                <Text size="xs">{formatTemperature(weatherData.temperature)}</Text>
+                <Text size="xs">{formatSpeed(weatherData.windSpeed)}</Text>
               </Group>
-            ) : (
-              <Text size="xs" c="dimmed">Loading weather...</Text>
             )}
           </Group>
-          {weatherData && (
-            <Text size="xs" c="dimmed" mt="xs">
-              {weatherData.description} • Humidity: {weatherData.humidity}%
-            </Text>
-          )}
         </Card>
 
         {/* Start Location */}
@@ -732,115 +740,117 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
           />
         </div>
 
-        {/* Training Goal */}
-        <div>
-          <Text size="sm" fw={500} mb="sm">Training Goal</Text>
+        {/* Training vs Recreational Toggle */}
+        <Card withBorder p="sm" style={{ backgroundColor: '#f0f9ff' }}>
+          <Group justify="space-between" align="center">
+            <div>
+              <Text size="sm" fw={500}>Ride Mode</Text>
+              <Text size="xs" c="dimmed">
+                {isTrainingMode ? 'Training ride with specific goals' : 'Casual ride for enjoyment'}
+              </Text>
+            </div>
+            <Switch
+              checked={isTrainingMode}
+              onChange={(e) => setIsTrainingMode(e.currentTarget.checked)}
+              size="lg"
+              onLabel="Training"
+              offLabel="Recreational"
+              styles={{
+                track: {
+                  minWidth: '120px'
+                }
+              }}
+            />
+          </Group>
+        </Card>
+
+        {/* Quick Training Setup - Only show in training mode */}
+        {isTrainingMode && (
+          <div>
+            <Text size="sm" fw={500} mb="sm">What type of ride?</Text>
           <Radio.Group value={trainingGoal} onChange={setTrainingGoal}>
-            <Stack gap="xs">
+            <Grid gutter="xs">
               {trainingGoals.map((goal) => (
-                <Card
-                  key={goal.value}
-                  withBorder
-                  p="sm"
-                  style={{
-                    backgroundColor: trainingGoal === goal.value ? '#e7f5ff' : 'white',
-                    border: trainingGoal === goal.value ? '2px solid #228be6' : '1px solid #dee2e6',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => setTrainingGoal(goal.value)}
-                >
-                  <Group gap="sm">
-                    <Radio value={goal.value} />
-                    <Text size="lg">{goal.icon}</Text>
-                    <div>
+                <Grid.Col span={6} key={goal.value}>
+                  <Card
+                    withBorder
+                    p="xs"
+                    style={{
+                      backgroundColor: trainingGoal === goal.value ? '#e7f5ff' : 'white',
+                      border: trainingGoal === goal.value ? '2px solid #228be6' : '1px solid #dee2e6',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                    onClick={() => setTrainingGoal(goal.value)}
+                  >
+                    <Stack gap={4} align="center">
+                      <Text size="xl">{goal.icon}</Text>
                       <Text size="sm" fw={500}>{goal.label}</Text>
-                      <Text size="xs" c="dimmed">{goal.description}</Text>
-                    </div>
-                  </Group>
-                </Card>
+                      <Radio value={goal.value} style={{ display: 'none' }} />
+                    </Stack>
+                  </Card>
+                </Grid.Col>
               ))}
-            </Stack>
+            </Grid>
           </Radio.Group>
-        </div>
-
-        {/* Training Plan Workout Selector */}
-        {activePlans.length > 0 && (
-          <Card withBorder p="md" style={{ backgroundColor: '#f0f9ff' }}>
-            <Text size="sm" fw={600} mb="sm">Use Training Plan Workout</Text>
-            <Stack gap="sm">
-              <Select
-                label="Select Training Plan"
-                placeholder="Choose a plan"
-                data={activePlans.map(plan => ({
-                  value: plan.id,
-                  label: plan.name
-                }))}
-                value={selectedPlan}
-                onChange={setSelectedPlan}
-                clearable
-              />
-
-              {selectedPlan && planWorkouts.length > 0 && (
-                <Select
-                  label="Select Workout"
-                  placeholder="Choose a workout"
-                  data={planWorkouts.map(workout => {
-                    const workoutType = WORKOUT_TYPES[workout.workout_type];
-                    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                    return {
-                      value: workout.id,
-                      label: `Week ${workout.week_number}, ${dayNames[workout.day_of_week]} - ${workoutType?.name || workout.workout_type} (${workout.target_duration}min, ${workout.target_tss} TSS)`
-                    };
-                  })}
-                  value={selectedWorkout}
-                  onChange={setSelectedWorkout}
-                  clearable
-                  maxDropdownHeight={300}
-                />
-              )}
-
-              {selectedWorkout && (
-                <Alert color="blue" variant="light">
-                  Training context updated from workout! Time available and TSS targets have been set automatically.
-                </Alert>
-              )}
-            </Stack>
-          </Card>
+          </div>
         )}
 
-        <Divider label="Or customize manually" labelPosition="center" my="md" />
-
-        {/* Training Context */}
-        <TrainingContextSelector
-          value={trainingContext}
-          onChange={setTrainingContext}
-        />
+        {/* Recreational Ride Style - Only show in recreational mode */}
+        {!isTrainingMode && (
+          <div>
+            <Text size="sm" fw={500} mb="sm">What kind of ride?</Text>
+            <Radio.Group value={recreationalStyle} onChange={setRecreationalStyle}>
+              <Grid gutter="xs">
+                {recreationalStyles.map((style) => (
+                  <Grid.Col span={6} key={style.value}>
+                    <Card
+                      withBorder
+                      p="xs"
+                      style={{
+                        backgroundColor: recreationalStyle === style.value ? '#e7f5ff' : 'white',
+                        border: recreationalStyle === style.value ? '2px solid #228be6' : '1px solid #dee2e6',
+                        cursor: 'pointer',
+                        textAlign: 'center'
+                      }}
+                      onClick={() => setRecreationalStyle(style.value)}
+                    >
+                      <Stack gap={4} align="center">
+                        <Text size="xl">{style.icon}</Text>
+                        <Text size="sm" fw={500}>{style.label}</Text>
+                        <Radio value={style.value} style={{ display: 'none' }} />
+                      </Stack>
+                    </Card>
+                  </Grid.Col>
+                ))}
+              </Grid>
+            </Radio.Group>
+          </div>
+        )}
 
         {/* Route Type */}
         <div>
           <Text size="sm" fw={500} mb="sm">Route Type</Text>
           <Radio.Group value={routeType} onChange={setRouteType}>
-            <Grid>
+            <Grid gutter="xs">
               {routeTypes.map((type) => (
                 <Grid.Col span={4} key={type.value}>
                   <Card
                     withBorder
-                    p="sm"
+                    p="xs"
                     style={{
                       backgroundColor: routeType === type.value ? '#e7f5ff' : 'white',
                       border: routeType === type.value ? '2px solid #228be6' : '1px solid #dee2e6',
                       cursor: 'pointer',
-                      textAlign: 'center'
+                      textAlign: 'center',
+                      minHeight: '80px'
                     }}
                     onClick={() => setRouteType(type.value)}
                   >
-                    <Stack gap="xs" align="center">
-                      <Radio value={type.value} />
-                      <Route size={20} />
-                      <div>
-                        <Text size="sm" fw={500}>{type.label}</Text>
-                        <Text size="xs" c="dimmed">{type.description}</Text>
-                      </div>
+                    <Stack gap={4} align="center" justify="center" style={{ height: '100%' }}>
+                      <Route size={18} />
+                      <Text size="xs" fw={500}>{type.label}</Text>
+                      <Radio value={type.value} style={{ display: 'none' }} />
                     </Stack>
                   </Card>
                 </Grid.Col>
@@ -849,7 +859,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
           </Radio.Group>
         </div>
 
-        {/* Generate Button */}
+        {/* Generate Button - PROMINENT POSITION */}
         <Button
           size="lg"
           leftSection={generating ? <Loader size={20} /> : <Brain size={20} />}
@@ -857,9 +867,113 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
           loading={generating}
           disabled={!startLocation || generating}
           fullWidth
+          style={{
+            fontSize: '16px',
+            height: '50px',
+            marginTop: '8px',
+            marginBottom: '8px'
+          }}
         >
           {generating ? 'Creating Your Routes...' : 'Find My Routes'}
         </Button>
+
+        {/* Advanced Options - Collapsible */}
+        <Accordion variant="contained">
+          <Accordion.Item value="advanced">
+            <Accordion.Control>
+              <Group gap="xs">
+                <Settings size={16} />
+                <Text size="sm" fw={500}>Advanced Options</Text>
+              </Group>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Stack gap="md">
+                {/* Training Plan Workout Selector */}
+                {activePlans.length > 0 && (
+                  <div>
+                    <Text size="sm" fw={600} mb="xs">Use Training Plan Workout</Text>
+                    <Stack gap="sm">
+                      <Select
+                        label="Select Training Plan"
+                        placeholder="Choose a plan"
+                        data={activePlans.map(plan => ({
+                          value: plan.id,
+                          label: plan.name
+                        }))}
+                        value={selectedPlan}
+                        onChange={setSelectedPlan}
+                        clearable
+                        size="sm"
+                      />
+
+                      {selectedPlan && planWorkouts.length > 0 && (
+                        <Select
+                          label="Select Workout"
+                          placeholder="Choose a workout"
+                          data={planWorkouts.map(workout => {
+                            const workoutType = WORKOUT_TYPES[workout.workout_type];
+                            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                            return {
+                              value: workout.id,
+                              label: `Week ${workout.week_number}, ${dayNames[workout.day_of_week]} - ${workoutType?.name || workout.workout_type} (${workout.target_duration}min, ${workout.target_tss} TSS)`
+                            };
+                          })}
+                          value={selectedWorkout}
+                          onChange={setSelectedWorkout}
+                          clearable
+                          maxDropdownHeight={300}
+                          size="sm"
+                        />
+                      )}
+
+                      {selectedWorkout && (
+                        <Alert color="blue" variant="light" p="xs">
+                          <Text size="xs">Training context updated from workout!</Text>
+                        </Alert>
+                      )}
+                    </Stack>
+                    <Divider my="sm" />
+                  </div>
+                )}
+
+                {/* Training Context - Manual */}
+                <div>
+                  <Text size="sm" fw={600} mb="xs">Manual Training Context</Text>
+                  <Text size="xs" c="dimmed" mb="xs">
+                    Adjusting these settings will override the "Type of ride" selection above
+                  </Text>
+                  <TrainingContextSelector
+                    value={trainingContext}
+                    onChange={handleTrainingContextChange}
+                  />
+                </div>
+
+                <Divider />
+
+                {/* Debug Toggles */}
+                <div>
+                  <Text size="sm" fw={500} mb="xs">Route Generation Options</Text>
+                  <Stack gap="xs">
+                    <Switch
+                      label="Use Past Rides"
+                      description="Learn from your riding history"
+                      checked={usePastRides}
+                      onChange={(e) => setUsePastRides(e.currentTarget.checked)}
+                      size="sm"
+                    />
+                    <Switch
+                      label="Use Training Context"
+                      description="Match routes to workout requirements"
+                      checked={useTrainingContext}
+                      onChange={(e) => setUseTrainingContext(e.currentTarget.checked)}
+                      size="sm"
+                    />
+                  </Stack>
+                </div>
+              </Stack>
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
 
         {/* Error Display */}
         {error && (
@@ -892,51 +1006,63 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                   trainingContext.workoutType || 'endurance'
                 );
 
+                // Generate interval cues if in training mode
+                const intervalCues = (isTrainingMode && useTrainingContext)
+                  ? generateIntervalCues(route, trainingContext)
+                  : null;
+
                 return (
-                <Card key={index} withBorder p="md" style={{ cursor: 'pointer' }}>
-                  <Group justify="space-between" align="flex-start">
-                    <div style={{ flex: 1 }}>
-                      <Group gap="sm" mb="xs">
-                        <Text size="sm" fw={600}>{route.name}</Text>
-                        <Badge size="sm" color={route.difficulty === 'easy' ? 'green' : route.difficulty === 'hard' ? 'red' : 'yellow'}>
-                          {route.difficulty}
-                        </Badge>
-                        {estimatedRouteTSS && (
-                          <Badge size="sm" color="blue" variant="light">
-                            {estimatedRouteTSS} TSS
+                <Card key={index} withBorder p="md">
+                  <Stack gap="md">
+                    <Group justify="space-between" align="flex-start">
+                      <div style={{ flex: 1 }}>
+                        <Group gap="sm" mb="xs">
+                          <Text size="sm" fw={600}>{route.name}</Text>
+                          <Badge size="sm" color={route.difficulty === 'easy' ? 'green' : route.difficulty === 'hard' ? 'red' : 'yellow'}>
+                            {route.difficulty}
                           </Badge>
-                        )}
-                      </Group>
+                          {estimatedRouteTSS && (
+                            <Badge size="sm" color="blue" variant="light">
+                              {estimatedRouteTSS} TSS
+                            </Badge>
+                          )}
+                        </Group>
 
-                      <Grid gutter="xs">
-                        <Grid.Col span={6}>
-                          <Text size="xs" c="dimmed">Distance</Text>
-                          <Text size="sm" fw={500}>{formatDistance(route.distance)}</Text>
-                        </Grid.Col>
-                        <Grid.Col span={6}>
-                          <Text size="xs" c="dimmed">Elevation</Text>
-                          <Text size="sm" fw={500}>+{formatElevation(route.elevationGain)}</Text>
-                        </Grid.Col>
-                      </Grid>
+                        <Grid gutter="xs">
+                          <Grid.Col span={6}>
+                            <Text size="xs" c="dimmed">Distance</Text>
+                            <Text size="sm" fw={500}>{formatDistance(route.distance)}</Text>
+                          </Grid.Col>
+                          <Grid.Col span={6}>
+                            <Text size="xs" c="dimmed">Elevation</Text>
+                            <Text size="sm" fw={500}>+{formatElevation(route.elevationGain)}</Text>
+                          </Grid.Col>
+                        </Grid>
 
-                      <Text size="xs" c="dimmed" mt="xs">
-                        {route.description}
-                      </Text>
-                    </div>
-                    
-                    <Button
-                      size="sm"
-                      leftSection={<Play size={14} />}
-                      onClick={() => {
-                        if (onRouteGenerated) {
-                          // Defer to avoid React error #185
-                          setTimeout(() => onRouteGenerated(route), 0);
-                        }
-                      }}
-                    >
-                      Use Route
-                    </Button>
-                  </Group>
+                        <Text size="xs" c="dimmed" mt="xs">
+                          {route.description}
+                        </Text>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        leftSection={<Play size={14} />}
+                        onClick={() => {
+                          if (onRouteGenerated) {
+                            // Defer to avoid React error #185
+                            setTimeout(() => onRouteGenerated(route), 0);
+                          }
+                        }}
+                      >
+                        Use Route
+                      </Button>
+                    </Group>
+
+                    {/* Show interval cues if available */}
+                    {intervalCues && (
+                      <IntervalCues cues={intervalCues} />
+                    )}
+                  </Stack>
                 </Card>
                 );
               })}
