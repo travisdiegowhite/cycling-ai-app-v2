@@ -636,3 +636,66 @@ export function getZoneName(zone) {
   };
   return names[zone] || 'Unknown';
 }
+
+/**
+ * Convert interval cues to colored route segments for map display
+ * Returns an array of GeoJSON LineStrings with color properties
+ */
+export function createColoredRouteSegments(coordinates, cues) {
+  if (!coordinates || coordinates.length < 2 || !cues || cues.length === 0) {
+    return null;
+  }
+
+  const totalDistance = calculateTotalDistance(coordinates);
+  const segments = [];
+
+  // Build cumulative distance array for faster lookups
+  const cumulativeDistances = [0];
+  for (let i = 1; i < coordinates.length; i++) {
+    const [lon1, lat1] = coordinates[i - 1];
+    const [lon2, lat2] = coordinates[i];
+    const segmentDist = haversineDistance(lat1, lon1, lat2, lon2);
+    cumulativeDistances.push(cumulativeDistances[i - 1] + segmentDist);
+  }
+
+  // Helper to find coordinate index at specific distance
+  const findIndexAtDistance = (targetDistance) => {
+    for (let i = 0; i < cumulativeDistances.length - 1; i++) {
+      if (cumulativeDistances[i + 1] >= targetDistance) {
+        return i;
+      }
+    }
+    return coordinates.length - 1;
+  };
+
+  // Create a segment for each cue
+  for (let i = 0; i < cues.length; i++) {
+    const cue = cues[i];
+    const startIdx = findIndexAtDistance(cue.startDistance);
+    const endIdx = findIndexAtDistance(cue.endDistance);
+
+    // Extract coordinates for this segment
+    const segmentCoords = coordinates.slice(startIdx, endIdx + 1);
+
+    if (segmentCoords.length > 1) {
+      segments.push({
+        type: 'Feature',
+        properties: {
+          zone: cue.zone,
+          color: getZoneColor(cue.zone),
+          type: cue.type,
+          instruction: cue.instruction
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: segmentCoords
+        }
+      });
+    }
+  }
+
+  return {
+    type: 'FeatureCollection',
+    features: segments
+  };
+}

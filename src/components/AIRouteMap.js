@@ -7,6 +7,7 @@ import { buildLineString } from '../utils/geo';
 import AIRouteGenerator from './AIRouteGenerator';
 import RouteProfile from './RouteProfile';
 import AIRouteActions from './AIRouteActions';
+import { createColoredRouteSegments } from '../utils/intervalCues';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 const AIRouteMap = () => {
@@ -36,6 +37,14 @@ const AIRouteMap = () => {
     }
     return buildLineString(selectedRoute.coordinates);
   }, [selectedRoute]); // Use selectedRoute instead of coordinates to avoid reference issues
+
+  // Memoize colored route segments if interval cues exist
+  const coloredRouteSegments = React.useMemo(() => {
+    if (!selectedRoute?.coordinates || !selectedRoute?.intervalCues || selectedRoute.intervalCues.length === 0) {
+      return null;
+    }
+    return createColoredRouteSegments(selectedRoute.coordinates, selectedRoute.intervalCues);
+  }, [selectedRoute]);
 
 
   const handleRouteGenerated = (route) => {
@@ -147,9 +156,25 @@ const AIRouteMap = () => {
             interactiveLayerIds={[]}
           >
           <NavigationControl position="top-right" />
-          
-          {/* Display generated route */}
-          {routeGeoJSON && (
+
+          {/* Display generated route - colored segments if interval cues exist, otherwise plain blue */}
+          {coloredRouteSegments ? (
+            <Source
+              id="ai-generated-route-colored"
+              type="geojson"
+              data={coloredRouteSegments}
+            >
+              <Layer
+                id="ai-route-line-colored"
+                type="line"
+                paint={{
+                  'line-color': ['get', 'color'],
+                  'line-width': 5,
+                  'line-opacity': 0.85
+                }}
+              />
+            </Source>
+          ) : routeGeoJSON ? (
             <Source
               id="ai-generated-route"
               type="geojson"
@@ -165,7 +190,7 @@ const AIRouteMap = () => {
                 }}
               />
             </Source>
-          )}
+          ) : null}
           
           {/* Display start location marker - draggable */}
           {startLocation && (

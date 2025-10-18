@@ -1049,8 +1049,13 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                         leftSection={<Play size={14} />}
                         onClick={() => {
                           if (onRouteGenerated) {
+                            // Add interval cues to route before passing
+                            const routeWithCues = {
+                              ...route,
+                              intervalCues: intervalCues
+                            };
                             // Defer to avoid React error #185
-                            setTimeout(() => onRouteGenerated(route), 0);
+                            setTimeout(() => onRouteGenerated(routeWithCues), 0);
                           }
                         }}
                       >
