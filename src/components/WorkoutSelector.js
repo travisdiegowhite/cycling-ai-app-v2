@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   Card,
   Select,
@@ -368,9 +368,9 @@ const WorkoutSelector = ({
     );
   }
 
-  if (compact) {
-    // Compact mode - just a dropdown
-    // Format data according to Mantine v8 grouped data requirements
+  // Memoize workout options to prevent infinite re-renders
+  const workoutOptions = useMemo(() => {
+    console.log('🔄 Calculating workout options (should only happen once)');
     const workoutsByCategory = {};
 
     Object.values(LIBRARY).forEach(workout => {
@@ -389,32 +389,39 @@ const WorkoutSelector = ({
     });
 
     // Convert to Mantine's grouped data format: [{ group: 'Name', items: [...] }]
-    const workoutOptions = Object.entries(workoutsByCategory).map(([group, items]) => ({
+    const options = Object.entries(workoutsByCategory).map(([group, items]) => ({
       group,
       items
     }));
 
-    console.log('Workout options for dropdown:', {
-      totalGroups: workoutOptions.length,
-      sample: workoutOptions[0],
-      structure: 'grouped'
+    console.log('✅ Workout options calculated:', {
+      totalGroups: options.length,
+      totalWorkouts: Object.keys(LIBRARY).length
     });
 
+    return options;
+  }, []); // Empty dependency array - only calculate once since LIBRARY is constant
+
+  // Memoize the change handler to prevent re-renders
+  const handleWorkoutChange = useCallback((workoutId) => {
+    console.log('Workout selected from dropdown:', workoutId);
+    if (!workoutId) return;
+    const workout = LIBRARY[workoutId];
+    console.log('Found workout object:', workout);
+    if (workout && onWorkoutSelect) {
+      onWorkoutSelect(workout);
+    }
+  }, [onWorkoutSelect]);
+
+  if (compact) {
+    // Compact mode - just a dropdown
     return (
       <Select
         label="Choose Workout"
         placeholder="Select a workout from the library"
         data={workoutOptions}
         value={selectedWorkoutId || null}
-        onChange={(workoutId) => {
-          console.log('Workout selected from dropdown:', workoutId);
-          if (!workoutId) return;
-          const workout = LIBRARY[workoutId];
-          console.log('Found workout object:', workout);
-          if (workout && onWorkoutSelect) {
-            onWorkoutSelect(workout);
-          }
-        }}
+        onChange={handleWorkoutChange}
         searchable
         leftSection={<Activity size={16} />}
         clearable
@@ -538,4 +545,5 @@ const WorkoutSelector = ({
   );
 };
 
-export default WorkoutSelector;
+// Wrap with React.memo to prevent unnecessary re-renders
+export default React.memo(WorkoutSelector);
