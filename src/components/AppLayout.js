@@ -11,14 +11,15 @@ import {
   UnstyledButton,
   Burger,
   Flex,
+  Badge,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, Activity, Plus, Zap, FileText, Scale, TrendingUp, Globe, Book } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, Activity, Plus, Zap, FileText, Scale, TrendingUp, Globe, Book, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
 const AppLayout = ({ children, activePage, setActivePage }) => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isDemoMode } = useAuth();
   const [opened, { toggle }] = useDisclosure();
   const navigate = useNavigate();
   
@@ -78,15 +79,15 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
               <Menu.Target>
                 <UnstyledButton>
                   <Group gap="xs">
-                    <Avatar size={{ base: 30, sm: 36 }} color="blue">
+                    <Avatar size={{ base: 30, sm: 36 }} color={isDemoMode ? "teal" : "blue"}>
                       <User size={20} />
                     </Avatar>
                     <div style={{ flex: 1, display: { base: 'none', sm: 'block' } }}>
                       <Text size="sm" fw={500} visibleFrom="sm">
-                        {user.email?.split('@')[0] || 'User'}
+                        {isDemoMode ? 'Demo User' : user.email?.split('@')[0] || 'User'}
                       </Text>
                       <Text size="xs" c="dimmed" visibleFrom="sm">
-                        {user.email}
+                        {isDemoMode ? 'Exploring features' : user.email}
                       </Text>
                     </div>
                   </Group>
@@ -94,8 +95,21 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
               </Menu.Target>
 
               <Menu.Dropdown>
+                {isDemoMode && (
+                  <Menu.Item
+                    leftSection={<UserPlus size={16} />}
+                    onClick={signOut}
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(34, 211, 238, 0.1) 100%)',
+                      fontWeight: 600,
+                      color: '#10b981',
+                    }}
+                  >
+                    Create Account
+                  </Menu.Item>
+                )}
                 <Menu.Item leftSection={<LogOut size={16} />} onClick={signOut}>
-                  Sign out
+                  {isDemoMode ? 'Exit Demo' : 'Sign out'}
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>

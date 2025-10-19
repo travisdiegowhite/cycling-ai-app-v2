@@ -635,18 +635,25 @@ For each waypoint, specify:
    * Get complete user preferences for display/editing
    */
   static async getCompletePreferences(userId) {
+    // Check for demo mode first
+    const { isDemoMode, demoPreferences } = await import('./demoData');
+    if (isDemoMode() && userId === 'demo-user-id') {
+      console.log('✅ Demo mode: returning mock preferences');
+      return demoPreferences;
+    }
+
     try {
       const { data, error } = await supabase
         .from('user_preferences_complete')
         .select('*')
         .eq('user_id', userId)
         .single();
-      
+
       if (error) {
         console.error('Error fetching complete preferences:', error);
         return null;
       }
-      
+
       return data;
     } catch (error) {
       console.error('Failed to get complete preferences:', error);

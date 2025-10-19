@@ -194,17 +194,25 @@ const TrainingDashboard = () => {
     try {
       setLoading(true);
 
-      // Load active training plan
-      const { data: plans } = await supabase
-        .from('training_plans')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1);
+      // Check for demo mode
+      const { isDemoMode } = await import('../utils/demoData');
+      const inDemoMode = isDemoMode();
 
-      if (plans && plans.length > 0) {
-        setActivePlan(plans[0]);
+      // Load active training plan (skip in demo mode)
+      if (!inDemoMode) {
+        const { data: plans } = await supabase
+          .from('training_plans')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (plans && plans.length > 0) {
+          setActivePlan(plans[0]);
+        }
+      } else {
+        console.log('✅ Demo mode: skipping training plans fetch');
       }
 
       // Load recent rides (last 90 days for CTL calculation)

@@ -198,6 +198,13 @@ const TrainingPlanBuilder = () => {
       return;
     }
 
+    // Check for demo mode - prevent creating plans
+    const { isDemoMode } = await import('../utils/demoData');
+    if (isDemoMode()) {
+      toast.error('Training plan creation is not available in demo mode. Please create an account to save plans.');
+      return;
+    }
+
     try {
       setCreating(true);
 

@@ -127,6 +127,17 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
             <Group spacing="md" mt="xl">
               <Button
                 size="lg"
+                onClick={onGetStarted}
+                leftSection={<ChevronRight size={20} />}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
+                }}
+              >
+                Create Free Account
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
                 onClick={async () => {
                   setDemoLoading(true);
                   try {
@@ -138,29 +149,15 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
                 loading={demoLoading}
                 leftSection={!demoLoading && <Play size={20} />}
                 style={{
-                  background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
-                }}
-              >
-                {demoLoading ? 'Signing in...' : 'Try Demo'}
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => setBetaModalOpened(true)}
-                leftSection={<Rocket size={20} />}
-                style={{
                   borderColor: '#10b981',
                   color: '#10b981',
                 }}
               >
-                Join Beta
+                {demoLoading ? 'Loading...' : 'Try Demo'}
               </Button>
             </Group>
-            <Badge size="lg" variant="gradient" gradient={{ from: 'teal', to: 'cyan' }} mt="md">
-              Beta Launch: December 1, 2025
-            </Badge>
-            <Text size="sm" c="dimmed" mt="xs">
-              No credit card required • Full feature access in demo
+            <Text size="sm" c="dimmed" mt="md">
+              No credit card required • Full feature access • Save your data with an account
             </Text>
           </Stack>
         </Center>
@@ -240,18 +237,21 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
               <Group>
                 <Button
                   size="md"
-                  onClick={onTryDemo}
-                  leftSection={<Play size={18} />}
+                  onClick={onGetStarted}
+                  leftSection={<ChevronRight size={18} />}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
+                  }}
                 >
-                  Try Demo
+                  Create Account
                 </Button>
                 <Button
                   size="md"
                   variant="outline"
-                  onClick={() => setBetaModalOpened(true)}
-                  leftSection={<Rocket size={18} />}
+                  onClick={onTryDemo}
+                  leftSection={<Play size={18} />}
                 >
-                  Join Beta
+                  Try Demo
                 </Button>
               </Group>
             </Stack>
@@ -367,29 +367,29 @@ const LandingPage = ({ onGetStarted, onTryDemo }) => {
             <Group>
               <Button
                 size="xl"
-                onClick={onTryDemo}
-                leftSection={<Play size={24} />}
+                onClick={onGetStarted}
+                leftSection={<ChevronRight size={24} />}
                 style={{
                   background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
                 }}
               >
-                Try Demo Now
+                Create Free Account
               </Button>
               <Button
                 size="xl"
                 variant="outline"
-                onClick={() => setBetaModalOpened(true)}
-                leftSection={<Rocket size={24} />}
+                onClick={onTryDemo}
+                leftSection={<Play size={24} />}
                 style={{
                   borderColor: '#10b981',
                   color: '#10b981',
                 }}
               >
-                Join Beta
+                Try Demo
               </Button>
             </Group>
             <Text size="sm" c="dimmed">
-              Free demo access • Beta launching Dec 1, 2025
+              No credit card required • Start riding smarter in under 2 minutes
             </Text>
           </Stack>
         </Center>

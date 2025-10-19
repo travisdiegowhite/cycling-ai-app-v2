@@ -20,7 +20,7 @@ import { enableDemoMode } from '../utils/demoData';
 const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(true); // Default to sign up
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -85,13 +85,13 @@ const Auth = () => {
 
       <Paper withBorder shadow="md" p={30} radius="md">
         <Title order={2} ta="center" mb="md">
-          {isSignUp ? 'Create Account' : 'Welcome Back'}
+          {isSignUp ? 'Create Your Free Account' : 'Welcome Back'}
         </Title>
 
         <Text c="dimmed" size="sm" ta="center" mb="xl">
           {isSignUp
-            ? 'Get started with intelligent route recommendations'
-            : 'Sign in to access your cycling routes'
+            ? 'Start planning smarter routes in under 2 minutes. No credit card required.'
+            : 'Sign in to access your cycling routes and training data'
           }
         </Text>
 

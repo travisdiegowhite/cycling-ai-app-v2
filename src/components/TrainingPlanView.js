@@ -69,6 +69,15 @@ const TrainingPlanView = () => {
     try {
       setLoading(true);
 
+      // Check for demo mode - redirect to training page
+      const { isDemoMode } = await import('../utils/demoData');
+      if (isDemoMode()) {
+        console.log('✅ Demo mode: training plans not available');
+        toast.error('Training plans are not available in demo mode');
+        navigate('/training');
+        return;
+      }
+
       // Load training plan
       const { data: planData, error: planError } = await supabase
         .from('training_plans')

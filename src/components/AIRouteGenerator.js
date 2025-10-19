@@ -188,9 +188,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
       const weather = await getWeatherData(location[1], location[0]);
       if (weather) {
         setWeatherData(weather);
-        // Format temperature inline to avoid dependency issues
-        const tempF = Math.round((weather.temperature * 9/5) + 32);
-        toast.success(`Weather updated: ${tempF}°F, ${weather.description}`);
+        // Don't show toast here - location toast is already shown
       } else {
         // Use mock data as fallback
         setWeatherData(getMockWeatherData());
@@ -422,6 +420,14 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   useEffect(() => {
     const loadTrainingPlans = async () => {
       if (!user?.id) return;
+
+      // Check for demo mode - skip training plans fetch
+      const { isDemoMode } = await import('../utils/demoData');
+      if (isDemoMode()) {
+        console.log('✅ Demo mode: skipping training plans fetch');
+        setActivePlans([]);
+        return;
+      }
 
       try {
         const { data: plans } = await supabase
