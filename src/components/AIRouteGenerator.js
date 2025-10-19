@@ -43,9 +43,11 @@ import { generateAIRoutes } from '../utils/aiRouteGenerator';
 import PreferenceSettings from './PreferenceSettings';
 import { EnhancedContextCollector } from '../utils/enhancedContext';
 import TrainingContextSelector from './TrainingContextSelector';
+import WorkoutSelector from './WorkoutSelector';
 import { estimateTSS, WORKOUT_TYPES } from '../utils/trainingPlans';
+import { WORKOUT_LIBRARY } from '../data/workoutLibrary';
 import { supabase } from '../supabase';
-import { generateIntervalCues } from '../utils/intervalCues';
+import { generateIntervalCues, generateCuesFromWorkoutStructure } from '../utils/intervalCues';
 import IntervalCues from './IntervalCues';
 
 const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, externalStartLocation }) => {
@@ -82,6 +84,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   const [planWorkouts, setPlanWorkouts] = useState([]);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
 
+  // Workout library integration
+  const [selectedLibraryWorkout, setSelectedLibraryWorkout] = useState(null);
+
   // Generation state
   const [generating, setGenerating] = useState(false);
   const [generatedRoutes, setGeneratedRoutes] = useState([]);
@@ -102,6 +107,37 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   const handleTrainingContextChange = useCallback((newContext) => {
     setTrainingContext(newContext);
     setTrainingContextManuallySet(true);
+  }, []);
+
+  // Handler for workout library selection
+  const handleLibraryWorkoutSelect = useCallback((workout) => {
+    if (!workout) {
+      console.error('No workout provided to handleLibraryWorkoutSelect');
+      return;
+    }
+
+    console.log('Workout selected from library:', workout);
+    setSelectedLibraryWorkout(workout);
+
+    // Update training context from workout
+    setTrainingContext({
+      workoutType: workout.category || 'endurance',
+      phase: 'build', // Default phase
+      targetDuration: workout.duration || 60,
+      targetTSS: workout.targetTSS || 75,
+      primaryZone: workout.primaryZone || 2
+    });
+
+    // Update time available to match workout
+    setTimeAvailable(workout.duration || 60);
+
+    // Mark as manually set so it doesn't get overridden
+    setTrainingContextManuallySet(true);
+
+    // Clear any training plan workout selection
+    setSelectedWorkout(null);
+
+    toast.success(`Workout selected: ${workout.name}`);
   }, []);
 
   // Sync training context with trainingGoal and timeAvailable (but only if not manually set)
@@ -888,6 +924,43 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
             </Accordion.Control>
             <Accordion.Panel>
               <Stack gap="md">
+                {/* Workout Library Selector - NEW! */}
+                <div>
+                  <Text size="sm" fw={600} mb="xs">Choose From Workout Library</Text>
+                  <Text size="xs" c="dimmed" mb="sm">
+                    40+ research-backed workouts from 2025 training science
+                  </Text>
+
+                  <WorkoutSelector
+                    compact={true}
+                    onWorkoutSelect={handleLibraryWorkoutSelect}
+                    selectedWorkoutId={selectedLibraryWorkout?.id}
+                  />
+
+                  {selectedLibraryWorkout && (
+                    <Alert color="blue" variant="light" p="xs" mt="xs">
+                      <Stack gap={4}>
+                        <Text size="xs" fw={600}>{selectedLibraryWorkout.name}</Text>
+                        <Text size="xs">{selectedLibraryWorkout.description}</Text>
+                        <Group gap="xs">
+                          <Badge size="xs">{selectedLibraryWorkout.duration}min</Badge>
+                          <Badge size="xs">{selectedLibraryWorkout.targetTSS} TSS</Badge>
+                          <Badge size="xs" color={selectedLibraryWorkout.difficulty === 'beginner' ? 'green' : selectedLibraryWorkout.difficulty === 'intermediate' ? 'yellow' : 'red'}>
+                            {selectedLibraryWorkout.difficulty}
+                          </Badge>
+                        </Group>
+                        {selectedLibraryWorkout.coachNotes && (
+                          <Text size="xs" c="dimmed" italic mt={4}>
+                            💡 {selectedLibraryWorkout.coachNotes}
+                          </Text>
+                        )}
+                      </Stack>
+                    </Alert>
+                  )}
+                </div>
+
+                <Divider label="OR" labelPosition="center" />
+
                 {/* Training Plan Workout Selector */}
                 {activePlans.length > 0 && (
                   <div>
@@ -896,7 +969,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                       <Select
                         label="Select Training Plan"
                         placeholder="Choose a plan"
-                        data={activePlans.map(plan => ({
+                        data={(activePlans || []).map(plan => ({
                           value: plan.id,
                           label: plan.name
                         }))}
@@ -910,7 +983,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                         <Select
                           label="Select Workout"
                           placeholder="Choose a workout"
-                          data={planWorkouts.map(workout => {
+                          data={(planWorkouts || []).map(workout => {
                             const workoutType = WORKOUT_TYPES[workout.workout_type];
                             const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                             return {
@@ -1007,9 +1080,18 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
                 );
 
                 // Generate interval cues if in training mode
-                const intervalCues = (isTrainingMode && useTrainingContext)
-                  ? generateIntervalCues(route, trainingContext)
-                  : null;
+                let intervalCues = null;
+                if (isTrainingMode && useTrainingContext) {
+                  // If we have a selected library workout, use its detailed structure
+                  if (selectedLibraryWorkout && selectedLibraryWorkout.structure) {
+                    console.log('📚 Using workout library structure for cues:', selectedLibraryWorkout.name);
+                    intervalCues = generateCuesFromWorkoutStructure(route, selectedLibraryWorkout);
+                  } else {
+                    // Otherwise use the generic training context
+                    console.log('🎯 Using generic training context for cues');
+                    intervalCues = generateIntervalCues(route, trainingContext);
+                  }
+                }
 
                 return (
                 <Card key={index} withBorder p="md">

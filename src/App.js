@@ -24,6 +24,7 @@ import ViewRoutes from './components/ViewRoutes';
 import TrainingDashboard from './components/TrainingDashboard';
 import TrainingPlanBuilder from './components/TrainingPlanBuilder';
 import TrainingPlanView from './components/TrainingPlanView';
+import WorkoutLibrary from './components/WorkoutLibrary';
 import HelpCenter from './components/HelpCenter';
 import Onboarding from './components/Onboarding';
 import DemoModeBanner from './components/DemoModeBanner';
@@ -51,6 +52,7 @@ const AppContent = () => {
     else if (path === '/upload') setActivePage('upload');
     else if (path === '/strava') setActivePage('strava');
     else if (path === '/help') setActivePage('help');
+    else if (path === '/workouts') setActivePage('workouts');
     else if (path.startsWith('/training')) setActivePage('training');
   }, [location]);
 
@@ -103,6 +105,7 @@ const AppContent = () => {
           <Route path="/training" element={<TrainingDashboard />} />
           <Route path="/training/plans/new" element={<TrainingPlanBuilder />} />
           <Route path="/training/plans/:planId" element={<TrainingPlanView />} />
+          <Route path="/workouts" element={<WorkoutLibrary />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Onboarding opened={showOnboarding} onClose={() => setShowOnboarding(false)} />

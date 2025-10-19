@@ -13,7 +13,7 @@ import {
   Flex,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, Activity, Plus, Zap, FileText, Scale, TrendingUp, Globe } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route, Brain, Activity, Plus, Zap, FileText, Scale, TrendingUp, Globe, Book } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -149,6 +149,16 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
             fullWidth
           >
             Training Dashboard
+          </Button>
+
+          <Button
+            variant={activePage === 'workouts' ? 'filled' : 'subtle'}
+            leftSection={<Book size={18} />}
+            onClick={() => handleNavigation('workouts', '/workouts')}
+            justify="flex-start"
+            fullWidth
+          >
+            Workout Library
           </Button>
 
           <Button

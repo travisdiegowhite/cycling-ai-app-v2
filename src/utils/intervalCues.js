@@ -71,7 +71,138 @@ function findCoordinateAtDistance(coordinates, targetDistance) {
 }
 
 /**
+ * Generate interval cues from a workout library structure
+ * Converts workout.structure into detailed cues mapped to route distance
+ */
+export function generateCuesFromWorkoutStructure(route, workout) {
+  if (!route || !route.coordinates || route.coordinates.length < 2) {
+    return null;
+  }
+
+  if (!workout || !workout.structure) {
+    return null;
+  }
+
+  console.log('📚 Generating cues from workout library:', {
+    workoutName: workout.name,
+    duration: workout.duration,
+    structure: workout.structure
+  });
+
+  const totalDistance = route.distance || calculateTotalDistance(route.coordinates);
+  const cues = [];
+  let currentDistance = 0;
+  let currentTime = 0; // Track time in minutes
+
+  // Helper to convert time-based segment to distance
+  const timeToDistance = (minutes, zone) => {
+    // Estimate speed based on zone
+    const zoneSpeed = {
+      1: 22,  // km/h - recovery
+      2: 25,  // km/h - endurance
+      3: 27,  // km/h - tempo
+      4: 28,  // km/h - threshold
+      5: 30,  // km/h - VO2max
+    };
+    const speed = zoneSpeed[zone] || 25;
+    return (speed / 60) * minutes;
+  };
+
+  // Helper to process a segment
+  const processSegment = (segment, segmentIndex, segmentType) => {
+    const segmentDistance = timeToDistance(segment.duration, segment.zone);
+
+    if (currentDistance + segmentDistance > totalDistance) {
+      // Don't add segments beyond route distance
+      return false;
+    }
+
+    cues.push({
+      type: segmentType,
+      zone: segment.zone,
+      distance: segmentDistance,
+      startDistance: currentDistance,
+      endDistance: currentDistance + segmentDistance,
+      coordinate: findCoordinateAtDistance(route.coordinates, currentDistance + segmentDistance).coordinate,
+      instruction: `${segment.description || segmentType}: Zone ${segment.zone} for ${segment.duration}min (${segmentDistance.toFixed(1)}km)${segment.powerPctFTP ? ` @ ${segment.powerPctFTP}% FTP` : ''}${segment.cadence ? ` | ${segment.cadence} rpm` : ''}`,
+      duration: segment.duration,
+      powerPctFTP: segment.powerPctFTP,
+      cadence: segment.cadence
+    });
+
+    currentDistance += segmentDistance;
+    currentTime += segment.duration;
+    return true;
+  };
+
+  // Helper to process repeating segments
+  const processRepeatStructure = (repeatBlock, blockIndex) => {
+    const { sets, work, rest } = repeatBlock;
+
+    for (let setNum = 1; setNum <= sets; setNum++) {
+      // Process work portion
+      if (Array.isArray(work)) {
+        work.forEach((workSegment, workIdx) => {
+          if (workSegment.type === 'repeat') {
+            // Nested repeats (like 30/30 intervals)
+            processRepeatStructure(workSegment, `${blockIndex}-${setNum}-${workIdx}`);
+          } else {
+            processSegment(workSegment, `${blockIndex}-${setNum}-${workIdx}`, `interval-hard`);
+          }
+        });
+      }
+
+      // Process rest portion (between sets, not after last set)
+      if (rest && rest.duration > 0 && setNum < sets) {
+        processSegment(rest, `${blockIndex}-${setNum}-rest`, 'interval-recovery');
+      }
+    }
+  };
+
+  // 1. Process warmup
+  if (workout.structure.warmup) {
+    processSegment(workout.structure.warmup, 0, 'warmup');
+  }
+
+  // 2. Process main workout
+  if (workout.structure.main && Array.isArray(workout.structure.main)) {
+    workout.structure.main.forEach((segment, idx) => {
+      if (segment.type === 'repeat') {
+        // Handle repeating intervals
+        processRepeatStructure(segment, idx);
+      } else {
+        // Simple steady segment
+        processSegment(segment, idx, 'main');
+      }
+    });
+  }
+
+  // 3. Process cooldown
+  if (workout.structure.cooldown) {
+    processSegment(workout.structure.cooldown, 'cooldown', 'cooldown');
+  }
+
+  // If we haven't used all the route distance, add a steady segment
+  if (currentDistance < totalDistance - 0.5) {
+    const remainingDist = totalDistance - currentDistance;
+    cues.push({
+      type: 'steady',
+      zone: 2,
+      distance: remainingDist,
+      startDistance: currentDistance,
+      endDistance: totalDistance,
+      coordinate: findCoordinateAtDistance(route.coordinates, totalDistance).coordinate,
+      instruction: `Steady Zone 2 for ${remainingDist.toFixed(1)}km`
+    });
+  }
+
+  console.log(`✅ Generated ${cues.length} cues from workout structure`);
+  return cues;
+}
+
+/**
  * Generate interval workout structure based on training context
+ * (Legacy function for generic workouts)
  */
 export function generateIntervalCues(route, trainingContext) {
   if (!route || !route.coordinates || route.coordinates.length < 2) {
