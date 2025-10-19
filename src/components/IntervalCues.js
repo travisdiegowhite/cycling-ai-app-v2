@@ -2,8 +2,11 @@ import React from 'react';
 import { Card, Text, Stack, Group, Badge, Timeline, ThemeIcon } from '@mantine/core';
 import { Activity, TrendingUp, Zap, Mountain, Heart } from 'lucide-react';
 import { getZoneColor, getZoneName } from '../utils/intervalCues';
+import { useUnits } from '../utils/units';
 
 const IntervalCues = ({ cues }) => {
+  const { formatDistance, distanceUnit } = useUnits();
+
   if (!cues || cues.length === 0) {
     return null;
   }
@@ -27,6 +30,37 @@ const IntervalCues = ({ cues }) => {
     if (cue.type === 'hill-climb') return 'orange';
     if (cue.type === 'endurance-surge') return 'yellow';
     return 'gray';
+  };
+
+  // Build instruction with user's preferred units
+  const buildInstruction = (cue) => {
+    const parts = [];
+
+    // Type/description
+    const typeLabel = cue.type.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    parts.push(typeLabel);
+
+    // Zone
+    parts.push(`Zone ${cue.zone}`);
+
+    // Duration and distance
+    if (cue.duration) {
+      parts.push(`for ${cue.duration}min (${formatDistance(cue.distance)})`);
+    } else if (cue.distance) {
+      parts.push(`for ${formatDistance(cue.distance)}`);
+    }
+
+    // Power target
+    if (cue.powerPctFTP) {
+      parts.push(`@ ${cue.powerPctFTP}% FTP`);
+    }
+
+    // Cadence
+    if (cue.cadence) {
+      parts.push(`| ${cue.cadence} rpm`);
+    }
+
+    return parts.join(' ');
   };
 
   return (
@@ -58,7 +92,7 @@ const IntervalCues = ({ cues }) => {
               title={
                 <Group gap="xs">
                   <Text size="sm" fw={500}>
-                    {cue.instruction.split(':')[0]}
+                    {cue.type.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </Text>
                   <Badge size="xs" color={getZoneColor(cue.zone)} variant="filled">
                     Zone {cue.zone}
@@ -67,10 +101,10 @@ const IntervalCues = ({ cues }) => {
               }
             >
               <Text size="xs" c="dimmed" mt={4}>
-                {cue.instruction.split(':')[1] || cue.instruction}
+                {buildInstruction(cue)}
               </Text>
               <Text size="xs" c="dimmed" mt={2}>
-                📍 At {cue.startDistance.toFixed(1)}km - {cue.endDistance.toFixed(1)}km
+                📍 At {formatDistance(cue.startDistance)} - {formatDistance(cue.endDistance)}
               </Text>
             </Timeline.Item>
           ))}
