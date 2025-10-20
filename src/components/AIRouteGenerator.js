@@ -98,6 +98,10 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
 
   // Feature toggles for debugging
   const [usePastRides, setUsePastRides] = useState(false); // Default OFF to avoid junk routes
+
+  // Natural language route request
+  const [naturalLanguageInput, setNaturalLanguageInput] = useState('');
+  const [processingNaturalLanguage, setProcessingNaturalLanguage] = useState(false);
   const [useTrainingContext, setUseTrainingContext] = useState(true);
 
   // Ref to track the last processed external location to prevent re-render loops
@@ -557,6 +561,105 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   }, [planWorkouts, selectedWorkout, setSearchParams]);
 
   // Generate intelligent routes
+  // Handle natural language route generation
+  const handleNaturalLanguageGenerate = async () => {
+    if (!naturalLanguageInput.trim()) {
+      toast.error('Please describe the route you want');
+      return;
+    }
+
+    setProcessingNaturalLanguage(true);
+    setError(null);
+    setGeneratedRoutes([]);
+
+    try {
+      console.log('🧠 Processing natural language request:', naturalLanguageInput);
+
+      // Call the natural language API
+      const response = await fetch(`${window.location.origin}/api/claude-routes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: buildNaturalLanguagePrompt(naturalLanguageInput, weatherData, user),
+          maxTokens: 3000,
+          temperature: 0.7
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to process route request');
+      }
+
+      console.log('✅ Natural language response received');
+
+      // Parse the response to extract route parameters
+      const parsedRoute = parseNaturalLanguageResponse(data.content);
+
+      // If we got a location name, geocode it to get coordinates
+      if (parsedRoute.startLocationName) {
+        const coords = await geocodeAddress(parsedRoute.startLocationName);
+        if (coords) {
+          parsedRoute.startLocation = coords;
+          setStartLocation(coords);
+          onStartLocationSet && onStartLocationSet(coords);
+
+          // Set the address
+          setCurrentAddress(parsedRoute.startLocationName);
+
+          // Fetch weather
+          await fetchWeatherData(coords);
+
+          // Center map
+          if (mapRef?.current) {
+            mapRef.current.flyTo({
+              center: coords,
+              zoom: 13,
+              duration: 1000
+            });
+          }
+        } else {
+          toast.error(`Could not find location: ${parsedRoute.startLocationName}`);
+          return;
+        }
+      }
+
+      // Set other parameters from the parsed response
+      if (parsedRoute.timeAvailable) {
+        setTimeAvailable(parsedRoute.timeAvailable);
+      }
+      if (parsedRoute.routeType) {
+        setRouteType(parsedRoute.routeType);
+      }
+      if (parsedRoute.trainingGoal) {
+        setTrainingGoal(parsedRoute.trainingGoal);
+      }
+
+      toast.success('Route parameters extracted! Review and generate below.');
+
+      // Automatically generate routes after parameters are set
+      setTimeout(() => {
+        if (parsedRoute.startLocation) {
+          generateRoutes();
+        }
+      }, 500);
+
+    } catch (err) {
+      console.error('Natural language processing error:', err);
+      setError(err.message || 'Failed to process route request');
+      toast.error('Failed to understand route request. Please try rephrasing.');
+    } finally {
+      setProcessingNaturalLanguage(false);
+    }
+  };
+
   const generateRoutes = async () => {
     if (!startLocation) {
       toast.error('Please set a start location first');
@@ -668,6 +771,60 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
               Personalized routes optimized for your training goals and conditions
             </Text>
           </div>
+
+        {/* Natural Language Route Request */}
+        <Card withBorder p="md" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(34, 211, 238, 0.05) 100%)' }}>
+          <Stack gap="sm">
+            <Group gap="xs">
+              <Brain size={18} style={{ color: '#10b981' }} />
+              <Text size="sm" fw={600} c="teal">
+                Describe Your Route
+              </Text>
+            </Group>
+            <Text size="xs" c="dimmed">
+              Tell me where you want to ride, what you want to see, and any preferences.
+              Example: "I want to ride the Colorado trail from Kenosha pass to Salida avoiding highways"
+            </Text>
+            <TextInput
+              placeholder='Try: "40 mile loop from downtown with scenic views and coffee shops"'
+              value={naturalLanguageInput}
+              onChange={(e) => setNaturalLanguageInput(e.target.value)}
+              size="md"
+              leftSection={<Brain size={16} />}
+              rightSection={
+                naturalLanguageInput && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => setNaturalLanguageInput('')}
+                  >
+                    <RotateCcw size={16} />
+                  </ActionIcon>
+                )
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && naturalLanguageInput.trim()) {
+                  handleNaturalLanguageGenerate();
+                }
+              }}
+            />
+            <Button
+              onClick={handleNaturalLanguageGenerate}
+              loading={processingNaturalLanguage}
+              disabled={!naturalLanguageInput.trim()}
+              leftSection={!processingNaturalLanguage && <Play size={18} />}
+              style={{
+                background: naturalLanguageInput.trim()
+                  ? 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)'
+                  : undefined
+              }}
+            >
+              {processingNaturalLanguage ? 'Creating Your Route...' : 'Generate Route'}
+            </Button>
+          </Stack>
+        </Card>
+
+        <Divider label="OR" labelPosition="center" />
 
         {/* Route Preferences - Prominent at top */}
         <Button
@@ -1177,5 +1334,107 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   );
 };
 
+
+// Helper function to build natural language prompt
+function buildNaturalLanguagePrompt(userRequest, weatherData, user) {
+  return `You are an expert cycling route planner. A cyclist has requested: "${userRequest}"
+
+Your task is to extract and interpret the route requirements from this request and return a structured JSON response.
+
+Extract the following information:
+1. Start location (city/landmark) - if mentioned
+2. End location (if different from start) - if mentioned
+3. Route type (loop, out_back, or point_to_point)
+4. Distance or time available (in km or minutes)
+5. Terrain preferences (flat, rolling, hilly)
+6. Things to avoid (highways, traffic, etc.)
+7. Things to include (scenic views, coffee shops, landmarks, trails, etc.)
+8. Training goal if mentioned (endurance, intervals, recovery, etc.)
+
+Current conditions:
+${weatherData ? `- Weather: ${weatherData.temperature}°C, ${weatherData.description}
+- Wind: ${weatherData.windSpeed} km/h` : '- Weather data not available'}
+
+Return ONLY a JSON object with this structure:
+{
+  "startLocation": "city or landmark name",
+  "endLocation": "city or landmark name (if different from start)",
+  "routeType": "loop|out_back|point_to_point",
+  "distance": number in km (or null if time-based),
+  "timeAvailable": number in minutes (or null if distance-based),
+  "terrain": "flat|rolling|hilly",
+  "avoidHighways": true/false,
+  "avoidTraffic": true/false,
+  "pointsOfInterest": ["coffee shops", "scenic viewpoints", etc],
+  "trailPreference": true/false,
+  "trainingGoal": "endurance|intervals|recovery|tempo|climbing" or null,
+  "specialRequirements": "any other specific requirements mentioned"
+}
+
+Important: Return ONLY the JSON object, no additional text or explanation.`;
+}
+
+// Helper function to parse the Claude response
+function parseNaturalLanguageResponse(responseText) {
+  try {
+    // Try to extract JSON from the response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON found in response');
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    console.log('📝 Parsed natural language response:', parsed);
+
+    // Convert to route generator parameters
+    const result = {};
+
+    // Determine route type
+    if (parsed.routeType) {
+      result.routeType = parsed.routeType;
+    } else if (parsed.endLocation && parsed.endLocation !== parsed.startLocation) {
+      result.routeType = 'point_to_point';
+    } else {
+      result.routeType = 'loop';
+    }
+
+    // Set time or distance
+    if (parsed.timeAvailable) {
+      result.timeAvailable = parsed.timeAvailable;
+    } else if (parsed.distance) {
+      // Estimate time from distance (assume 25 km/h average)
+      result.timeAvailable = Math.round((parsed.distance / 25) * 60);
+    }
+
+    // Set training goal
+    if (parsed.trainingGoal) {
+      result.trainingGoal = parsed.trainingGoal;
+    } else if (parsed.terrain === 'hilly') {
+      result.trainingGoal = 'climbing';
+    } else {
+      result.trainingGoal = 'endurance';
+    }
+
+    // Note: startLocation coordinates will need to be geocoded separately
+    // Store the location names for geocoding
+    result.startLocationName = parsed.startLocation;
+    result.endLocationName = parsed.endLocation;
+    result.preferences = {
+      avoidHighways: parsed.avoidHighways,
+      avoidTraffic: parsed.avoidTraffic,
+      pointsOfInterest: parsed.pointsOfInterest,
+      trailPreference: parsed.trailPreference,
+      terrain: parsed.terrain,
+      specialRequirements: parsed.specialRequirements
+    };
+
+    console.log('🎯 Converted to route parameters:', result);
+    return result;
+
+  } catch (error) {
+    console.error('Failed to parse natural language response:', error);
+    throw new Error('Could not understand the route request. Please try being more specific.');
+  }
+}
 
 export default AIRouteGenerator;
