@@ -46,6 +46,15 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+  const signInWithGoogle = async () => {
+    return supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      }
+    });
+  };
+
   const signOut = () => {
     // If in demo mode, just disable it and reload
     if (isDemoMode()) {
@@ -63,6 +72,7 @@ export const AuthProvider = ({ children }) => {
       loading,
       signUp,
       signIn,
+      signInWithGoogle,
       signOut,
       isDemoMode: isDemoMode(),
     }}>
