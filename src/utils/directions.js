@@ -363,10 +363,22 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
 
   // UPDATED: Mapbox Directions API only supports: ferry, cash_only_tolls, unpaved, tunnel
   // motorway, trunk, toll, primary are NO LONGER valid exclude values
-  if (preferences?.routingPreferences?.trafficTolerance === 'low') {
-    // Low traffic tolerance - exclude unpaved and tolls
+
+  // Check if user wants gravel/unpaved roads (for gravel cycling)
+  const wantsUnpaved = preferences?.surfaceType === 'gravel' ||
+                       preferences?.preferences?.surfaceType === 'gravel' ||
+                       preferences?.preferences?.trailPreference === true;
+
+  // CRITICAL: For gravel routes, use walking profile which has access to trails and unpaved paths
+  if (wantsUnpaved) {
+    routingProfile = 'walking'; // Walking profile can access trails, paths, and unpaved roads
+    excludeParam = '&exclude=cash_only_tolls,ferry'; // Don't exclude unpaved!
+    annotations += ',congestion';
+    console.log('🌲🚶 GRAVEL MODE: Using walking profile for trail/unpaved road access');
+  } else if (preferences?.routingPreferences?.trafficTolerance === 'low') {
+    // Low traffic tolerance for paved cycling
     excludeParam = '&exclude=cash_only_tolls,unpaved,ferry';
-    annotations += ',congestion'; // Request congestion data when available
+    annotations += ',congestion';
     console.log('🚫 Low traffic tolerance - excluding tolls, unpaved roads, and ferries');
 
     // For very quiet roads, consider walking profile which often uses local streets
@@ -417,14 +429,19 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
       overview,
       alternatives
     });
-    
-    if (quietRoute.success && quietRoute.route.coordinates.length > waypoints.length) {
+
+    if (quietRoute.success && quietRoute.route?.geometry?.coordinates?.length > waypoints.length) {
       console.log('✅ Quiet routing successful with walking profile');
+      const route = quietRoute.route;
       return {
-        ...quietRoute.route,
-        confidence: quietRoute.route.confidence * 0.95, // Slightly lower confidence for walking profile
-        trafficScore: calculateTrafficScore(quietRoute.route, 'low'),
-        quietnessScore: 0.9
+        coordinates: route.geometry.coordinates,
+        distance: route.distance || 0,
+        duration: route.duration || 0,
+        confidence: 0.85, // Slightly lower confidence for walking profile
+        profile: 'walking',
+        trafficScore: calculateTrafficScore(route, 'low'),
+        quietnessScore: 0.9,
+        congestionData: route.legs?.[0]?.annotation?.congestion || []
       };
     }
     
@@ -438,15 +455,20 @@ export async function getCyclingDirections(waypoints, accessToken, options = {})
         overview,
         alternatives: true // Request alternatives to find quieter options
       });
-      
-      if (moderateRoute.success) {
+
+      if (moderateRoute.success && moderateRoute.route?.geometry?.coordinates) {
         // If alternatives are available, pick the one that seems quietest
         const bestRoute = selectQuietestRoute(moderateRoute.route, moderateRoute.alternatives);
         console.log('✅ Moderate quiet routing successful with cycling profile');
         return {
-          ...bestRoute,
+          coordinates: bestRoute.geometry.coordinates,
+          distance: bestRoute.distance || 0,
+          duration: bestRoute.duration || 0,
+          confidence: 0.9,
+          profile: 'cycling',
           trafficScore: calculateTrafficScore(bestRoute, 'medium'),
-          quietnessScore: 0.75
+          quietnessScore: 0.75,
+          congestionData: bestRoute.legs?.[0]?.annotation?.congestion || []
         };
       }
     }

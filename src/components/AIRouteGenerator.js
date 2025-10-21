@@ -98,6 +98,10 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
 
   // Feature toggles for debugging
   const [usePastRides, setUsePastRides] = useState(false); // Default OFF to avoid junk routes
+
+  // Natural language route request
+  const [naturalLanguageInput, setNaturalLanguageInput] = useState('');
+  const [processingNaturalLanguage, setProcessingNaturalLanguage] = useState(false);
   const [useTrainingContext, setUseTrainingContext] = useState(true);
 
   // Ref to track the last processed external location to prevent re-render loops
@@ -200,9 +204,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   }, []);
 
   // Geocode address to coordinates using Mapbox Geocoding API
-  const geocodeAddress = async (address) => {
+  const geocodeAddress = async (address, proximity = null) => {
     if (!address.trim()) return null;
-    
+
     const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
     if (!mapboxToken) {
       toast.error('Mapbox token not available for geocoding');
@@ -212,15 +216,23 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     try {
       setGeocoding(true);
       const encodedAddress = encodeURIComponent(address);
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedAddress}.json?access_token=${mapboxToken}&country=US&types=address,poi`
-      );
-      
+
+      // Add proximity bias if available (helps disambiguate locations)
+      let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedAddress}.json?access_token=${mapboxToken}&country=US&types=place,locality,address,poi`;
+
+      if (proximity) {
+        url += `&proximity=${proximity[0]},${proximity[1]}`;
+      }
+
+      console.log(`🔍 Geocoding: "${address}"${proximity ? ' with proximity bias' : ''}`);
+
+      const response = await fetch(url);
       const data = await response.json();
-      
+
       if (data.features && data.features.length > 0) {
         const feature = data.features[0];
         const [longitude, latitude] = feature.center;
+        console.log(`✅ Geocoded "${address}" to:`, feature.place_name);
         return {
           coordinates: [longitude, latitude],
           address: feature.place_name
@@ -556,6 +568,301 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
     }
   }, [planWorkouts, selectedWorkout, setSearchParams]);
 
+  // Generate routes with natural language preferences (bypasses generic AI generation)
+  const generateRoutesWithNaturalLanguage = async (parsedRoute) => {
+    if (!parsedRoute.startLocation) {
+      toast.error('No start location found');
+      return;
+    }
+
+    setGenerating(true);
+    setError(null);
+
+    try {
+      console.log('🗣️ Generating routes from natural language request:', parsedRoute);
+      console.log('📍 Start location:', parsedRoute.startLocation);
+      console.log('🎯 Preferences:', parsedRoute.preferences);
+
+      // Import the routing utilities we need
+      const { getCyclingDirections } = await import('../utils/directions');
+
+      // For now, let's create routes that go through the specified waypoints
+      // Build waypoints array: start -> intermediate locations -> back to start (if loop)
+      const waypoints = [parsedRoute.startLocation];
+
+      // Add waypoints if specified
+      if (parsedRoute.waypoints && parsedRoute.waypoints.length > 0) {
+        // Geocode each waypoint using the start location as proximity bias
+        for (const waypointName of parsedRoute.waypoints) {
+          console.log(`🔍 Geocoding waypoint: ${waypointName}`);
+          const coords = await geocodeAddress(waypointName, parsedRoute.startLocation);
+          if (coords) {
+            console.log(`✅ Found coordinates for ${waypointName}:`, coords.coordinates);
+            waypoints.push(coords.coordinates);
+          } else {
+            console.warn(`⚠️ Could not geocode waypoint: ${waypointName}`);
+          }
+        }
+      }
+
+      // If loop, return to start
+      if (parsedRoute.routeType === 'loop') {
+        waypoints.push(parsedRoute.startLocation);
+      }
+
+      console.log('🗺️ Waypoints for route:', waypoints);
+
+      // Get Mapbox token
+      const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
+      if (!mapboxToken) {
+        throw new Error('Mapbox token not available');
+      }
+
+      // Build routing preferences based on user's gravel/trail preferences
+      let routingPreferences = null;
+      const surfaceType = parsedRoute.preferences?.surfaceType || 'mixed';
+
+      if (surfaceType === 'gravel' || parsedRoute.preferences?.trailPreference) {
+        console.log('🌲 Gravel/trail preference detected - configuring for unpaved roads');
+        // For gravel cycling, we want to INCLUDE unpaved roads and trails
+        // This will be passed to directions.js which will NOT exclude unpaved roads
+        routingPreferences = {
+          surfaceType: 'gravel', // Pass to routing engine
+          routingPreferences: {
+            trafficTolerance: 'low', // Prefer quieter roads that are more likely unpaved
+          },
+          scenicPreferences: {
+            quietnessLevel: 'high', // Quieter roads often correlate with gravel/dirt
+          },
+          safetyPreferences: {
+            bikeInfrastructure: 'preferred' // Not required, as gravel roads may not have infrastructure
+          }
+        };
+      } else if (surfaceType === 'paved') {
+        console.log('🚴 Paved road cycling - using standard cycling preferences');
+        routingPreferences = {
+          surfaceType: 'paved',
+          routingPreferences: {
+            trafficTolerance: 'low', // Still prefer bike-friendly roads
+          }
+        };
+      } else {
+        console.log('🚴 Mixed surface cycling - balanced preferences');
+        routingPreferences = {
+          surfaceType: 'mixed',
+          routingPreferences: {
+            trafficTolerance: 'medium',
+          }
+        };
+      }
+
+      console.log(`🚴 Routing with ${waypoints.length} waypoints (gravel preference: ${parsedRoute.preferences?.trailPreference})`);
+      console.log('🔧 Routing preferences:', routingPreferences);
+
+      // For GRAVEL routes, use GraphHopper which has a dedicated gravel profile
+      // that actively prioritizes unpaved roads and dirt paths
+      let routeData;
+      if (surfaceType === 'gravel') {
+        console.log('🌾 Using GraphHopper for gravel routing (better unpaved road support)');
+        const { getGraphHopperCyclingDirections, GRAPHHOPPER_PROFILES } = await import('../utils/graphHopper');
+
+        routeData = await getGraphHopperCyclingDirections(waypoints, {
+          profile: GRAPHHOPPER_PROFILES.GRAVEL,
+          elevation: true,
+          alternatives: false,
+          preferences: routingPreferences
+        });
+
+        if (!routeData) {
+          console.warn('⚠️ GraphHopper failed, falling back to Mapbox');
+          // Fallback to Mapbox if GraphHopper fails
+          routeData = await getCyclingDirections(
+            waypoints,
+            mapboxToken,
+            {
+              profile: 'walking', // Walking profile has better trail access
+              preferences: routingPreferences
+            }
+          );
+        } else {
+          console.log('✅ GraphHopper gravel route generated successfully');
+        }
+      } else {
+        // For paved routes, use Mapbox Directions API
+        routeData = await getCyclingDirections(
+          waypoints,
+          mapboxToken,
+          {
+            profile: routingPreferences?.profile || 'cycling',
+            preferences: routingPreferences
+          }
+        );
+      }
+
+      if (routeData && routeData.coordinates) {
+        const waypointNames = parsedRoute.waypoints?.join(' → ') || 'waypoints';
+
+        // Build description based on surface type
+        let surfaceDescription = 'Cycling route';
+        let routingSource = routeData.source || 'mapbox';
+        if (surfaceType === 'gravel') {
+          surfaceDescription = `Gravel/dirt focused route - prioritizes unpaved roads and trails (via ${routingSource === 'graphhopper' ? 'GraphHopper' : 'Mapbox'})`;
+        } else if (surfaceType === 'paved') {
+          surfaceDescription = 'Paved road route';
+        }
+
+        // Handle elevation data from different routing sources
+        let elevationGain = 0;
+        if (routeData.elevation?.ascent) {
+          // GraphHopper format
+          elevationGain = routeData.elevation.ascent;
+        } else if (routeData.elevationGain) {
+          // Mapbox format
+          elevationGain = routeData.elevationGain;
+        }
+
+        const route = {
+          name: `${parsedRoute.startLocationName} → ${waypointNames}`,
+          description: `${surfaceDescription} from ${parsedRoute.startLocationName}`,
+          difficulty: 'moderate',
+          coordinates: routeData.coordinates,
+          distance: (routeData.distance || 0) / 1000, // Convert meters to km
+          elevationGain: elevationGain,
+          routeType: parsedRoute.routeType || 'loop',
+          source: 'natural_language',
+          routingProvider: routingSource, // Track which routing service was used
+          surfaceType: surfaceType, // Include surface type in route data
+          elevationProfile: routeData.elevationProfile
+        };
+
+        console.log('✅ Generated natural language route:', route);
+        setGeneratedRoutes([route]);
+
+        // Disable training context when using natural language
+        setUseTrainingContext(false);
+
+        toast.success('Generated custom route based on your description!');
+      } else {
+        console.error('❌ Failed to generate route - no coordinates returned');
+        toast.error('Could not generate route. The waypoints may be too far apart or unreachable by bike.');
+      }
+
+    } catch (err) {
+      console.error('Natural language route generation error:', err);
+      setError(err.message || 'Failed to generate routes');
+      toast.error('Failed to generate route from description');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Handle natural language route generation
+  const handleNaturalLanguageGenerate = async () => {
+    if (!naturalLanguageInput.trim()) {
+      toast.error('Please describe the route you want');
+      return;
+    }
+
+    setProcessingNaturalLanguage(true);
+    setError(null);
+    setGeneratedRoutes([]);
+
+    try {
+      console.log('🧠 Processing natural language request:', naturalLanguageInput);
+
+      // Call the natural language API
+      // Use port 3001 for local dev, same origin for production
+      const apiUrl = process.env.NODE_ENV === 'development'
+        ? 'http://localhost:3001/api/claude-routes'
+        : `${window.location.origin}/api/claude-routes`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: buildNaturalLanguagePrompt(naturalLanguageInput, weatherData),
+          maxTokens: 3000,
+          temperature: 0.7
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to process route request');
+      }
+
+      console.log('✅ Natural language response received');
+
+      // Parse the response to extract route parameters
+      const parsedRoute = parseNaturalLanguageResponse(data.content);
+
+      // If we got a location name, geocode it to get coordinates
+      if (parsedRoute.startLocationName) {
+        // Use Colorado center as proximity bias to prefer Colorado locations
+        const coloradoCenter = [-105.5, 39.0]; // Approximate center of Colorado
+        const coords = await geocodeAddress(parsedRoute.startLocationName, coloradoCenter);
+        if (coords) {
+          parsedRoute.startLocation = coords.coordinates;
+          setStartLocation(coords.coordinates);
+          onStartLocationSet && onStartLocationSet(coords.coordinates);
+
+          // Set the address
+          setCurrentAddress(coords.address);
+
+          // Fetch weather
+          await fetchWeatherData(coords.coordinates);
+
+          // Center map
+          if (mapRef?.current) {
+            mapRef.current.flyTo({
+              center: coords.coordinates,
+              zoom: 13,
+              duration: 1000
+            });
+          }
+        } else {
+          toast.error(`Could not find location: ${parsedRoute.startLocationName}`);
+          return;
+        }
+      }
+
+      // Set other parameters from the parsed response
+      if (parsedRoute.timeAvailable) {
+        setTimeAvailable(parsedRoute.timeAvailable);
+      }
+      if (parsedRoute.routeType) {
+        setRouteType(parsedRoute.routeType);
+      }
+      if (parsedRoute.trainingGoal) {
+        setTrainingGoal(parsedRoute.trainingGoal);
+      }
+
+      toast.success('Route parameters extracted! Generating routes now...');
+
+      // Generate routes with natural language preferences
+      setTimeout(() => {
+        // Check if we successfully set the start location
+        if (parsedRoute.startLocation) {
+          generateRoutesWithNaturalLanguage(parsedRoute);
+        }
+      }, 500);
+
+    } catch (err) {
+      console.error('Natural language processing error:', err);
+      setError(err.message || 'Failed to process route request');
+      toast.error('Failed to understand route request. Please try rephrasing.');
+    } finally {
+      setProcessingNaturalLanguage(false);
+    }
+  };
+
   // Generate intelligent routes
   const generateRoutes = async () => {
     if (!startLocation) {
@@ -668,6 +975,60 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
               Personalized routes optimized for your training goals and conditions
             </Text>
           </div>
+
+        {/* Natural Language Route Request */}
+        <Card withBorder p="md" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(34, 211, 238, 0.05) 100%)' }}>
+          <Stack gap="sm">
+            <Group gap="xs">
+              <Brain size={18} style={{ color: '#10b981' }} />
+              <Text size="sm" fw={600} c="teal">
+                Describe Your Route
+              </Text>
+            </Group>
+            <Text size="xs" c="dimmed">
+              Tell me where you want to ride, what you want to see, and any preferences.
+              Example: "I want to ride the Colorado trail from Kenosha pass to Salida avoiding highways"
+            </Text>
+            <TextInput
+              placeholder='Try: "40 mile loop from downtown with scenic views and coffee shops"'
+              value={naturalLanguageInput}
+              onChange={(e) => setNaturalLanguageInput(e.target.value)}
+              size="md"
+              leftSection={<Brain size={16} />}
+              rightSection={
+                naturalLanguageInput && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => setNaturalLanguageInput('')}
+                  >
+                    <RotateCcw size={16} />
+                  </ActionIcon>
+                )
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && naturalLanguageInput.trim()) {
+                  handleNaturalLanguageGenerate();
+                }
+              }}
+            />
+            <Button
+              onClick={handleNaturalLanguageGenerate}
+              loading={processingNaturalLanguage}
+              disabled={!naturalLanguageInput.trim()}
+              leftSection={!processingNaturalLanguage && <Play size={18} />}
+              style={{
+                background: naturalLanguageInput.trim()
+                  ? 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)'
+                  : undefined
+              }}
+            >
+              {processingNaturalLanguage ? 'Creating Your Route...' : 'Generate Route'}
+            </Button>
+          </Stack>
+        </Card>
+
+        <Divider label="OR" labelPosition="center" />
 
         {/* Route Preferences - Prominent at top */}
         <Button
@@ -1177,5 +1538,208 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
   );
 };
 
+
+// Helper function to build detailed route prompt for natural language requests
+function buildDetailedRoutePrompt(parsedRoute) {
+  const { startLocationName, endLocationName, preferences, timeAvailable, routeType } = parsedRoute;
+
+  return `You are an expert cycling route planner. Create 2-3 specific cycling route options based on this request:
+
+START LOCATION: ${startLocationName}
+${endLocationName ? `END LOCATION: ${endLocationName}` : ''}
+ROUTE TYPE: ${routeType || 'loop'}
+TIME/DISTANCE: ${timeAvailable ? `${timeAvailable} minutes` : 'flexible'}
+
+PREFERENCES:
+${preferences?.trailPreference ? '- PRIORITIZE gravel/dirt/unpaved roads and trails' : ''}
+${preferences?.avoidHighways ? '- Avoid highways and major roads' : ''}
+${preferences?.avoidTraffic ? '- Minimize traffic' : ''}
+${preferences?.terrain ? `- Terrain: ${preferences.terrain}` : ''}
+${preferences?.pointsOfInterest?.length ? `- Include: ${preferences.pointsOfInterest.join(', ')}` : ''}
+${preferences?.specialRequirements ? `- Special: ${preferences.specialRequirements}` : ''}
+
+Please provide 2-3 specific route options with actual waypoints (lat/lon coordinates). For each route:
+
+1. Route Name (creative, descriptive)
+2. Description (what makes this route special)
+3. Waypoints: List of 3-5 key locations with coordinates
+   - Start: ${startLocationName}
+   - Intermediate waypoints (with coordinates)
+   ${endLocationName ? `- End: ${endLocationName}` : '- Return to start'}
+
+Format your response as JSON:
+{
+  "routes": [
+    {
+      "name": "Route Name",
+      "description": "What makes this route special",
+      "difficulty": "easy|moderate|hard",
+      "waypoints": [
+        {"name": "Start", "lat": 40.0195584, "lon": -105.0574848},
+        {"name": "Waypoint description", "lat": XX.XXXXX, "lon": -XXX.XXXXX},
+        ...
+      ]
+    }
+  ]
+}
+
+IMPORTANT:
+- Provide REAL coordinates for actual locations
+- For gravel/dirt preferences, choose trails, canal paths, dirt roads
+- Ensure waypoints create a logical route
+- Return ONLY valid JSON`;
+}
+
+// Helper function to parse Claude's route response
+function parseClaudeRouteResponse(responseText, parsedRoute) {
+  try {
+    // Extract JSON from response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('No JSON found in Claude response');
+      return null;
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    console.log('📝 Parsed Claude route response:', parsed);
+
+    if (!parsed.routes || !Array.isArray(parsed.routes)) {
+      console.error('Invalid route format from Claude');
+      return null;
+    }
+
+    // Convert Claude's route format to our app's format
+    const routes = parsed.routes.map(route => {
+      // Convert waypoints to coordinates array
+      const coordinates = route.waypoints.map(wp => [wp.lon, wp.lat]);
+
+      return {
+        name: route.name,
+        description: route.description,
+        difficulty: route.difficulty || 'moderate',
+        coordinates: coordinates,
+        distance: 0, // Will be calculated by routing service
+        elevationGain: 0, // Will be calculated
+        routeType: parsedRoute.routeType || 'loop',
+        waypoints: route.waypoints,
+        source: 'natural_language'
+      };
+    });
+
+    return routes;
+
+  } catch (error) {
+    console.error('Failed to parse Claude route response:', error);
+    return null;
+  }
+}
+
+// Helper function to build natural language prompt
+function buildNaturalLanguagePrompt(userRequest, weatherData) {
+  return `You are an expert cycling route planner. A cyclist has requested: "${userRequest}"
+
+Your task is to extract and interpret the route requirements from this request and return a structured JSON response.
+
+Extract the following information:
+1. Start location (city/landmark) - if mentioned
+2. Waypoints - ALL intermediate locations mentioned (Jamestown, Longmont, etc.)
+3. Route type (loop, out_back, or point_to_point)
+4. Distance or time available (in km or minutes)
+5. Terrain preferences (flat, rolling, hilly)
+6. Things to avoid (highways, traffic, etc.)
+7. Surface preference - CRITICAL FOR GRAVEL CYCLISTS:
+   - Set surfaceType to "gravel" if request mentions: gravel, dirt, unpaved, trails, off-road, gravel roads, dirt paths, singletrack
+   - Set surfaceType to "paved" if request mentions: road, paved, asphalt, tarmac
+   - Set surfaceType to "mixed" if both or unspecified
+
+Current conditions:
+${weatherData ? `- Weather: ${weatherData.temperature}°C, ${weatherData.description}
+- Wind: ${weatherData.windSpeed} km/h` : '- Weather data not available'}
+
+Return ONLY a JSON object with this structure:
+{
+  "startLocation": "Erie, CO",
+  "waypoints": ["Jamestown", "Longmont"],
+  "routeType": "loop",
+  "distance": number in km (or null if time-based),
+  "timeAvailable": number in minutes (or null if distance-based),
+  "terrain": "flat|rolling|hilly",
+  "avoidHighways": true/false,
+  "avoidTraffic": true/false,
+  "surfaceType": "gravel|paved|mixed",
+  "trainingGoal": "endurance|intervals|recovery|tempo|hills" or null
+}
+
+IMPORTANT:
+- Extract ALL waypoints mentioned (e.g., "Erie to Jamestown to Longmont to Erie" -> waypoints: ["Jamestown", "Longmont"])
+- GRAVEL ROUTING: If user says "gravel", "dirt", "unpaved", or "trails", set surfaceType to "gravel"
+  This tells the routing engine to PREFER unpaved roads and make the route longer if needed to use more gravel
+- Return ONLY valid JSON, no additional text`;
+}
+
+// Helper function to parse the Claude response
+function parseNaturalLanguageResponse(responseText) {
+  try {
+    // Try to extract JSON from the response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON found in response');
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    console.log('📝 Parsed natural language response:', parsed);
+
+    // Convert to route generator parameters
+    const result = {};
+
+    // Determine route type
+    if (parsed.routeType) {
+      result.routeType = parsed.routeType;
+    } else if (parsed.endLocation && parsed.endLocation !== parsed.startLocation) {
+      result.routeType = 'point_to_point';
+    } else {
+      result.routeType = 'loop';
+    }
+
+    // Set time or distance
+    if (parsed.timeAvailable) {
+      result.timeAvailable = parsed.timeAvailable;
+    } else if (parsed.distance) {
+      // Estimate time from distance (assume 25 km/h average)
+      result.timeAvailable = Math.round((parsed.distance / 25) * 60);
+    }
+
+    // Set training goal
+    if (parsed.trainingGoal) {
+      result.trainingGoal = parsed.trainingGoal;
+    } else if (parsed.terrain === 'hilly') {
+      result.trainingGoal = 'hills';
+    } else {
+      result.trainingGoal = 'endurance';
+    }
+
+    // Note: startLocation coordinates will need to be geocoded separately
+    // Store the location names for geocoding
+    result.startLocationName = parsed.startLocation;
+    result.waypoints = parsed.waypoints || []; // Array of waypoint names
+    result.endLocationName = parsed.endLocation;
+    result.preferences = {
+      avoidHighways: parsed.avoidHighways,
+      avoidTraffic: parsed.avoidTraffic,
+      pointsOfInterest: parsed.pointsOfInterest,
+      surfaceType: parsed.surfaceType || 'mixed', // gravel, paved, or mixed
+      trailPreference: parsed.surfaceType === 'gravel', // backward compatibility
+      terrain: parsed.terrain,
+      specialRequirements: parsed.specialRequirements
+    };
+
+    console.log('🎯 Converted to route parameters:', result);
+    return result;
+
+  } catch (error) {
+    console.error('Failed to parse natural language response:', error);
+    throw new Error('Could not understand the route request. Please try being more specific.');
+  }
+}
 
 export default AIRouteGenerator;

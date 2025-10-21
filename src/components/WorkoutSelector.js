@@ -53,6 +53,55 @@ const WorkoutSelector = ({
   showFilters = true,
   compact = false
 }) => {
+  // Memoize workout options to prevent infinite re-renders
+  const workoutOptions = useMemo(() => {
+    if (!LIBRARY || Object.keys(LIBRARY).length === 0) {
+      return [];
+    }
+
+    console.log('🔄 Calculating workout options (should only happen once)');
+    const workoutsByCategory = {};
+
+    Object.values(LIBRARY).forEach(workout => {
+      const categoryLabel = workout.category ?
+        workout.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) :
+        'Other';
+
+      if (!workoutsByCategory[categoryLabel]) {
+        workoutsByCategory[categoryLabel] = [];
+      }
+
+      workoutsByCategory[categoryLabel].push({
+        value: workout.id || '',
+        label: `${workout.name || 'Unknown'} (${workout.duration || 0}min, ${workout.targetTSS || 0} TSS)`
+      });
+    });
+
+    // Convert to Mantine's grouped data format: [{ group: 'Name', items: [...] }]
+    const options = Object.entries(workoutsByCategory).map(([group, items]) => ({
+      group,
+      items
+    }));
+
+    console.log('✅ Workout options calculated:', {
+      totalGroups: options.length,
+      totalWorkouts: Object.keys(LIBRARY).length
+    });
+
+    return options;
+  }, []); // Empty dependency array - only calculate once since LIBRARY is constant
+
+  // Memoize the change handler to prevent re-renders
+  const handleWorkoutChange = useCallback((workoutId) => {
+    console.log('Workout selected from dropdown:', workoutId);
+    if (!workoutId) return;
+    const workout = LIBRARY[workoutId];
+    console.log('Found workout object:', workout);
+    if (workout && onWorkoutSelect) {
+      onWorkoutSelect(workout);
+    }
+  }, [onWorkoutSelect]);
+
   const [filters, setFilters] = useState({
     category: 'all',
     difficulty: 'all',
@@ -367,51 +416,6 @@ const WorkoutSelector = ({
       </Alert>
     );
   }
-
-  // Memoize workout options to prevent infinite re-renders
-  const workoutOptions = useMemo(() => {
-    console.log('🔄 Calculating workout options (should only happen once)');
-    const workoutsByCategory = {};
-
-    Object.values(LIBRARY).forEach(workout => {
-      const categoryLabel = workout.category ?
-        workout.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) :
-        'Other';
-
-      if (!workoutsByCategory[categoryLabel]) {
-        workoutsByCategory[categoryLabel] = [];
-      }
-
-      workoutsByCategory[categoryLabel].push({
-        value: workout.id || '',
-        label: `${workout.name || 'Unknown'} (${workout.duration || 0}min, ${workout.targetTSS || 0} TSS)`
-      });
-    });
-
-    // Convert to Mantine's grouped data format: [{ group: 'Name', items: [...] }]
-    const options = Object.entries(workoutsByCategory).map(([group, items]) => ({
-      group,
-      items
-    }));
-
-    console.log('✅ Workout options calculated:', {
-      totalGroups: options.length,
-      totalWorkouts: Object.keys(LIBRARY).length
-    });
-
-    return options;
-  }, []); // Empty dependency array - only calculate once since LIBRARY is constant
-
-  // Memoize the change handler to prevent re-renders
-  const handleWorkoutChange = useCallback((workoutId) => {
-    console.log('Workout selected from dropdown:', workoutId);
-    if (!workoutId) return;
-    const workout = LIBRARY[workoutId];
-    console.log('Found workout object:', workout);
-    if (workout && onWorkoutSelect) {
-      onWorkoutSelect(workout);
-    }
-  }, [onWorkoutSelect]);
 
   if (compact) {
     // Compact mode - just a dropdown
