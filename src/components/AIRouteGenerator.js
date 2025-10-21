@@ -782,7 +782,7 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          prompt: buildNaturalLanguagePrompt(naturalLanguageInput, weatherData),
+          prompt: buildNaturalLanguagePrompt(naturalLanguageInput, weatherData, startLocation, currentAddress),
           maxTokens: 3000,
           temperature: 0.7
         })
@@ -805,9 +805,9 @@ const AIRouteGenerator = ({ mapRef, onRouteGenerated, onStartLocationSet, extern
 
       // If we got a location name, geocode it to get coordinates
       if (parsedRoute.startLocationName) {
-        // Use Colorado center as proximity bias to prefer Colorado locations
-        const coloradoCenter = [-105.5, 39.0]; // Approximate center of Colorado
-        const coords = await geocodeAddress(parsedRoute.startLocationName, coloradoCenter);
+        // Use current location as proximity bias (if available) to resolve location ambiguity
+        const proximityBias = startLocation || null;
+        const coords = await geocodeAddress(parsedRoute.startLocationName, proximityBias);
         if (coords) {
           parsedRoute.startLocation = coords.coordinates;
           setStartLocation(coords.coordinates);
@@ -1635,31 +1635,90 @@ function parseClaudeRouteResponse(responseText, parsedRoute) {
 }
 
 // Helper function to build natural language prompt
-function buildNaturalLanguagePrompt(userRequest, weatherData) {
-  return `You are an expert cycling route planner. A cyclist has requested: "${userRequest}"
+function buildNaturalLanguagePrompt(userRequest, weatherData, userLocation, userAddress) {
+  // Extract region/area from user's address for context
+  let regionContext = '';
+  let gravelExamples = '';
+
+  if (userAddress) {
+    // Try to determine the general region
+    const addressLower = userAddress.toLowerCase();
+
+    if (addressLower.includes('colorado') || addressLower.includes(', co')) {
+      regionContext = 'The cyclist is in Colorado.';
+      gravelExamples = `
+   **Colorado Front Range Examples:**
+   - Erie → Lafayette → Superior → Louisville (county roads)
+   - Boulder → Lyons → Hygiene → Longmont (dirt roads in foothills)
+   - Boulder → Nederland → Ward → Jamestown (high country gravel)
+   - Golden → Morrison → Evergreen → Conifer (mountain roads)`;
+    } else if (addressLower.includes('california') || addressLower.includes(', ca')) {
+      regionContext = 'The cyclist is in California.';
+      gravelExamples = `
+   **California Examples:**
+   - Use small towns connected by county roads
+   - Suggest towns in wine country, foothills, or rural areas
+   - Look for agricultural areas with farm roads`;
+    } else if (addressLower.includes('oregon') || addressLower.includes(', or')) {
+      regionContext = 'The cyclist is in Oregon.';
+      gravelExamples = `
+   **Oregon Examples:**
+   - Small towns connected by forest service roads
+   - Rural communities with logging roads
+   - Coastal or valley towns with farm roads`;
+    } else {
+      regionContext = `The cyclist is near: ${userAddress}`;
+      gravelExamples = `
+   **General Strategy (works anywhere):**
+   - Suggest small towns/communities near the cyclist's location
+   - Rural areas typically have more gravel/dirt roads
+   - County roads between small towns are often unpaved`;
+    }
+  } else {
+    regionContext = 'Cyclist location unknown.';
+    gravelExamples = `
+   **General Strategy:**
+   - Suggest small towns logically placed between start and destination
+   - Rural areas and small communities often have gravel roads
+   - Use actual town names that will geocode reliably`;
+  }
+
+  return `You are an expert cycling route planner with knowledge of cycling routes worldwide. A cyclist has requested: "${userRequest}"
+
+${regionContext}
 
 Your task is to extract and interpret the route requirements from this request and return a structured JSON response.
 
 Extract the following information:
 1. Start location (city/landmark) - if mentioned
-2. Waypoints - ALL intermediate locations mentioned (Jamestown, Longmont, etc.)
+2. Waypoints - intermediate locations to route through
 3. Route type (loop, out_back, or point_to_point)
 4. Distance or time available (in km or minutes)
 5. Terrain preferences (flat, rolling, hilly)
 6. Things to avoid (highways, traffic, etc.)
-7. Surface preference - CRITICAL FOR GRAVEL CYCLISTS:
-   - Set surfaceType to "gravel" if request mentions: gravel, dirt, unpaved, trails, off-road, gravel roads, dirt paths, singletrack
-   - Set surfaceType to "paved" if request mentions: road, paved, asphalt, tarmac
-   - Set surfaceType to "mixed" if both or unspecified
+7. Surface preference - CRITICAL FOR GRAVEL CYCLISTS
 
 Current conditions:
 ${weatherData ? `- Weather: ${weatherData.temperature}°C, ${weatherData.description}
 - Wind: ${weatherData.windSpeed} km/h` : '- Weather data not available'}
 
+CRITICAL GRAVEL ROUTING INSTRUCTIONS:
+If the user requests gravel, dirt, unpaved roads, or trails:
+1. Set surfaceType to "gravel"
+2. **SUGGEST 1-3 INTERMEDIATE TOWN/CITY WAYPOINTS** near the user's location that create a logical gravel cycling route
+${gravelExamples}
+
+**IMPORTANT**:
+- Suggest ACTUAL TOWN NAMES that will geocode correctly (not trail names!)
+- Choose towns that are logically between the start and destination
+- Use towns near the cyclist's current location (${userAddress || 'unknown'})
+- Fewer waypoints = better (1-2 is ideal, max 3)
+- The routing between towns will naturally use back roads and county roads
+
 Return ONLY a JSON object with this structure:
 {
   "startLocation": "Erie, CO",
-  "waypoints": ["Jamestown", "Longmont"],
+  "waypoints": ["Coal Creek Trail", "Marshall Mesa", "Community Ditch Trail"],
   "routeType": "loop",
   "distance": number in km (or null if time-based),
   "timeAvailable": number in minutes (or null if distance-based),
@@ -1667,13 +1726,49 @@ Return ONLY a JSON object with this structure:
   "avoidHighways": true/false,
   "avoidTraffic": true/false,
   "surfaceType": "gravel|paved|mixed",
-  "trainingGoal": "endurance|intervals|recovery|tempo|hills" or null
+  "trainingGoal": "endurance|intervals|recovery|tempo|hills" or null,
+  "suggestedGravelWaypoints": ["waypoint1", "waypoint2", "waypoint3"]
+}
+
+EXAMPLES:
+
+User: "gravel ride from Erie to Boulder and back"
+Response:
+{
+  "startLocation": "Erie, CO",
+  "waypoints": ["Lafayette", "Boulder"],
+  "routeType": "loop",
+  "surfaceType": "gravel",
+  "avoidHighways": true,
+  "suggestedGravelWaypoints": ["Lafayette", "Superior"]
+}
+
+User: "I want to ride from Broomfield to Lyons on gravel roads"
+Response:
+{
+  "startLocation": "Broomfield, CO",
+  "waypoints": ["Louisville", "Lyons"],
+  "routeType": "point_to_point",
+  "surfaceType": "gravel",
+  "avoidHighways": true,
+  "suggestedGravelWaypoints": ["Louisville", "Hygiene"]
+}
+
+User: "gravel loop from Boulder through the mountains"
+Response:
+{
+  "startLocation": "Boulder, CO",
+  "waypoints": ["Nederland", "Ward", "Jamestown"],
+  "routeType": "loop",
+  "surfaceType": "gravel",
+  "avoidHighways": true,
+  "suggestedGravelWaypoints": ["Nederland", "Ward", "Jamestown", "Gold Hill"]
 }
 
 IMPORTANT:
-- Extract ALL waypoints mentioned (e.g., "Erie to Jamestown to Longmont to Erie" -> waypoints: ["Jamestown", "Longmont"])
-- GRAVEL ROUTING: If user says "gravel", "dirt", "unpaved", or "trails", set surfaceType to "gravel"
-  This tells the routing engine to PREFER unpaved roads and make the route longer if needed to use more gravel
+- For gravel requests, ALWAYS suggest intermediate waypoints even if user doesn't mention them
+- Waypoints should be ACTUAL TOWN/CITY NAMES that will geocode reliably (NOT trail names!)
+- Keep it simple: 1-2 waypoints is usually enough
 - Return ONLY valid JSON, no additional text`;
 }
 
