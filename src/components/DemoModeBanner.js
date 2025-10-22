@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Group, Text, Button, Box, Stack } from '@mantine/core';
-import { Info, UserPlus, Sparkles } from 'lucide-react';
+import { Info, UserPlus, Sparkles, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { disableDemoMode } from '../utils/demoData';
 
@@ -10,6 +10,11 @@ const DemoModeBanner = () => {
   if (!isDemoMode) return null;
 
   const handleCreateAccount = () => {
+    disableDemoMode();
+    window.location.reload();
+  };
+
+  const handleSignIn = () => {
     disableDemoMode();
     window.location.reload();
   };
@@ -38,19 +43,30 @@ const DemoModeBanner = () => {
             You're using demo mode
           </Text>
           <Text size="xs" c="dimmed">
-            Create a free account to save routes, build training plans, and connect your Strava account. No credit card required.
+            Create a free account to save routes, build training plans, and connect your bike computer. No credit card required.
           </Text>
         </Box>
-        <Button
-          size="sm"
-          leftSection={<UserPlus size={16} />}
-          onClick={handleCreateAccount}
-          style={{
-            background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
-          }}
-        >
-          Create Free Account
-        </Button>
+        <Group gap="sm">
+          <Button
+            size="sm"
+            variant="light"
+            leftSection={<LogIn size={16} />}
+            onClick={handleSignIn}
+            color="teal"
+          >
+            Sign In
+          </Button>
+          <Button
+            size="sm"
+            leftSection={<UserPlus size={16} />}
+            onClick={handleCreateAccount}
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
+            }}
+          >
+            Create Account
+          </Button>
+        </Group>
       </Group>
     </Alert>
   );
