@@ -1,42 +1,73 @@
 # Database Migrations
 
-## How to Apply Migrations
+This directory contains SQL migration files for the Tribos Cycling AI app.
 
-### Using Supabase Dashboard (Recommended)
+## How to Run Migrations
 
-1. Go to your Supabase project dashboard
-2. Navigate to **SQL Editor** in the left sidebar
-3. Click **New Query**
-4. Copy the contents of the migration file
-5. Paste into the SQL editor
-6. Click **Run** to execute
+### Option 1: Using Supabase Dashboard (Recommended)
 
-### Using Supabase CLI
+1. Go to your Supabase project: https://supabase.com/dashboard/project/toihfeffpljsmgritmuy
+2. Click on "SQL Editor" in the left sidebar
+3. Click "New Query"
+4. Copy and paste the contents of the migration file
+5. Click "Run" to execute the migration
+
+### Option 2: Using Supabase CLI
 
 ```bash
-supabase db push --file database/migrations/fix_target_duration_constraint.sql
+# Install Supabase CLI if you haven't
+npm install -g supabase
+
+# Login to Supabase
+supabase login
+
+# Link your project
+supabase link --project-ref toihfeffpljsmgritmuy
+
+# Run migrations
+supabase db push
 ```
 
----
+## Migration Order
 
-## Migration: Fix Target Duration Constraint
+Run these migrations in the following order:
 
-**File**: `fix_target_duration_constraint.sql`
-**Date**: 2025-10-06
-**Issue**: The `target_duration` constraint didn't allow 0, which prevented rest days from being created
+1. **create_bike_computer_integrations.sql** - Creates tables for Garmin/Wahoo integrations
+2. **fix_bike_computer_integrations.sql** - Updates column names (only if table already existed)
+3. **fix_sync_history.sql** - Additional sync history fixes
 
-**What it does**:
-- Drops the old constraint: `target_duration > 0`
-- Adds new constraint: `target_duration >= 0`
-- Allows rest days (0 duration) to be saved
+## Required Migrations for Garmin/Wahoo Integration
 
-**Required**: Yes - Training plans cannot be created without this fix
+To enable Garmin and Wahoo integrations, you **must** run:
+- `create_bike_computer_integrations.sql`
 
----
+This creates:
+- `bike_computer_integrations` table - Stores OAuth tokens and connection info
+- `bike_computer_sync_history` table - Tracks sync operations
+- Adds `garmin_id`, `wahoo_id` columns to `routes` table
+- Sets up Row Level Security (RLS) policies
 
-## Future Migrations
+## Current Status
 
-Add new migration files here with the naming convention:
-- `YYYY-MM-DD_description.sql`
-- Include a comment at the top explaining what the migration does
-- Update this README with migration details
+If you're seeing 406 errors from Supabase for bike_computer_integrations, it means the table doesn't exist yet. Run `create_bike_computer_integrations.sql` to fix this.
+
+## Verifying Migrations
+
+After running migrations, verify they were successful:
+
+```sql
+-- Check if tables exist
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+AND table_name IN ('bike_computer_integrations', 'bike_computer_sync_history');
+
+-- Check table structure
+\d bike_computer_integrations
+\d bike_computer_sync_history
+
+-- Check RLS policies
+SELECT tablename, policyname, cmd
+FROM pg_policies
+WHERE tablename IN ('bike_computer_integrations', 'bike_computer_sync_history');
+```
