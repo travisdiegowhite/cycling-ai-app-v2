@@ -14,7 +14,7 @@ import {
   Badge,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Map, Upload, User, LogOut, Route, Brain, Activity, Plus, Zap, FileText, Scale, TrendingUp, Globe, Book, UserPlus } from 'lucide-react';
+import { Map, Upload, User, LogOut, Route as RouteIcon, Brain, Activity, Plus, Zap, FileText, Scale, TrendingUp, Globe, Book, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UnitSettings from './UnitSettings';
 
@@ -55,7 +55,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
           <Group>
             <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" />
             <Group gap="xs" visibleFrom="xs">
-              <Route size={28} color="#10b981" style={{ filter: 'drop-shadow(0 0 6px rgba(16, 185, 129, 0.4))' }} />
+              <RouteIcon size={28} color="#10b981" style={{ filter: 'drop-shadow(0 0 6px rgba(16, 185, 129, 0.4))' }} />
               <Text
                 size={{ base: 'xl', sm: '2xl' }}
                 fw={800}
@@ -177,7 +177,7 @@ const AppLayout = ({ children, activePage, setActivePage }) => {
 
           <Button
             variant={activePage === 'routes' ? 'filled' : 'subtle'}
-            leftSection={<Route size={18} />}
+            leftSection={<RouteIcon size={18} />}
             onClick={() => handleNavigation('routes', '/routes')}
             justify="flex-start"
             fullWidth

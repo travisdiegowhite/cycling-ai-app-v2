@@ -144,7 +144,9 @@ async function getRequestToken(req, res, userId) {
 
     // Now regenerate the signature with oauth_callback included
     // We need to do this manually since the library doesn't support this
-    const signingKey = `${encodeURIComponent(process.env.GARMIN_CONSUMER_SECRET)}&`;
+    // Per OAuth 1.0a spec: signing key = consumer_secret&token_secret
+    // For request token, there's no token_secret yet, so it's just consumer_secret&
+    const signingKey = `${process.env.GARMIN_CONSUMER_SECRET}&`;
 
     // Build signature base string
     const paramString = Object.keys(authParamsWithCallback)
