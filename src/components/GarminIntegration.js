@@ -151,8 +151,20 @@ const GarminIntegration = () => {
     );
   }
 
+  const isDevelopment = process.env.NODE_ENV === 'development';
+
   return (
     <Stack gap="lg">
+      {/* Development Mode Warning */}
+      {isDevelopment && (
+        <Alert color="yellow" title="Development Mode" variant="light">
+          <Text size="sm">
+            Garmin integration requires deployment to work. The OAuth API routes are serverless functions that only run on Vercel.
+            Deploy to production to test the Garmin connection.
+          </Text>
+        </Alert>
+      )}
+
       {/* Header */}
       <Group justify="space-between" align="center">
         <Group>
