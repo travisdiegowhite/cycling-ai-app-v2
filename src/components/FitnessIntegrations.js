@@ -8,6 +8,7 @@ import {
 } from '@mantine/core';
 import StravaIntegration from './StravaIntegration';
 import WahooIntegration from './WahooIntegration';
+import GarminIntegration from './GarminIntegration';
 
 const FitnessIntegrations = () => {
   const [activeTab, setActiveTab] = useState('strava');
@@ -30,6 +31,9 @@ const FitnessIntegrations = () => {
             <Tabs.Tab value="wahoo">
               Wahoo Fitness
             </Tabs.Tab>
+            <Tabs.Tab value="garmin">
+              Garmin Connect
+            </Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="strava" pt="lg">
@@ -38,6 +42,10 @@ const FitnessIntegrations = () => {
 
           <Tabs.Panel value="wahoo" pt="lg">
             <WahooIntegration />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="garmin" pt="lg">
+            <GarminIntegration />
           </Tabs.Panel>
         </Tabs>
       </Stack>
