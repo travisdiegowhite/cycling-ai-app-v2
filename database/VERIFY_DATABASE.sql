@@ -4,8 +4,8 @@
 -- 1. Check if tables exist
 SELECT
   'Tables Exist' as check_type,
-  table_name,
-  CASE WHEN table_name IS NOT NULL THEN '✅ EXISTS' ELSE '❌ MISSING' END as status
+  expected.table_name,
+  CASE WHEN t.table_name IS NOT NULL THEN '✅ EXISTS' ELSE '❌ MISSING' END as status
 FROM (
   SELECT 'bike_computer_integrations' as table_name
   UNION ALL
