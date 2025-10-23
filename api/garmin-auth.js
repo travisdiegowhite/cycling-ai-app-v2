@@ -132,63 +132,32 @@ async function getRequestToken(req, res, userId) {
     });
 
     // Build OAuth request for request token
-    // oauth_callback needs to be part of the signature, but the oauth-1.0a library
-    // treats 'data' as POST body parameters. We need to pass it differently.
+    // Include oauth_callback in the data parameter so it's part of the signature
     const requestData = {
       url: GARMIN_REQUEST_TOKEN_URL,
-      method: 'POST'
+      method: 'POST',
+      data: {
+        oauth_callback: callbackUrl
+      }
     };
 
-    // Authorize the request (generates oauth params)
-    const authParams = oauth.authorize(requestData);
+    // Generate OAuth authorization (includes oauth_callback in signature)
+    const authData = oauth.authorize(requestData);
 
-    // Add oauth_callback to the auth params BEFORE signing
-    // This ensures it's included in the signature
-    const authParamsWithCallback = {
-      ...authParams,
-      oauth_callback: callbackUrl
-    };
+    // Convert to Authorization header format
+    const authHeader = oauth.toHeader(authData);
 
-    // Now regenerate the signature with oauth_callback included
-    // We need to do this manually since the library doesn't support this
-    // Per OAuth 1.0a spec: signing key = consumer_secret&token_secret
-    // For request token, there's no token_secret yet, so it's just consumer_secret&
-    const signingKey = `${process.env.GARMIN_CONSUMER_SECRET}&`;
-
-    // Build signature base string
-    const paramString = Object.keys(authParamsWithCallback)
-      .sort()
-      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(authParamsWithCallback[key])}`)
-      .join('&');
-
-    const signatureBaseString = `POST&${encodeURIComponent(GARMIN_REQUEST_TOKEN_URL)}&${encodeURIComponent(paramString)}`;
-
-    // Generate signature
-    const signature = crypto
-      .createHmac('sha1', signingKey)
-      .update(signatureBaseString)
-      .digest('base64');
-
-    // Add signature to auth params
-    authParamsWithCallback.oauth_signature = signature;
-
-    // Convert to header format
-    const authHeader = {
-      Authorization: 'OAuth ' + Object.keys(authParamsWithCallback)
-        .sort()
-        .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(authParamsWithCallback[key])}"`)
-        .join(', ')
-    };
-
-    console.log('📝 Signature Base String:', signatureBaseString);
-    console.log('📝 Signing Key:', signingKey);
-    console.log('📝 Signature:', signature);
+    console.log('📝 OAuth Callback:', callbackUrl);
     console.log('📝 Authorization Header:', authHeader);
 
     // Request token from Garmin
     const response = await fetch(GARMIN_REQUEST_TOKEN_URL, {
       method: 'POST',
-      headers: authHeader
+      headers: {
+        ...authHeader,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `oauth_callback=${encodeURIComponent(callbackUrl)}`
     });
 
     if (!response.ok) {
