@@ -97,7 +97,14 @@ export default async function handler(req, res) {
 
     return res.status(500).json({
       error: 'Authentication failed',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: error.message,
+      details: error.stack,
+      env: {
+        hasGarminKey: !!process.env.GARMIN_CONSUMER_KEY,
+        hasGarminSecret: !!process.env.GARMIN_CONSUMER_SECRET,
+        hasSupabaseUrl: !!process.env.SUPABASE_URL,
+        hasSupabaseKey: !!process.env.SUPABASE_SERVICE_KEY
+      }
     });
   }
 }
