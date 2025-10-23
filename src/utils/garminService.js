@@ -72,6 +72,7 @@ export class GarminService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Garmin API Error Response:', errorData);
         throw new Error(errorData.error || `HTTP error ${response.status}`);
       }
 
