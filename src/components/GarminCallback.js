@@ -13,8 +13,8 @@ const GarminCallback = () => {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        const oauthToken = searchParams.get('oauth_token');
-        const oauthVerifier = searchParams.get('oauth_verifier');
+        const code = searchParams.get('code');
+        const state = searchParams.get('state');
         const error = searchParams.get('error');
 
         if (error) {
@@ -23,17 +23,17 @@ const GarminCallback = () => {
           return;
         }
 
-        if (!oauthToken || !oauthVerifier) {
-          setError('Missing OAuth parameters from Garmin');
+        if (!code || !state) {
+          setError('Missing OAuth 2.0 parameters from Garmin');
           setStatus('error');
           return;
         }
 
-        console.log('🔗 Processing Garmin OAuth callback...');
+        console.log('🔗 Processing Garmin OAuth 2.0 callback...');
         setStatus('exchanging');
 
-        // Complete OAuth flow (exchange verifier for access token)
-        const result = await garminService.completeAuth(oauthToken, oauthVerifier);
+        // Complete OAuth 2.0 PKCE flow (exchange code for access token)
+        const result = await garminService.completeAuth(code, state);
 
         console.log('✅ Garmin connection successful!');
 

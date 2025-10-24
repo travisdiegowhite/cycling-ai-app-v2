@@ -1,9 +1,8 @@
 // Vercel API Route: Secure Garmin Authentication
-// Handles OAuth 1.0a authentication flow and token storage
+// Handles OAuth 2.0 PKCE authentication flow and token storage
 // Documentation: https://developer.garmin.com/gc-developer-program/overview/
 
 import { createClient } from '@supabase/supabase-js';
-import OAuth from 'oauth-1.0a';
 import crypto from 'crypto';
 
 // Initialize Supabase (server-side)
@@ -12,13 +11,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Garmin OAuth 1.0a endpoints
-const GARMIN_REQUEST_TOKEN_URL = 'https://connectapi.garmin.com/oauth-service/oauth/request_token';
-const GARMIN_ACCESS_TOKEN_URL = 'https://connectapi.garmin.com/oauth-service/oauth/access_token';
-const GARMIN_AUTHORIZE_URL = 'https://connect.garmin.com/oauthConfirm';
+// Garmin OAuth 2.0 PKCE endpoints
+const GARMIN_AUTHORIZE_URL = 'https://connect.garmin.com/oauth2Confirm';
+const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token';
 
-// Temporary storage for request tokens (in production, use Redis or database)
-const requestTokenStore = new Map();
+// Temporary storage for code verifiers (in production, use Redis or database)
+const codeVerifierStore = new Map();
 
 const getAllowedOrigins = () => {
   if (process.env.NODE_ENV === 'production') {
@@ -33,21 +31,28 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true',
 };
 
-// Initialize OAuth 1.0a
-function getOAuthClient() {
-  return new OAuth({
-    consumer: {
-      key: process.env.GARMIN_CONSUMER_KEY,
-      secret: process.env.GARMIN_CONSUMER_SECRET,
-    },
-    signature_method: 'HMAC-SHA1',
-    hash_function(base_string, key) {
-      return crypto
-        .createHmac('sha1', key)
-        .update(base_string)
-        .digest('base64');
-    },
-  });
+/**
+ * Generate a cryptographically random code verifier (43-128 characters)
+ */
+function generateCodeVerifier() {
+  return base64URLEncode(crypto.randomBytes(32));
+}
+
+/**
+ * Generate code challenge from verifier (SHA-256 hash)
+ */
+function generateCodeChallenge(verifier) {
+  return base64URLEncode(crypto.createHash('sha256').update(verifier).digest());
+}
+
+/**
+ * Base64 URL encoding (without padding)
+ */
+function base64URLEncode(buffer) {
+  return buffer.toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 }
 
 export default async function handler(req, res) {
@@ -71,7 +76,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { action, userId, oauthToken, oauthVerifier } = req.body;
+    const { action, userId, code, state } = req.body;
 
     // Validate required environment variables
     if (!process.env.GARMIN_CONSUMER_KEY || !process.env.GARMIN_CONSUMER_SECRET) {
@@ -79,11 +84,14 @@ export default async function handler(req, res) {
     }
 
     switch (action) {
-      case 'get_request_token':
-        return await getRequestToken(req, res, userId);
+      case 'get_authorization_url':
+        return await getAuthorizationUrl(req, res, userId);
 
-      case 'exchange_token':
-        return await exchangeTokenForAccess(req, res, userId, oauthToken, oauthVerifier);
+      case 'exchange_code':
+        return await exchangeCodeForToken(req, res, userId, code, state);
+
+      case 'refresh_token':
+        return await refreshAccessToken(req, res, userId);
 
       case 'disconnect':
         return await disconnectGarmin(req, res, userId);
@@ -110,183 +118,145 @@ export default async function handler(req, res) {
 }
 
 /**
- * Step 1: Get OAuth 1.0a request token from Garmin
+ * Step 1: Generate authorization URL with PKCE challenge
  */
-async function getRequestToken(req, res, userId) {
+async function getAuthorizationUrl(req, res, userId) {
   if (!userId) {
     return res.status(400).json({ error: 'UserId required' });
   }
 
   try {
-    const oauth = getOAuthClient();
+    // Generate PKCE parameters
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+    const state = base64URLEncode(crypto.randomBytes(16));
 
     // Determine callback URL based on environment
-    const callbackUrl = process.env.NODE_ENV === 'production'
+    const redirectUri = process.env.NODE_ENV === 'production'
       ? process.env.REACT_APP_GARMIN_REDIRECT_URI || 'https://www.tribos.studio/garmin/callback'
       : 'http://localhost:3000/garmin/callback';
 
-    console.log('🔍 Requesting Garmin OAuth token:', {
+    console.log('🔍 Generating Garmin OAuth 2.0 PKCE URL:', {
       userId,
-      callbackUrl,
-      consumerKey: process.env.GARMIN_CONSUMER_KEY
+      redirectUri,
+      clientId: process.env.GARMIN_CONSUMER_KEY
     });
 
-    // Build OAuth request for request token
-    // Include oauth_callback in the data parameter so it's part of the signature
-    const requestData = {
-      url: GARMIN_REQUEST_TOKEN_URL,
-      method: 'POST',
-      data: {
-        oauth_callback: callbackUrl
-      }
-    };
-
-    // Generate OAuth authorization (includes oauth_callback in signature)
-    const authData = oauth.authorize(requestData);
-
-    // Convert to Authorization header format
-    const authHeader = oauth.toHeader(authData);
-
-    console.log('📝 OAuth Callback:', callbackUrl);
-    console.log('📝 Authorization Header:', authHeader);
-
-    // Request token from Garmin
-    const response = await fetch(GARMIN_REQUEST_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        ...authHeader,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: `oauth_callback=${encodeURIComponent(callbackUrl)}`
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Garmin request token failed:', errorText);
-      throw new Error(`Garmin request token failed: ${errorText}`);
-    }
-
-    const responseText = await response.text();
-    const params = new URLSearchParams(responseText);
-
-    const oauthToken = params.get('oauth_token');
-    const oauthTokenSecret = params.get('oauth_token_secret');
-
-    if (!oauthToken || !oauthTokenSecret) {
-      console.error('Invalid response from Garmin:', responseText);
-      throw new Error('Invalid response from Garmin');
-    }
-
-    console.log('✅ Garmin request token received:', {
-      hasToken: !!oauthToken,
-      hasSecret: !!oauthTokenSecret
-    });
-
-    // Store request token temporarily (associated with userId)
-    requestTokenStore.set(oauthToken, {
-      secret: oauthTokenSecret,
+    // Store code verifier temporarily (associated with state)
+    codeVerifierStore.set(state, {
+      verifier: codeVerifier,
       userId: userId,
       timestamp: Date.now()
     });
 
-    // Clean up old tokens (older than 10 minutes)
+    // Clean up old verifiers (older than 10 minutes)
     const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-    for (const [token, data] of requestTokenStore.entries()) {
+    for (const [key, data] of codeVerifierStore.entries()) {
       if (data.timestamp < tenMinutesAgo) {
-        requestTokenStore.delete(token);
+        codeVerifierStore.delete(key);
       }
     }
 
     // Build authorization URL
-    const authorizationUrl = `${GARMIN_AUTHORIZE_URL}?oauth_token=${oauthToken}`;
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: process.env.GARMIN_CONSUMER_KEY,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+      redirect_uri: redirectUri,
+      state: state
+    });
+
+    const authorizationUrl = `${GARMIN_AUTHORIZE_URL}?${params.toString()}`;
+
+    console.log('✅ Generated authorization URL with PKCE challenge');
 
     return res.status(200).json({
       success: true,
       authorizationUrl: authorizationUrl,
-      oauthToken: oauthToken
+      state: state
     });
 
   } catch (error) {
-    console.error('Request token error:', error);
+    console.error('Authorization URL generation error:', error);
     throw error;
   }
 }
 
 /**
- * Step 2: Exchange request token + verifier for access token
+ * Step 2: Exchange authorization code for access token
  */
-async function exchangeTokenForAccess(req, res, userId, oauthToken, oauthVerifier) {
-  if (!userId || !oauthToken || !oauthVerifier) {
-    return res.status(400).json({ error: 'UserId, oauthToken, and oauthVerifier required' });
+async function exchangeCodeForToken(req, res, userId, code, state) {
+  if (!userId || !code || !state) {
+    return res.status(400).json({ error: 'UserId, code, and state required' });
   }
 
   try {
-    // Retrieve stored request token secret
-    const storedData = requestTokenStore.get(oauthToken);
+    // Retrieve stored code verifier
+    const storedData = codeVerifierStore.get(state);
     if (!storedData) {
-      return res.status(400).json({ error: 'Invalid or expired request token' });
+      return res.status(400).json({ error: 'Invalid or expired state parameter' });
     }
 
-    // Verify this token belongs to the requesting user
+    // Verify this state belongs to the requesting user
     if (storedData.userId !== userId) {
-      return res.status(403).json({ error: 'Token does not belong to this user' });
+      return res.status(403).json({ error: 'State does not belong to this user' });
     }
 
-    const oauthTokenSecret = storedData.secret;
+    const codeVerifier = storedData.verifier;
 
-    console.log('🔄 Exchanging Garmin token for access token:', {
+    console.log('🔄 Exchanging authorization code for access token:', {
       userId,
-      hasToken: !!oauthToken,
-      hasVerifier: !!oauthVerifier
+      hasCode: !!code,
+      hasVerifier: !!codeVerifier
     });
 
-    const oauth = getOAuthClient();
-
-    // Build OAuth request for access token
-    const requestData = {
-      url: GARMIN_ACCESS_TOKEN_URL,
-      method: 'POST',
-      data: { oauth_verifier: oauthVerifier }
-    };
-
-    const token = {
-      key: oauthToken,
-      secret: oauthTokenSecret
-    };
-
-    const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
+    // Determine redirect URI (must match the one used in authorization)
+    const redirectUri = process.env.NODE_ENV === 'production'
+      ? process.env.REACT_APP_GARMIN_REDIRECT_URI || 'https://www.tribos.studio/garmin/callback'
+      : 'http://localhost:3000/garmin/callback';
 
     // Request access token from Garmin
-    const response = await fetch(GARMIN_ACCESS_TOKEN_URL, {
+    const params = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: process.env.GARMIN_CONSUMER_KEY,
+      client_secret: process.env.GARMIN_CONSUMER_SECRET,
+      code: code,
+      code_verifier: codeVerifier,
+      redirect_uri: redirectUri
+    });
+
+    const response = await fetch(GARMIN_TOKEN_URL, {
       method: 'POST',
       headers: {
-        ...authHeader,
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: `oauth_verifier=${encodeURIComponent(oauthVerifier)}`
+      body: params.toString()
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Garmin access token exchange failed:', errorText);
-      throw new Error(`Garmin access token exchange failed: ${errorText}`);
+      console.error('Garmin token exchange failed:', errorText);
+      throw new Error(`Garmin token exchange failed: ${errorText}`);
     }
 
-    const responseText = await response.text();
-    const params = new URLSearchParams(responseText);
+    const tokenData = await response.json();
 
-    const accessToken = params.get('oauth_token');
-    const accessTokenSecret = params.get('oauth_token_secret');
-
-    if (!accessToken || !accessTokenSecret) {
-      console.error('Invalid access token response from Garmin:', responseText);
-      throw new Error('Invalid access token response from Garmin');
+    if (!tokenData.access_token || !tokenData.refresh_token) {
+      console.error('Invalid token response from Garmin:', tokenData);
+      throw new Error('Invalid token response from Garmin');
     }
 
-    console.log('✅ Garmin access token received');
+    console.log('✅ Garmin access token received:', {
+      expiresIn: tokenData.expires_in,
+      scope: tokenData.scope
+    });
 
-    // Clean up request token
-    requestTokenStore.delete(oauthToken);
+    // Clean up code verifier
+    codeVerifierStore.delete(state);
+
+    // Calculate token expiration
+    const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
 
     // Store tokens in database
     const { error: dbError } = await supabase
@@ -294,11 +264,14 @@ async function exchangeTokenForAccess(req, res, userId, oauthToken, oauthVerifie
       .upsert({
         user_id: userId,
         provider: 'garmin',
-        access_token: accessToken,
-        refresh_token: accessTokenSecret, // OAuth 1.0a uses token secret instead
-        token_expires_at: null, // OAuth 1.0a tokens don't expire
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        token_expires_at: expiresAt,
         provider_user_id: null, // Will be populated on first sync
-        provider_user_data: null,
+        provider_user_data: {
+          scope: tokenData.scope,
+          token_type: tokenData.token_type
+        },
         sync_enabled: true,
         last_sync_at: null,
         sync_error: null,
@@ -316,11 +289,93 @@ async function exchangeTokenForAccess(req, res, userId, oauthToken, oauthVerifie
 
     return res.status(200).json({
       success: true,
-      message: 'Garmin connected successfully'
+      message: 'Garmin connected successfully',
+      expiresIn: tokenData.expires_in
     });
 
   } catch (error) {
     console.error('Token exchange error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Refresh access token using refresh token
+ */
+async function refreshAccessToken(req, res, userId) {
+  if (!userId) {
+    return res.status(400).json({ error: 'UserId required' });
+  }
+
+  try {
+    // Get current integration
+    const { data: integration, error: fetchError } = await supabase
+      .from('bike_computer_integrations')
+      .select('refresh_token')
+      .eq('user_id', userId)
+      .eq('provider', 'garmin')
+      .single();
+
+    if (fetchError || !integration?.refresh_token) {
+      return res.status(404).json({ error: 'Garmin integration not found' });
+    }
+
+    console.log('🔄 Refreshing Garmin access token for user:', userId);
+
+    // Request new access token
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: process.env.GARMIN_CONSUMER_KEY,
+      client_secret: process.env.GARMIN_CONSUMER_SECRET,
+      refresh_token: integration.refresh_token
+    });
+
+    const response = await fetch(GARMIN_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params.toString()
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Garmin token refresh failed:', errorText);
+      throw new Error(`Garmin token refresh failed: ${errorText}`);
+    }
+
+    const tokenData = await response.json();
+
+    // Calculate token expiration
+    const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
+
+    // Update tokens in database
+    const { error: updateError } = await supabase
+      .from('bike_computer_integrations')
+      .update({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        token_expires_at: expiresAt,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId)
+      .eq('provider', 'garmin');
+
+    if (updateError) {
+      console.error('Database error updating tokens:', updateError);
+      throw new Error('Failed to update tokens');
+    }
+
+    console.log('✅ Garmin access token refreshed successfully');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Token refreshed successfully',
+      expiresIn: tokenData.expires_in
+    });
+
+  } catch (error) {
+    console.error('Token refresh error:', error);
     throw error;
   }
 }
@@ -334,6 +389,10 @@ async function disconnectGarmin(req, res, userId) {
   }
 
   try {
+    // TODO: Call Garmin's delete user registration endpoint
+    // DELETE https://apis.garmin.com/wellness-api/rest/user/registration
+    // (requires access token in Authorization header)
+
     // Delete stored integration
     const { error } = await supabase
       .from('bike_computer_integrations')

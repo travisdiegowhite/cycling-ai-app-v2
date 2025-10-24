@@ -41,8 +41,8 @@ export class GarminService {
   }
 
   /**
-   * Initiate Garmin OAuth flow (OAuth 1.0a requires server-side request token)
-   * This calls the server to get a request token first
+   * Initiate Garmin OAuth 2.0 PKCE flow
+   * This calls the server to generate authorization URL with PKCE challenge
    */
   async initiateAuth() {
     if (!this.isConfigured()) {
@@ -55,9 +55,9 @@ export class GarminService {
     }
 
     try {
-      console.log('🔍 Initiating Garmin OAuth flow...');
+      console.log('🔍 Initiating Garmin OAuth 2.0 PKCE flow...');
 
-      // Call server to get OAuth 1.0a request token
+      // Call server to get authorization URL with PKCE
       const response = await fetch(`${getApiBaseUrl()}/api/garmin-auth`, {
         method: 'POST',
         headers: {
@@ -65,7 +65,7 @@ export class GarminService {
         },
         credentials: 'include',
         body: JSON.stringify({
-          action: 'get_request_token',
+          action: 'get_authorization_url',
           userId: userId
         })
       });
@@ -79,7 +79,7 @@ export class GarminService {
       const data = await response.json();
       const authUrl = data.authorizationUrl;
 
-      console.log('🔗 Generated Garmin Auth URL');
+      console.log('🔗 Generated Garmin Auth URL with PKCE');
       return authUrl;
 
     } catch (error) {
@@ -89,16 +89,16 @@ export class GarminService {
   }
 
   /**
-   * Complete OAuth flow after callback (exchange verifier for access token)
+   * Complete OAuth 2.0 flow after callback (exchange code for access token)
    */
-  async completeAuth(oauthToken, oauthVerifier) {
+  async completeAuth(code, state) {
     const userId = await this.getCurrentUserId();
     if (!userId) {
       throw new Error('User must be authenticated');
     }
 
     try {
-      console.log('🔄 Completing Garmin OAuth flow...');
+      console.log('🔄 Completing Garmin OAuth 2.0 flow...');
 
       const response = await fetch(`${getApiBaseUrl()}/api/garmin-auth`, {
         method: 'POST',
@@ -107,9 +107,9 @@ export class GarminService {
         },
         credentials: 'include',
         body: JSON.stringify({
-          action: 'exchange_token',
-          oauthToken: oauthToken,
-          oauthVerifier: oauthVerifier,
+          action: 'exchange_code',
+          code: code,
+          state: state,
           userId: userId
         })
       });
