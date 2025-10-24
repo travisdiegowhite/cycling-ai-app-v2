@@ -3,8 +3,6 @@
 // Documentation: https://developer.garmin.com/gc-developer-program/overview/
 
 import { createClient } from '@supabase/supabase-js';
-import OAuth from 'oauth-1.0a';
-import crypto from 'crypto';
 
 // Initialize Supabase (server-side)
 const supabase = createClient(
@@ -26,23 +24,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Credentials': 'true',
 };
-
-// Initialize OAuth 1.0a
-function getOAuthClient() {
-  return new OAuth({
-    consumer: {
-      key: process.env.GARMIN_CONSUMER_KEY,
-      secret: process.env.GARMIN_CONSUMER_SECRET,
-    },
-    signature_method: 'HMAC-SHA1',
-    hash_function(base_string, key) {
-      return crypto
-        .createHmac('sha1', key)
-        .update(base_string)
-        .digest('base64');
-    },
-  });
-}
 
 export default async function handler(req, res) {
   // Handle CORS
@@ -94,7 +75,6 @@ export default async function handler(req, res) {
     // Fetch activities from Garmin
     const activities = await fetchGarminActivities(
       integration.access_token,
-      integration.refresh_token, // OAuth 1.0a token secret
       { startDate: start, endDate: end }
     );
 
@@ -161,8 +141,7 @@ export default async function handler(req, res) {
             try {
               const trackPoints = await fetchGarminTrackPoints(
                 activity.activityId,
-                integration.access_token,
-                integration.refresh_token
+                integration.access_token
               );
 
               if (trackPoints && trackPoints.length > 0) {
@@ -266,8 +245,8 @@ export default async function handler(req, res) {
   }
 }
 
-// Fetch activities from Garmin API using OAuth 1.0a
-async function fetchGarminActivities(accessToken, tokenSecret, options = {}) {
+// Fetch activities from Garmin API using OAuth 2.0 Bearer token
+async function fetchGarminActivities(accessToken, options = {}) {
   const { startDate, endDate } = options;
 
   // Format dates as YYYY-MM-DD
@@ -282,24 +261,10 @@ async function fetchGarminActivities(accessToken, tokenSecret, options = {}) {
 
   const fullUrl = `${url}?${params.toString()}`;
 
-  const oauth = getOAuthClient();
-
-  const requestData = {
-    url: fullUrl,
-    method: 'GET'
-  };
-
-  const token = {
-    key: accessToken,
-    secret: tokenSecret
-  };
-
-  const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
-
   const response = await fetch(fullUrl, {
     method: 'GET',
     headers: {
-      ...authHeader
+      'Authorization': `Bearer ${accessToken}`
     }
   });
 
@@ -374,29 +339,15 @@ function convertGarminActivity(activity, userId) {
   }
 }
 
-// Fetch GPS track points for an activity using OAuth 1.0a
-async function fetchGarminTrackPoints(activityId, accessToken, tokenSecret) {
+// Fetch GPS track points for an activity using OAuth 2.0 Bearer token
+async function fetchGarminTrackPoints(activityId, accessToken) {
   try {
     const url = `${GARMIN_API_BASE}/activityDetails/${activityId}`;
-
-    const oauth = getOAuthClient();
-
-    const requestData = {
-      url: url,
-      method: 'GET'
-    };
-
-    const token = {
-      key: accessToken,
-      secret: tokenSecret
-    };
-
-    const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
 
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        ...authHeader
+        'Authorization': `Bearer ${accessToken}`
       }
     });
 
