@@ -4,8 +4,6 @@
 
 import { createClient } from '@supabase/supabase-js';
 import FitParser from 'fit-file-parser';
-import OAuth from 'oauth-1.0a';
-import crypto from 'crypto';
 
 // Initialize Supabase (server-side)
 const supabase = createClient(
@@ -28,13 +26,20 @@ const corsHeaders = {
 };
 
 export default async function handler(req, res) {
-  // Handle CORS
+  // Handle CORS - Allow both browser origins and Garmin servers
   const origin = req.headers.origin;
   const allowedOrigins = getAllowedOrigins();
 
-  if (allowedOrigins.includes(origin)) {
+  // For browser requests (OPTIONS preflight), require specific origin
+  // For webhook POST/GET from Garmin servers, allow any origin (no Origin header)
+  if (origin && allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin && req.method !== 'OPTIONS') {
+    // No origin header = server-to-server request from Garmin
+    // Set permissive headers to allow the request
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
+
   res.setHeader('Access-Control-Allow-Methods', corsHeaders['Access-Control-Allow-Methods']);
   res.setHeader('Access-Control-Allow-Headers', corsHeaders['Access-Control-Allow-Headers']);
   res.setHeader('Access-Control-Allow-Credentials', corsHeaders['Access-Control-Allow-Credentials']);
@@ -247,38 +252,12 @@ async function downloadAndProcessFitFile(event, integration) {
   try {
     console.log('📥 Downloading FIT file:', event.file_url);
 
-    // Generate OAuth signature for file download
-    const oauth = new OAuth({
-      consumer: {
-        key: process.env.GARMIN_CONSUMER_KEY,
-        secret: process.env.GARMIN_CONSUMER_SECRET,
-      },
-      signature_method: 'HMAC-SHA1',
-      hash_function(base_string, key) {
-        return crypto
-          .createHmac('sha1', key)
-          .update(base_string)
-          .digest('base64');
-      },
-    });
-
-    const requestData = {
-      url: event.file_url,
-      method: 'GET'
-    };
-
-    const token = {
-      key: integration.access_token,
-      secret: integration.refresh_token
-    };
-
-    const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
-
+    // Garmin OAuth 2.0 requires Bearer token for file downloads
     // Download FIT file
     const response = await fetch(event.file_url, {
       method: 'GET',
       headers: {
-        ...authHeader
+        'Authorization': `Bearer ${integration.access_token}`
       }
     });
 
