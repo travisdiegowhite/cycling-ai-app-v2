@@ -213,6 +213,15 @@ export class GarminService {
    * Note: Garmin primarily uses PUSH webhooks for real-time data.
    * This backfill function requests historical activities from Garmin,
    * which will then be sent to your webhook endpoint.
+   *
+   * @param {Object} options - Sync options
+   * @param {string} options.startDate - Start date (ISO string or Date)
+   * @param {string} options.endDate - End date (ISO string or Date)
+   *
+   * Examples:
+   * - syncActivities() - Last 30 days
+   * - syncActivities({ startDate: '2020-01-01' }) - From Jan 2020 to now
+   * - syncActivities({ startDate: '2020-01-01', endDate: '2023-12-31' }) - 2020-2023
    */
   async syncActivities(options = {}) {
     const userId = await this.getCurrentUserId();
@@ -221,7 +230,15 @@ export class GarminService {
     }
 
     try {
-      console.log('🔄 Requesting Garmin activity backfill...');
+      const { startDate, endDate } = options;
+
+      const dateRangeStr = startDate && endDate
+        ? ` from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}`
+        : startDate
+        ? ` from ${new Date(startDate).toLocaleDateString()} to now`
+        : ' (last 30 days)';
+
+      console.log(`🔄 Requesting Garmin activity backfill${dateRangeStr}...`);
 
       const response = await fetch(`${getApiBaseUrl()}/api/garmin-sync`, {
         method: 'POST',
@@ -231,7 +248,8 @@ export class GarminService {
         credentials: 'include',
         body: JSON.stringify({
           userId: userId,
-          ...options
+          startDate,
+          endDate
         })
       });
 

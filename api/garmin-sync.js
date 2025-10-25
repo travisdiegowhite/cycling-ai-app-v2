@@ -74,94 +74,149 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Sync is disabled' });
     }
 
-    // Calculate date range (default to last 30 days, max 30 days per request)
+    // Calculate date range
+    // If no dates provided, default to last 30 days
+    // If dates provided, we'll split into 30-day chunks
     const end = endDate ? new Date(endDate) : new Date();
     const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    // Validate date range (max 30 days per Garmin API docs)
-    const daysDiff = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysDiff > 30) {
-      return res.status(400).json({
-        error: 'Date range too large. Maximum 30 days per backfill request.',
-        maxDays: 30,
-        requestedDays: daysDiff
-      });
+    // Calculate total days
+    const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+    // If date range is > 30 days, we need to split into chunks
+    // Garmin max is 30 days per backfill request
+    const CHUNK_SIZE_DAYS = 30;
+    const chunks = [];
+
+    if (totalDays > CHUNK_SIZE_DAYS) {
+      // Split into 30-day chunks
+      let currentStart = new Date(start);
+      while (currentStart < end) {
+        const currentEnd = new Date(Math.min(
+          currentStart.getTime() + (CHUNK_SIZE_DAYS * 24 * 60 * 60 * 1000),
+          end.getTime()
+        ));
+
+        chunks.push({
+          start: new Date(currentStart),
+          end: new Date(currentEnd)
+        });
+
+        currentStart = new Date(currentEnd);
+      }
+
+      console.log(`📅 Splitting ${totalDays} days into ${chunks.length} chunks of ${CHUNK_SIZE_DAYS} days`);
+    } else {
+      chunks.push({ start, end });
     }
 
     console.log('🔄 Triggering Garmin backfill:', {
       userId,
       hasAccessToken: !!integration.access_token,
-      startDate: start.toISOString(),
-      endDate: end.toISOString(),
-      daysDiff
-    });
-
-    // Trigger backfill request for activities
-    const backfillUrl = `${GARMIN_BACKFILL_BASE}/activities`;
-    const params = new URLSearchParams({
-      summaryStartTimeInSeconds: Math.floor(start.getTime() / 1000).toString(),
-      summaryEndTimeInSeconds: Math.floor(end.getTime() / 1000).toString()
-    });
-
-    console.log('📡 Calling Garmin Backfill API:', {
-      url: `${backfillUrl}?${params.toString()}`,
-      hasAuth: !!integration.access_token
-    });
-
-    const response = await fetch(`${backfillUrl}?${params.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${integration.access_token}`
+      totalDays,
+      chunks: chunks.length,
+      dateRange: {
+        start: start.toISOString(),
+        end: end.toISOString()
       }
     });
 
-    console.log('📡 Garmin Backfill API response:', {
-      status: response.status,
-      statusText: response.statusText
-    });
+    // Send backfill requests for each chunk
+    const results = [];
+    const backfillUrl = `${GARMIN_BACKFILL_BASE}/activities`;
 
-    if (response.status === 202) {
-      // 202 Accepted - Backfill request accepted
-      console.log('✅ Garmin backfill request accepted');
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const params = new URLSearchParams({
+        summaryStartTimeInSeconds: Math.floor(chunk.start.getTime() / 1000).toString(),
+        summaryEndTimeInSeconds: Math.floor(chunk.end.getTime() / 1000).toString()
+      });
 
-      // Update last sync time
-      await supabase
-        .from('bike_computer_integrations')
-        .update({ last_sync_at: new Date().toISOString() })
-        .eq('user_id', userId)
-        .eq('provider', 'garmin');
+      console.log(`📡 Backfill chunk ${i + 1}/${chunks.length}:`, {
+        url: `${backfillUrl}?${params.toString()}`,
+        start: chunk.start.toISOString(),
+        end: chunk.end.toISOString()
+      });
 
-      return res.status(200).json({
-        success: true,
-        message: 'Backfill request accepted. Activities will be sent to your webhook shortly.',
-        dateRange: {
-          start: start.toISOString(),
-          end: end.toISOString(),
-          days: daysDiff
+      const response = await fetch(`${backfillUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${integration.access_token}`
         }
       });
 
-    } else if (response.status === 409) {
-      // 409 Conflict - Duplicate backfill request
-      const errorData = await response.json().catch(() => ({}));
-      console.warn('⚠️ Duplicate backfill request:', errorData);
-
-      return res.status(200).json({
-        success: true,
-        message: 'Backfill already in progress for this time range.',
-        duplicate: true
-      });
-
-    } else {
-      // Error response
-      const errorText = await response.text();
-      console.error('❌ Garmin backfill error:', {
+      console.log(`📡 Chunk ${i + 1} response:`, {
         status: response.status,
-        error: errorText
+        statusText: response.statusText
       });
 
-      throw new Error(`Garmin backfill failed (${response.status}): ${errorText}`);
+      if (response.status === 202) {
+        results.push({
+          chunk: i + 1,
+          status: 'accepted',
+          dateRange: {
+            start: chunk.start.toISOString(),
+            end: chunk.end.toISOString()
+          }
+        });
+      } else if (response.status === 409) {
+        const errorData = await response.json().catch(() => ({}));
+        results.push({
+          chunk: i + 1,
+          status: 'duplicate',
+          message: 'Already requested',
+          dateRange: {
+            start: chunk.start.toISOString(),
+            end: chunk.end.toISOString()
+          }
+        });
+      } else {
+        const errorText = await response.text();
+        results.push({
+          chunk: i + 1,
+          status: 'error',
+          error: errorText,
+          dateRange: {
+            start: chunk.start.toISOString(),
+            end: chunk.end.toISOString()
+          }
+        });
+      }
+
+      // Small delay between requests to avoid rate limiting
+      if (i < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
+
+    // Update last sync time
+    await supabase
+      .from('bike_computer_integrations')
+      .update({ last_sync_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('provider', 'garmin');
+
+    const acceptedCount = results.filter(r => r.status === 'accepted').length;
+    const duplicateCount = results.filter(r => r.status === 'duplicate').length;
+    const errorCount = results.filter(r => r.status === 'error').length;
+
+    console.log('✅ Backfill requests completed:', {
+      total: results.length,
+      accepted: acceptedCount,
+      duplicate: duplicateCount,
+      errors: errorCount
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Backfill request completed. ${acceptedCount} chunk(s) accepted, ${duplicateCount} already in progress.`,
+      totalDays,
+      chunks: results.length,
+      accepted: acceptedCount,
+      duplicate: duplicateCount,
+      errors: errorCount,
+      results
+    });
 
   } catch (error) {
     console.error('❌ Garmin sync error:', {
