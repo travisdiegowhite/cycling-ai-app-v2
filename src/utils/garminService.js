@@ -235,7 +235,10 @@ export class GarminService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error ${response.status}`);
+        console.error('❌ Garmin sync error response:', errorData);
+        const errorMessage = errorData.message || errorData.error || `HTTP error ${response.status}`;
+        const errorDetails = errorData.details || '';
+        throw new Error(`${errorMessage}${errorDetails ? '\n' + errorDetails : ''}`);
       }
 
       const data = await response.json();
