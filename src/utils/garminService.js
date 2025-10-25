@@ -209,8 +209,10 @@ export class GarminService {
   }
 
   /**
-   * Manually trigger sync from Garmin
-   * Note: Garmin primarily uses PUSH webhooks, but manual sync is available
+   * Trigger backfill request for historical Garmin activities
+   * Note: Garmin primarily uses PUSH webhooks for real-time data.
+   * This backfill function requests historical activities from Garmin,
+   * which will then be sent to your webhook endpoint.
    */
   async syncActivities(options = {}) {
     const userId = await this.getCurrentUserId();
@@ -219,7 +221,7 @@ export class GarminService {
     }
 
     try {
-      console.log('🔄 Syncing activities from Garmin...');
+      console.log('🔄 Requesting Garmin activity backfill...');
 
       const response = await fetch(`${getApiBaseUrl()}/api/garmin-sync`, {
         method: 'POST',
@@ -235,18 +237,18 @@ export class GarminService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Garmin sync error response:', errorData);
+        console.error('❌ Garmin backfill error response:', errorData);
         const errorMessage = errorData.message || errorData.error || `HTTP error ${response.status}`;
         const errorDetails = errorData.details || '';
         throw new Error(`${errorMessage}${errorDetails ? '\n' + errorDetails : ''}`);
       }
 
       const data = await response.json();
-      console.log('✅ Garmin sync completed:', data);
+      console.log('✅ Garmin backfill request completed:', data);
 
       return data;
     } catch (error) {
-      console.error('❌ Garmin sync failed:', error);
+      console.error('❌ Garmin backfill failed:', error);
       throw error;
     }
   }
