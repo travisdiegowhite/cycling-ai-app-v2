@@ -32,7 +32,41 @@
 
 ---
 
-### Step 2: Register Webhook in Garmin Developer Portal
+### Step 2: Configure Vercel Deployment Protection (CRITICAL)
+
+**IMPORTANT**: Vercel's Security Checkpoint is currently blocking Garmin's webhook requests. You must configure bypass access first.
+
+#### Option A: Protection Bypass for Automation (Recommended)
+
+1. Go to Vercel Dashboard: https://vercel.com/travisdiegowhites-projects/cycling-ai-app-v2/settings/deployment-protection
+
+2. Under "Protection Bypass for Automation", click **Generate Token**
+
+3. Copy the 32-character token
+
+4. **STOP!** This won't work because Garmin doesn't let you add custom headers. Use Option B instead.
+
+#### Option B: Disable Standard Protection (REQUIRED for Garmin Webhooks)
+
+1. Go to Vercel Dashboard: https://vercel.com/travisdiegowhites-projects/cycling-ai-app-v2/settings/general
+
+2. Scroll to **Deployment Protection**
+
+3. Change from "Standard Protection" to **"None (Publicly Accessible)"**
+
+4. Click **Save**
+
+5. Test the endpoint:
+   ```bash
+   curl https://www.tribos.studio/api/garmin-webhook
+   # Should return: {"status":"ok","service":"garmin-webhook-handler",...}
+   ```
+
+**Why this is needed**: Garmin's webhook requests don't include browser verification, so Vercel's Security Checkpoint blocks them. Making the deployment publicly accessible allows Garmin to reach your webhook endpoint.
+
+---
+
+### Step 3: Register Webhook in Garmin Developer Portal
 
 #### A. Log into Garmin Developer Console
 
@@ -68,7 +102,7 @@ If Garmin asks for a verification token or secret:
 
 ---
 
-### Step 3: Test the Webhook
+### Step 4: Test the Webhook
 
 #### Option A: Use Garmin's Test Tools
 

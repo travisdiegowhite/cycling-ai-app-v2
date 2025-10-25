@@ -4,12 +4,22 @@
 
 import { createClient } from '@supabase/supabase-js';
 import FitParser from 'fit-file-parser';
+import crypto from 'crypto';
 
 // Initialize Supabase (server-side)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+
+// Security Configuration
+const WEBHOOK_SECRET = process.env.GARMIN_WEBHOOK_SECRET; // Optional: for signature verification
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 100; // Max 100 requests per minute per IP
+const REQUEST_TIMEOUT_MS = 30000; // 30 seconds max processing time
+
+// In-memory rate limiting (use Redis for production)
+const rateLimitStore = new Map();
 
 // CORS configuration
 const getAllowedOrigins = () => {
@@ -48,7 +58,47 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  // Security checks for webhook requests
   if (req.method === 'POST') {
+    // 1. Rate limiting
+    const rateLimitResult = checkRateLimit(req);
+    if (!rateLimitResult.allowed) {
+      console.warn('🚫 Rate limit exceeded:', {
+        ip: getClientIP(req),
+        requestsInWindow: rateLimitResult.count
+      });
+      return res.status(429).json({
+        error: 'Too many requests',
+        retryAfter: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)
+      });
+    }
+
+    // 2. Payload size check (max 10MB)
+    const contentLength = parseInt(req.headers['content-length'] || '0');
+    if (contentLength > 10 * 1024 * 1024) {
+      console.warn('🚫 Payload too large:', contentLength);
+      return res.status(413).json({ error: 'Payload too large' });
+    }
+
+    // 3. Content-Type validation
+    const contentType = req.headers['content-type'];
+    if (contentType && !contentType.includes('application/json')) {
+      console.warn('🚫 Invalid content-type:', contentType);
+      return res.status(415).json({ error: 'Content-Type must be application/json' });
+    }
+
+    // 4. Webhook signature verification (if secret is configured)
+    if (WEBHOOK_SECRET) {
+      const signatureValid = verifyWebhookSignature(req);
+      if (!signatureValid) {
+        console.warn('🚫 Invalid webhook signature:', {
+          ip: getClientIP(req),
+          userAgent: req.headers['user-agent']
+        });
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
+    }
+
     return handleWebhook(req, res);
   }
 
@@ -57,6 +107,79 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Get client IP address
+ */
+function getClientIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0].trim() ||
+         req.headers['x-real-ip'] ||
+         req.connection?.remoteAddress ||
+         'unknown';
+}
+
+/**
+ * Rate limiting check
+ */
+function checkRateLimit(req) {
+  const ip = getClientIP(req);
+  const now = Date.now();
+
+  // Clean up old entries
+  for (const [key, data] of rateLimitStore.entries()) {
+    if (now - data.windowStart > RATE_LIMIT_WINDOW_MS) {
+      rateLimitStore.delete(key);
+    }
+  }
+
+  // Get or create rate limit data for this IP
+  let limitData = rateLimitStore.get(ip);
+  if (!limitData || now - limitData.windowStart > RATE_LIMIT_WINDOW_MS) {
+    limitData = {
+      windowStart: now,
+      count: 0
+    };
+  }
+
+  limitData.count++;
+  rateLimitStore.set(ip, limitData);
+
+  return {
+    allowed: limitData.count <= RATE_LIMIT_MAX_REQUESTS,
+    count: limitData.count
+  };
+}
+
+/**
+ * Verify webhook signature (HMAC-SHA256)
+ * Garmin may send signature in header like: X-Garmin-Signature
+ */
+function verifyWebhookSignature(req) {
+  const signature = req.headers['x-garmin-signature'] ||
+                   req.headers['x-webhook-signature'];
+
+  if (!signature) {
+    console.warn('⚠️ No signature header found');
+    return false;
+  }
+
+  try {
+    const payload = JSON.stringify(req.body);
+    const expectedSignature = crypto
+      .createHmac('sha256', WEBHOOK_SECRET)
+      .update(payload)
+      .digest('hex');
+
+    // Constant-time comparison to prevent timing attacks
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  } catch (error) {
+    console.error('Signature verification error:', error);
+    return false;
+  }
 }
 
 /**
@@ -76,17 +199,52 @@ async function handleHealthCheck(req, res) {
 async function handleWebhook(req, res) {
   try {
     const webhookData = req.body;
+    const clientIP = getClientIP(req);
 
     console.log('📥 Garmin webhook received:', {
       eventType: webhookData.eventType,
       userId: webhookData.userId,
       activityId: webhookData.activityId,
+      ip: clientIP,
+      userAgent: req.headers['user-agent'],
       timestamp: new Date().toISOString()
     });
 
-    // Validate webhook payload
+    // Validate webhook payload structure
+    if (!webhookData || typeof webhookData !== 'object') {
+      console.warn('🚫 Invalid payload structure:', typeof webhookData);
+      return res.status(400).json({ error: 'Invalid payload structure' });
+    }
+
+    // Required fields validation
     if (!webhookData.userId) {
+      console.warn('🚫 Missing userId in webhook payload');
       return res.status(400).json({ error: 'Missing userId in webhook payload' });
+    }
+
+    // Validate data types
+    if (webhookData.activityId && typeof webhookData.activityId !== 'string') {
+      console.warn('🚫 Invalid activityId type:', typeof webhookData.activityId);
+      return res.status(400).json({ error: 'Invalid activityId type' });
+    }
+
+    // Check for duplicate webhook (idempotency)
+    if (webhookData.activityId) {
+      const { data: existingEvent } = await supabase
+        .from('garmin_webhook_events')
+        .select('id')
+        .eq('activity_id', webhookData.activityId)
+        .eq('garmin_user_id', webhookData.userId)
+        .single();
+
+      if (existingEvent) {
+        console.log('ℹ️ Duplicate webhook ignored:', webhookData.activityId);
+        return res.status(200).json({
+          success: true,
+          message: 'Webhook already processed',
+          eventId: existingEvent.id
+        });
+      }
     }
 
     // Store webhook event for async processing
