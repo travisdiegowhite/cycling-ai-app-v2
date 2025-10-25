@@ -39,11 +39,11 @@
 1. Go to: https://developerportal.garmin.com/
 2. Sign in with your approved developer account
 3. Navigate to your application/project
+4. Go to the **Endpoint Configuration** page
 
-#### B. Register Activity Webhook
+#### B. Register Activity Webhook Endpoint
 
-1. Find "Webhooks" or "Push Notifications" section
-2. Add a new webhook with these details:
+1. On the Endpoint Configuration page, add a new endpoint with these details:
 
 **Webhook URL:**
 ```

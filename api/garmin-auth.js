@@ -255,6 +255,27 @@ async function exchangeCodeForToken(req, res, userId, code, state) {
     // Clean up code verifier
     codeVerifierStore.delete(state);
 
+    // Fetch Garmin user ID using the access token
+    let garminUserId = null;
+    try {
+      console.log('🔍 Fetching Garmin user ID...');
+      const userIdResponse = await fetch('https://apis.garmin.com/wellness-api/rest/user/id', {
+        headers: {
+          'Authorization': `Bearer ${tokenData.access_token}`
+        }
+      });
+
+      if (userIdResponse.ok) {
+        const userData = await userIdResponse.json();
+        garminUserId = userData.userId;
+        console.log('✅ Garmin user ID retrieved:', garminUserId);
+      } else {
+        console.warn('⚠️ Failed to fetch Garmin user ID:', await userIdResponse.text());
+      }
+    } catch (userIdError) {
+      console.warn('⚠️ Error fetching Garmin user ID:', userIdError.message);
+    }
+
     // Calculate token expiration
     const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
 
@@ -267,7 +288,7 @@ async function exchangeCodeForToken(req, res, userId, code, state) {
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         token_expires_at: expiresAt,
-        provider_user_id: null, // Will be populated on first sync
+        provider_user_id: garminUserId, // Garmin's internal user ID
         provider_user_data: {
           scope: tokenData.scope,
           token_type: tokenData.token_type
