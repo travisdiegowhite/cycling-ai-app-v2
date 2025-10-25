@@ -22,7 +22,6 @@
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.18",
     "fit-file-parser": "^1.21.0",
-    "leaflet": "^1.9.4",
     "lucide-react": "^0.539.0",
     "mapbox-gl": "^2.15.0",
     "oauth-1.0a": "^2.2.6",
@@ -35,7 +34,6 @@
     "react-dom": "^19.1.1",
     "react-hot-toast": "^2.5.2",
     "react-is": "^19.1.1",
-    "react-leaflet": "^5.0.0",
     "react-map-gl": "^7.1.9",
     "react-router-dom": "^7.8.2",
     "react-scripts": "5.0.1",
@@ -57,7 +55,9 @@
     "eject": "react-scripts eject",
     "deploy": "vercel --prod",
     "vercel-build": "CI=false npm run build",
-    "build-test": "node build-test.js"
+    "build-test": "node build-test.js",
+    "analyze-build": "node analyze-build.js",
+    "build-and-analyze": "npm run build && npm run analyze-build"
   },
   "eslintConfig": {
     "extends": [

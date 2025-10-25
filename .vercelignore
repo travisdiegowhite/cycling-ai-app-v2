@@ -6,9 +6,17 @@
 
 # Build test files
 build-test.js
+analyze-build.js
+build-metrics.json
+dev-server.js
+run-safe-migration.js
+setup-strava-db.js
 
-# Documentation
-README.deployment.md
+# Documentation (exclude all MD files except README)
+*.md
+!README.md
+docs/
+database/
 
 # Backup files
 **/*-backup*
@@ -23,3 +31,7 @@ node_modules/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Test files
+**/*.test.js
+**/*.spec.js
