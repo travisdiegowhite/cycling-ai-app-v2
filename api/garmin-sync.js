@@ -72,13 +72,20 @@ export default async function handler(req, res) {
     const end = endDate ? new Date(endDate) : new Date();
     const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+    console.log('🔄 Fetching activities from Garmin:', {
+      userId,
+      hasAccessToken: !!integration.access_token,
+      startDate: start.toISOString(),
+      endDate: end.toISOString()
+    });
+
     // Fetch activities from Garmin
     const activities = await fetchGarminActivities(
       integration.access_token,
       { startDate: start, endDate: end }
     );
 
-    console.log(`Fetched ${activities.length} activities from Garmin`);
+    console.log(`✅ Fetched ${activities.length} activities from Garmin`);
 
     // Filter for cycling activities
     const cyclingActivities = activities.filter(activity =>
@@ -222,7 +229,11 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Garmin sync error:', error);
+    console.error('❌ Garmin sync error:', {
+      message: error.message,
+      stack: error.stack,
+      userId: req.body?.userId
+    });
 
     // Record sync error
     try {
@@ -240,7 +251,8 @@ export default async function handler(req, res) {
 
     return res.status(500).json({
       error: 'Sync failed',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: error.message,
+      details: error.stack
     });
   }
 }
@@ -248,10 +260,6 @@ export default async function handler(req, res) {
 // Fetch activities from Garmin API using OAuth 2.0 Bearer token
 async function fetchGarminActivities(accessToken, options = {}) {
   const { startDate, endDate } = options;
-
-  // Format dates as YYYY-MM-DD
-  const startDateStr = startDate.toISOString().split('T')[0];
-  const endDateStr = endDate.toISOString().split('T')[0];
 
   const url = `${GARMIN_API_BASE}/activities`;
   const params = new URLSearchParams({
@@ -261,6 +269,11 @@ async function fetchGarminActivities(accessToken, options = {}) {
 
   const fullUrl = `${url}?${params.toString()}`;
 
+  console.log('📡 Calling Garmin API:', {
+    url: fullUrl,
+    hasAuth: !!accessToken
+  });
+
   const response = await fetch(fullUrl, {
     method: 'GET',
     headers: {
@@ -268,12 +281,25 @@ async function fetchGarminActivities(accessToken, options = {}) {
     }
   });
 
+  console.log('📡 Garmin API response:', {
+    status: response.status,
+    statusText: response.statusText,
+    ok: response.ok
+  });
+
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Failed to fetch Garmin activities: ${error}`);
+    console.error('❌ Garmin API error response:', error);
+    throw new Error(`Failed to fetch Garmin activities (${response.status}): ${error}`);
   }
 
   const data = await response.json();
+  console.log('📊 Garmin API response data:', {
+    isArray: Array.isArray(data),
+    count: Array.isArray(data) ? data.length : 'not an array',
+    keys: data ? Object.keys(data) : 'null'
+  });
+
   return data || [];
 }
 
