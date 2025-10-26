@@ -5,6 +5,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import FitParser from 'fit-file-parser';
 
 // Security Configuration
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
@@ -389,8 +390,6 @@ async function processWebhookEvent(eventId, supabase, env) {
 
 /**
  * Download FIT file from Garmin and process it
- * Note: FIT file parsing would require a FIT parser library
- * For now, we'll mark it as needing external processing
  */
 async function downloadAndProcessFitFile(event, integration, supabase, env) {
   try {
@@ -409,33 +408,213 @@ async function downloadAndProcessFitFile(event, integration, supabase, env) {
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    const buffer = new Uint8Array(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer);
 
     console.log('✅ FIT file downloaded, size:', buffer.length, 'bytes');
 
-    // Store FIT file data temporarily and mark for external processing
-    // Cloudflare Workers have CPU time limits, so complex FIT parsing
-    // should be done by a separate background job or Vercel API route
+    // Parse FIT file
+    const fitParser = new FitParser({
+      force: true,
+      speedUnit: 'km/h',
+      lengthUnit: 'km',
+      mode: 'cascade'
+    });
 
+    const fitData = await new Promise((resolve, reject) => {
+      fitParser.parse(buffer, (error, data) => {
+        if (error) reject(error);
+        else resolve(data);
+      });
+    });
+
+    console.log('✅ FIT file parsed successfully');
+
+    // Process activity data
+    await processActivityData(event, integration, fitData, supabase);
+
+  } catch (error) {
+    console.error('FIT file download/parse error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Process parsed FIT data and store in database
+ */
+async function processActivityData(event, integration, fitData, supabase) {
+  try {
+    const activity = fitData.activity;
+    const session = activity.sessions?.[0];
+    const records = activity.records || [];
+
+    if (!session) {
+      throw new Error('No session data in FIT file');
+    }
+
+    console.log('📊 Processing activity:', {
+      sport: session.sport,
+      distance: session.total_distance,
+      duration: session.total_elapsed_time,
+      points: records.length
+    });
+
+    // Check if cycling activity
+    const sport = session.sport?.toLowerCase() || '';
+    const isCycling = sport.includes('cycling') || sport.includes('biking') || sport === 'cycling';
+
+    if (!isCycling) {
+      console.log('Skipping non-cycling activity:', session.sport);
+
+      await supabase
+        .from('garmin_webhook_events')
+        .update({
+          processed: true,
+          processed_at: new Date().toISOString(),
+          process_error: `Non-cycling activity: ${session.sport}`
+        })
+        .eq('id', event.id);
+
+      return;
+    }
+
+    // Determine activity type
+    let activityType = 'road_biking';
+    if (sport.includes('mountain')) activityType = 'mountain_biking';
+    else if (sport.includes('gravel')) activityType = 'gravel_cycling';
+    else if (sport.includes('indoor')) activityType = 'indoor_cycling';
+
+    // Calculate polyline from GPS data
+    const gpsPoints = records.filter(r => r.position_lat && r.position_long);
+    const polyline = encodePolyline(gpsPoints);
+
+    // Create route
+    const { data: route, error: routeError } = await supabase
+      .from('routes')
+      .insert({
+        user_id: integration.user_id,
+        name: `Garmin ${activityType.replace('_', ' ')} - ${new Date().toLocaleDateString()}`,
+        description: `Imported from Garmin Connect`,
+        distance: session.total_distance ? session.total_distance / 1000 : null,
+        elevation_gain: session.total_ascent,
+        elevation_loss: session.total_descent,
+        duration: session.total_elapsed_time,
+        avg_speed: session.avg_speed,
+        max_speed: session.max_speed,
+        avg_heart_rate: session.avg_heart_rate,
+        max_heart_rate: session.max_heart_rate,
+        avg_power: session.avg_power,
+        max_power: session.max_power,
+        avg_cadence: session.avg_cadence,
+        calories: session.total_calories,
+        polyline: polyline,
+        garmin_id: event.activity_id,
+        garmin_url: event.activity_id ? `https://connect.garmin.com/modern/activity/${event.activity_id}` : null,
+        has_gps_data: gpsPoints.length > 0,
+        has_heart_rate_data: records.some(r => r.heart_rate),
+        has_power_data: records.some(r => r.power),
+        has_cadence_data: records.some(r => r.cadence),
+        activity_type: activityType,
+        started_at: session.start_time || new Date().toISOString(),
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (routeError) throw routeError;
+
+    console.log('✅ Route created:', route.id);
+
+    // Store track points (GPS data)
+    if (gpsPoints.length > 0) {
+      const trackPoints = gpsPoints.map((r, index) => ({
+        route_id: route.id,
+        timestamp: r.timestamp || new Date().toISOString(),
+        latitude: r.position_lat,
+        longitude: r.position_long,
+        elevation: r.altitude,
+        heart_rate: r.heart_rate,
+        power: r.power,
+        cadence: r.cadence,
+        speed: r.speed,
+        temperature: r.temperature,
+        distance: r.distance,
+        sequence_number: index
+      }));
+
+      // Insert in batches of 1000
+      for (let i = 0; i < trackPoints.length; i += 1000) {
+        const batch = trackPoints.slice(i, i + 1000);
+        await supabase.from('track_points').insert(batch);
+      }
+
+      console.log('✅ Track points stored:', trackPoints.length);
+    }
+
+    // Record sync history
+    await supabase
+      .from('bike_computer_sync_history')
+      .insert({
+        integration_id: integration.id,
+        user_id: integration.user_id,
+        provider: 'garmin',
+        activity_id: event.activity_id,
+        route_id: route.id,
+        synced_at: new Date().toISOString(),
+        sync_status: 'success',
+        activity_data: session
+      });
+
+    // Mark webhook as processed
     await supabase
       .from('garmin_webhook_events')
       .update({
-        processed: false, // Keep as unprocessed
-        processed_at: null,
-        process_error: 'FIT file downloaded - needs external processing',
-        payload: {
-          ...event.payload,
-          fitFileSize: buffer.length,
-          fitFileDownloaded: true
-        }
+        processed: true,
+        processed_at: new Date().toISOString(),
+        route_id: route.id
       })
       .eq('id', event.id);
 
-    console.log('⚠️ FIT file downloaded but needs external processing');
-    console.log('💡 Set up a cron job or separate worker to process FIT files');
+    console.log('🎉 Activity imported successfully:', route.id);
 
   } catch (error) {
-    console.error('FIT file download error:', error);
+    console.error('Activity processing error:', error);
     throw error;
   }
+}
+
+/**
+ * Encode GPS points to polyline
+ */
+function encodePolyline(points) {
+  if (!points || points.length === 0) return null;
+
+  let encoded = '';
+  let prevLat = 0;
+  let prevLng = 0;
+
+  for (const point of points) {
+    const lat = Math.round(point.position_lat * 1e5);
+    const lng = Math.round(point.position_long * 1e5);
+
+    encoded += encodeNumber(lat - prevLat);
+    encoded += encodeNumber(lng - prevLng);
+
+    prevLat = lat;
+    prevLng = lng;
+  }
+
+  return encoded;
+}
+
+function encodeNumber(num) {
+  let encoded = '';
+  let value = num < 0 ? ~(num << 1) : num << 1;
+
+  while (value >= 0x20) {
+    encoded += String.fromCharCode((0x20 | (value & 0x1f)) + 63);
+    value >>= 5;
+  }
+
+  encoded += String.fromCharCode(value + 63);
+  return encoded;
 }
