@@ -12,36 +12,72 @@ const RATE_LIMIT_MAX_REQUESTS = 100; // Max 100 requests per minute per IP
 
 export default {
   async fetch(request, env, ctx) {
-    // Initialize Supabase with environment variables
-    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+    try {
+      console.log('🔧 Worker invoked:', request.method, request.url);
 
-    // Handle CORS preflight
-    if (request.method === 'OPTIONS') {
-      return handleCORS();
-    }
+      // Check environment variables
+      if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) {
+        console.error('❌ Missing environment variables:', {
+          hasSupabaseUrl: !!env.SUPABASE_URL,
+          hasSupabaseKey: !!env.SUPABASE_SERVICE_KEY
+        });
+        return new Response(JSON.stringify({
+          error: 'Server configuration error',
+          details: 'Missing required environment variables'
+        }), {
+          status: 500,
+          headers: corsHeaders()
+        });
+      }
 
-    // Security checks
-    const securityCheck = await checkSecurity(request, env);
-    if (!securityCheck.allowed) {
-      return new Response(JSON.stringify({ error: securityCheck.reason }), {
-        status: securityCheck.status,
+      console.log('✅ Environment variables present');
+
+      // Initialize Supabase with environment variables
+      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+      console.log('✅ Supabase client initialized');
+
+      // Handle CORS preflight
+      if (request.method === 'OPTIONS') {
+        console.log('Handling CORS preflight');
+        return handleCORS();
+      }
+
+      // Security checks
+      const securityCheck = await checkSecurity(request, env);
+      if (!securityCheck.allowed) {
+        console.warn('🚫 Security check failed:', securityCheck.reason);
+        return new Response(JSON.stringify({ error: securityCheck.reason }), {
+          status: securityCheck.status,
+          headers: corsHeaders()
+        });
+      }
+
+      // Route requests
+      if (request.method === 'GET') {
+        console.log('📋 Handling health check');
+        return handleHealthCheck();
+      }
+
+      if (request.method === 'POST') {
+        console.log('📬 Handling webhook POST');
+        return await handleWebhook(request, supabase, env, ctx);
+      }
+
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+        status: 405,
+        headers: corsHeaders()
+      });
+    } catch (error) {
+      console.error('💥 Fatal error in worker:', error);
+      return new Response(JSON.stringify({
+        error: 'Internal server error',
+        message: error.message,
+        stack: error.stack
+      }), {
+        status: 500,
         headers: corsHeaders()
       });
     }
-
-    // Route requests
-    if (request.method === 'GET') {
-      return handleHealthCheck();
-    }
-
-    if (request.method === 'POST') {
-      return await handleWebhook(request, supabase, env, ctx);
-    }
-
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: corsHeaders()
-    });
   }
 };
 
