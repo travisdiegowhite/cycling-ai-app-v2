@@ -3,11 +3,11 @@ main = "src/index.js"
 compatibility_date = "2025-01-15"
 
 # Environment variables (set these in Cloudflare dashboard or wrangler)
-# SUPABASE_URL
-# SUPABASE_SERVICE_KEY
-# GARMIN_CONSUMER_KEY
-# GARMIN_CONSUMER_SECRET
-# GARMIN_WEBHOOK_SECRET (optional)
+# SUPABASE_URL - Your Supabase project URL
+# SUPABASE_SERVICE_KEY - Your Supabase service_role key
+# GARMIN_CONSUMER_KEY - Garmin OAuth client ID
+# GARMIN_CONSUMER_SECRET - Garmin OAuth client secret
+# GARMIN_WEBHOOK_SECRET (optional) - Webhook signature verification secret
 
 # Free plan automatically gets 10ms CPU limit
 # Paid plan ($5/month) gets 30s CPU limit

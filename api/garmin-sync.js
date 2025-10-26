@@ -17,6 +17,7 @@ const supabase = createClient(
 );
 
 const GARMIN_BACKFILL_BASE = 'https://apis.garmin.com/wellness-api/rest/backfill';
+const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token';
 
 const getAllowedOrigins = () => {
   if (process.env.NODE_ENV === 'production') {
@@ -30,6 +31,65 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Credentials': 'true',
 };
+
+/**
+ * Refresh Garmin access token using refresh token
+ */
+async function refreshAccessToken(integration) {
+  try {
+    console.log('🔄 Refreshing Garmin access token...');
+
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: process.env.GARMIN_CONSUMER_KEY,
+      client_secret: process.env.GARMIN_CONSUMER_SECRET,
+      refresh_token: integration.refresh_token
+    });
+
+    const response = await fetch(GARMIN_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params.toString()
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Garmin token refresh failed:', errorText);
+      throw new Error(`Token refresh failed: ${errorText}`);
+    }
+
+    const tokenData = await response.json();
+
+    // Calculate token expiration
+    const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
+
+    // Update tokens in database
+    const { error: updateError } = await supabase
+      .from('bike_computer_integrations')
+      .update({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token || integration.refresh_token,
+        token_expires_at: expiresAt,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', integration.id);
+
+    if (updateError) {
+      console.error('Failed to update tokens:', updateError);
+      throw updateError;
+    }
+
+    console.log('✅ Access token refreshed successfully');
+
+    return tokenData.access_token;
+
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    throw error;
+  }
+}
 
 export default async function handler(req, res) {
   // Handle CORS
@@ -124,6 +184,8 @@ export default async function handler(req, res) {
     // Send backfill requests for each chunk
     const results = [];
     const backfillUrl = `${GARMIN_BACKFILL_BASE}/activities`;
+    let currentAccessToken = integration.access_token;
+    let tokenRefreshed = false;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -138,10 +200,10 @@ export default async function handler(req, res) {
         end: chunk.end.toISOString()
       });
 
-      const response = await fetch(`${backfillUrl}?${params.toString()}`, {
+      let response = await fetch(`${backfillUrl}?${params.toString()}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${integration.access_token}`
+          'Authorization': `Bearer ${currentAccessToken}`
         }
       });
 
@@ -149,6 +211,41 @@ export default async function handler(req, res) {
         status: response.status,
         statusText: response.statusText
       });
+
+      // If token expired (401), try to refresh and retry once
+      if (response.status === 401 && !tokenRefreshed) {
+        console.log('🔄 Token expired, attempting to refresh...');
+
+        try {
+          currentAccessToken = await refreshAccessToken(integration);
+          tokenRefreshed = true;
+
+          // Retry the request with new token
+          response = await fetch(`${backfillUrl}?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${currentAccessToken}`
+            }
+          });
+
+          console.log(`📡 Retry after refresh - Chunk ${i + 1} response:`, {
+            status: response.status,
+            statusText: response.statusText
+          });
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
+          results.push({
+            chunk: i + 1,
+            status: 'error',
+            error: `Token refresh failed: ${refreshError.message}`,
+            dateRange: {
+              start: chunk.start.toISOString(),
+              end: chunk.end.toISOString()
+            }
+          });
+          continue;
+        }
+      }
 
       if (response.status === 202) {
         results.push({

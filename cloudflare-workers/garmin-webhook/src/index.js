@@ -11,6 +11,9 @@ import FitParser from 'fit-file-parser';
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 100; // Max 100 requests per minute per IP
 
+// Garmin OAuth 2.0 Token URL
+const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token';
+
 export default {
   async fetch(request, env, ctx) {
     try {
@@ -389,19 +392,99 @@ async function processWebhookEvent(eventId, supabase, env) {
 }
 
 /**
+ * Refresh Garmin access token using refresh token
+ */
+async function refreshAccessToken(integration, supabase, env) {
+  try {
+    console.log('🔄 Refreshing Garmin access token...');
+
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: env.GARMIN_CONSUMER_KEY,
+      client_secret: env.GARMIN_CONSUMER_SECRET,
+      refresh_token: integration.refresh_token
+    });
+
+    const response = await fetch(GARMIN_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params.toString()
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Garmin token refresh failed:', errorText);
+      throw new Error(`Token refresh failed: ${errorText}`);
+    }
+
+    const tokenData = await response.json();
+
+    // Calculate token expiration
+    const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
+
+    // Update tokens in database
+    const { error: updateError } = await supabase
+      .from('bike_computer_integrations')
+      .update({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token || integration.refresh_token,
+        token_expires_at: expiresAt,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', integration.id);
+
+    if (updateError) {
+      console.error('Failed to update tokens:', updateError);
+      throw updateError;
+    }
+
+    console.log('✅ Access token refreshed successfully');
+
+    return tokenData.access_token;
+
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    throw error;
+  }
+}
+
+/**
  * Download FIT file from Garmin and process it
  */
 async function downloadAndProcessFitFile(event, integration, supabase, env) {
   try {
     console.log('📥 Downloading FIT file:', event.file_url);
 
+    let accessToken = integration.access_token;
+
     // Download FIT file using OAuth 2.0 Bearer token
-    const response = await fetch(event.file_url, {
+    let response = await fetch(event.file_url, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${integration.access_token}`
+        'Authorization': `Bearer ${accessToken}`
       }
     });
+
+    // If token expired (401), refresh and retry
+    if (response.status === 401) {
+      console.log('🔄 Token expired, refreshing...');
+
+      try {
+        accessToken = await refreshAccessToken(integration, supabase, env);
+
+        // Retry download with new token
+        response = await fetch(event.file_url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+      } catch (refreshError) {
+        throw new Error(`Token refresh failed: ${refreshError.message}`);
+      }
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to download FIT file: ${response.status} ${response.statusText}`);
