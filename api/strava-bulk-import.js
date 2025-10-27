@@ -207,18 +207,18 @@ async function importStravaActivity(userId, activity, accessToken) {
   const startTime = new Date(activity.start_date);
   const fiveMinutesAgo = new Date(startTime.getTime() - 5 * 60 * 1000);
   const fiveMinutesLater = new Date(startTime.getTime() + 5 * 60 * 1000);
+  const distanceKm = activity.distance / 1000; // meters to km
 
-  const { data: nearDuplicate } = await supabase
+  const { data: nearDuplicates } = await supabase
     .from('routes')
     .select('id')
     .gte('started_at', fiveMinutesAgo.toISOString())
     .lte('started_at', fiveMinutesLater.toISOString())
-    .gte('distance', (activity.distance / 1000) - 0.1)
-    .lte('distance', (activity.distance / 1000) + 0.1)
-    .limit(1)
-    .single();
+    .gte('distance', distanceKm - 0.1)
+    .lte('distance', distanceKm + 0.1)
+    .limit(1);
 
-  if (nearDuplicate) {
+  if (nearDuplicates && nearDuplicates.length > 0) {
     console.log(`⏭️ Near-duplicate found for activity ${activity.id} (time+distance match)`);
     return 'skipped';
   }
