@@ -280,9 +280,13 @@ export default async function handler(req, res) {
         });
       }
 
-      // Small delay between requests to avoid rate limiting
+      // Delay between requests to avoid rate limiting
+      // Garmin enforces rate limits, so we need longer delays for multiple chunks
       if (i < chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Progressive delay: 1s, 2s, 3s, etc. for subsequent chunks
+        const delay = Math.min(1000 + (i * 500), 5000); // Max 5 second delay
+        console.log(`⏱️ Waiting ${delay}ms before next chunk...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 

@@ -503,7 +503,16 @@ const GarminIntegration = () => {
           <Alert color="blue" variant="light">
             <Text size="sm">
               Select how far back you want to import activities from Garmin Connect.
-              Garmin will send the data via webhooks, which may take several minutes to process.
+              Activities will be sent via webhooks and may take several minutes to process.
+            </Text>
+          </Alert>
+
+          <Alert color="orange" variant="light">
+            <Text size="xs" fw={600} mb={4}>⚠️ Garmin Backfill Limitation:</Text>
+            <Text size="xs">
+              Garmin only allows backfill from the date you <strong>first registered your webhook</strong>.
+              If you just connected recently, you can only import activities from that date forward.
+              Check your Garmin Developer dashboard for your webhook registration date.
             </Text>
           </Alert>
 
@@ -513,10 +522,10 @@ const GarminIntegration = () => {
             value={historicalPeriod}
             onChange={(value) => setHistoricalPeriod(value)}
             data={[
-              { value: '3_months', label: 'Last 3 Months' },
-              { value: '6_months', label: 'Last 6 Months' },
-              { value: '1_year', label: 'Last 1 Year' },
-              { value: '2_years', label: 'Last 2 Years' },
+              { value: '3_months', label: 'Last 3 Months (if webhook registered 3+ months ago)' },
+              { value: '6_months', label: 'Last 6 Months (if webhook registered 6+ months ago)' },
+              { value: '1_year', label: 'Last 1 Year (if webhook registered 1+ year ago)' },
+              { value: '2_years', label: 'Last 2 Years (if webhook registered 2+ years ago)' },
               { value: 'custom', label: 'Custom Period' }
             ]}
           />
@@ -535,9 +544,9 @@ const GarminIntegration = () => {
 
           <Alert color="yellow" variant="light">
             <Text size="xs">
-              <strong>Important:</strong> Large date ranges (1+ years) may result in hundreds
-              of activities. Garmin processes backfill requests in 30-day chunks and may take
-              10-30 minutes to complete.
+              <strong>Processing Time:</strong> Garmin processes backfill requests in 30-day chunks.
+              Large date ranges may take 10-30 minutes. The system adds delays between chunks to
+              avoid rate limiting. Activities will appear gradually as Garmin sends them.
             </Text>
           </Alert>
 
