@@ -14,6 +14,9 @@ import {
   Avatar,
   Tooltip,
   SimpleGrid,
+  Modal,
+  Select,
+  NumberInput,
 } from '@mantine/core';
 import {
   Activity,
@@ -25,7 +28,8 @@ import {
   ExternalLink,
   CheckCircle,
   XCircle,
-  Watch
+  Watch,
+  History
 } from 'lucide-react';
 import garminService from '../utils/garminService';
 import { supabase } from '../supabase';
@@ -41,6 +45,11 @@ const GarminIntegration = () => {
   const [syncProgress, setSyncProgress] = useState(0);
   const [lastSync, setLastSync] = useState(null);
   const [connecting, setConnecting] = useState(false);
+
+  // Historical import modal state
+  const [showHistoricalModal, setShowHistoricalModal] = useState(false);
+  const [historicalPeriod, setHistoricalPeriod] = useState('1_year');
+  const [customYears, setCustomYears] = useState(2);
 
   useEffect(() => {
     checkConnection();
@@ -135,6 +144,84 @@ const GarminIntegration = () => {
     } catch (error) {
       console.error('Error syncing Garmin activities:', error);
       toast.error('Failed to sync activities from Garmin');
+    } finally {
+      setSyncing(false);
+      setSyncProgress(0);
+    }
+  };
+
+  const handleHistoricalImport = async () => {
+    if (!connected) {
+      toast.error('Please connect to Garmin first');
+      return;
+    }
+
+    try {
+      setSyncing(true);
+      setSyncProgress(10);
+      setShowHistoricalModal(false);
+
+      // Calculate date range based on selection
+      let startDate;
+      const endDate = new Date();
+
+      switch (historicalPeriod) {
+        case '3_months':
+          startDate = new Date();
+          startDate.setMonth(startDate.getMonth() - 3);
+          break;
+        case '6_months':
+          startDate = new Date();
+          startDate.setMonth(startDate.getMonth() - 6);
+          break;
+        case '1_year':
+          startDate = new Date();
+          startDate.setFullYear(startDate.getFullYear() - 1);
+          break;
+        case '2_years':
+          startDate = new Date();
+          startDate.setFullYear(startDate.getFullYear() - 2);
+          break;
+        case 'custom':
+          startDate = new Date();
+          startDate.setFullYear(startDate.getFullYear() - customYears);
+          break;
+        default:
+          startDate = new Date();
+          startDate.setFullYear(startDate.getFullYear() - 1);
+      }
+
+      console.log(`🕐 Importing historical activities from ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}...`);
+
+      toast.loading(`Requesting activities from ${startDate.toLocaleDateString()}...`, { id: 'historical-sync' });
+
+      const result = await garminService.syncActivities({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+
+      setSyncProgress(100);
+
+      toast.dismiss('historical-sync');
+
+      const totalDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
+
+      if (result.accepted > 0) {
+        toast.success(
+          `Backfill request sent for ${totalDays} days! Activities will appear as Garmin processes them. This may take several minutes.`,
+          { duration: 8000 }
+        );
+      } else if (result.duplicate > 0) {
+        toast.info('Backfill already in progress. Please wait for Garmin to process your activities.');
+      } else if (result.errors > 0) {
+        toast.error('Some backfill requests failed. Check console for details.');
+      }
+
+      await checkLastSync();
+
+    } catch (error) {
+      console.error('Error importing historical activities:', error);
+      toast.error('Failed to request historical activities from Garmin');
     } finally {
       setSyncing(false);
       setSyncProgress(0);
@@ -304,38 +391,46 @@ const GarminIntegration = () => {
               </Text>
             </div>
 
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              <Tooltip label="Sync recent activities from Garmin">
-                <Button
-                  leftSection={syncing ? <Loader size={16} /> : <Download size={16} />}
-                  onClick={handleSync}
-                  loading={syncing}
-                  disabled={syncing}
-                  variant="filled"
-                  fullWidth
-                  style={{
-                    backgroundColor: '#007CC3',
-                    color: 'white'
-                  }}
-                >
-                  {syncing ? 'Syncing...' : 'Sync Activities'}
-                </Button>
-              </Tooltip>
+            <Stack gap="md">
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <Tooltip label="Sync recent activities from Garmin (last 30 days)">
+                  <Button
+                    leftSection={syncing ? <Loader size={16} /> : <Download size={16} />}
+                    onClick={handleSync}
+                    loading={syncing}
+                    disabled={syncing}
+                    variant="filled"
+                    fullWidth
+                    style={{
+                      backgroundColor: '#007CC3',
+                      color: 'white'
+                    }}
+                  >
+                    {syncing ? 'Syncing...' : 'Sync Recent'}
+                  </Button>
+                </Tooltip>
 
-              <Tooltip label="Force refresh all activities">
-                <Button
-                  leftSection={syncing ? <Loader size={16} /> : <RefreshCw size={16} />}
-                  onClick={handleSync}
-                  loading={syncing}
-                  disabled={syncing}
-                  variant="outline"
-                  color="blue"
-                  fullWidth
-                >
-                  {syncing ? 'Syncing...' : 'Refresh All'}
-                </Button>
-              </Tooltip>
-            </SimpleGrid>
+                <Tooltip label="Import activities from past months/years">
+                  <Button
+                    leftSection={<History size={16} />}
+                    onClick={() => setShowHistoricalModal(true)}
+                    disabled={syncing}
+                    variant="outline"
+                    color="blue"
+                    fullWidth
+                  >
+                    Import Historical
+                  </Button>
+                </Tooltip>
+              </SimpleGrid>
+
+              <Alert color="blue" variant="light" icon={<Calendar size={16} />}>
+                <Text size="xs">
+                  <strong>Note:</strong> Garmin processes backfill requests in batches.
+                  Historical activities may take 5-10 minutes to appear after requesting.
+                </Text>
+              </Alert>
+            </Stack>
 
             {syncing && (
               <Progress value={syncProgress} size="sm" mt="md" color="blue" />
@@ -396,6 +491,75 @@ const GarminIntegration = () => {
           </Card>
         </Stack>
       )}
+
+      {/* Historical Import Modal */}
+      <Modal
+        opened={showHistoricalModal}
+        onClose={() => setShowHistoricalModal(false)}
+        title="Import Historical Activities"
+        size="md"
+      >
+        <Stack gap="md">
+          <Alert color="blue" variant="light">
+            <Text size="sm">
+              Select how far back you want to import activities from Garmin Connect.
+              Garmin will send the data via webhooks, which may take several minutes to process.
+            </Text>
+          </Alert>
+
+          <Select
+            label="Time Period"
+            description="How far back to import activities"
+            value={historicalPeriod}
+            onChange={(value) => setHistoricalPeriod(value)}
+            data={[
+              { value: '3_months', label: 'Last 3 Months' },
+              { value: '6_months', label: 'Last 6 Months' },
+              { value: '1_year', label: 'Last 1 Year' },
+              { value: '2_years', label: 'Last 2 Years' },
+              { value: 'custom', label: 'Custom Period' }
+            ]}
+          />
+
+          {historicalPeriod === 'custom' && (
+            <NumberInput
+              label="Years"
+              description="Number of years to import"
+              value={customYears}
+              onChange={(value) => setCustomYears(value)}
+              min={1}
+              max={10}
+              step={1}
+            />
+          )}
+
+          <Alert color="yellow" variant="light">
+            <Text size="xs">
+              <strong>Important:</strong> Large date ranges (1+ years) may result in hundreds
+              of activities. Garmin processes backfill requests in 30-day chunks and may take
+              10-30 minutes to complete.
+            </Text>
+          </Alert>
+
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              onClick={() => setShowHistoricalModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleHistoricalImport}
+              style={{
+                backgroundColor: '#007CC3',
+                color: 'white'
+              }}
+            >
+              Start Import
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 };
