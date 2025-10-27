@@ -306,6 +306,60 @@ export class StravaService {
   // No more localStorage token storage
 
   /**
+   * Bulk import historical activities from Strava
+   * This is used for the hybrid import strategy (Step 1: Strava history)
+   */
+  async bulkImport(options = {}) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('User must be authenticated');
+    }
+
+    try {
+      const { startDate, endDate } = options;
+
+      console.log('📥 Starting Strava bulk import...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/strava-bulk-import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId,
+          startDate,
+          endDate
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Bulk import failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Bulk import failed');
+      }
+
+      console.log('✅ Bulk import complete:', data);
+
+      return {
+        imported: data.imported,
+        skipped: data.skipped,
+        errors: data.errors,
+        total: data.total
+      };
+
+    } catch (error) {
+      console.error('Strava bulk import error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if user is connected to Strava (secure server-side check)
    */
   async isConnected() {

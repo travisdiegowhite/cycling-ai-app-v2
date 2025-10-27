@@ -26,6 +26,7 @@ import {
   TrendingUp,
   CheckCircle,
 } from 'lucide-react';
+import { stravaService } from '../utils/stravaService';
 
 /**
  * Smart Import Wizard - Guides users through hybrid Strava + Garmin setup
@@ -72,21 +73,25 @@ const ImportWizard = ({ opened, onClose, stravaConnected, garminConnected }) => 
 
       setImportProgress(30);
 
-      // TODO: Call actual Strava bulk import API
-      // const result = await stravaService.bulkImport({
-      //   startDate: startDate.toISOString(),
-      //   endDate: new Date().toISOString()
-      // });
+      console.log('📥 Starting Strava bulk import...', {
+        from: startDate.toISOString(),
+        to: new Date().toISOString()
+      });
 
-      // Simulate for now
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Call actual Strava bulk import API
+      const result = await stravaService.bulkImport({
+        startDate: startDate.toISOString(),
+        endDate: new Date().toISOString()
+      });
 
       setImportProgress(100);
       setImportResults({
-        imported: 127,
-        skipped: 3,
-        errors: 0
+        imported: result.imported,
+        skipped: result.skipped,
+        errors: result.errors
       });
+
+      console.log('✅ Import complete:', result);
 
       // Auto-advance to next step after success
       setTimeout(() => {
@@ -95,6 +100,13 @@ const ImportWizard = ({ opened, onClose, stravaConnected, garminConnected }) => 
 
     } catch (error) {
       console.error('Import error:', error);
+      // Show error to user
+      setImportResults({
+        imported: 0,
+        skipped: 0,
+        errors: 1,
+        errorMessage: error.message
+      });
     } finally {
       setImporting(false);
     }
@@ -220,12 +232,21 @@ const ImportWizard = ({ opened, onClose, stravaConnected, garminConnected }) => 
               </Paper>
             )}
 
-            {importResults && (
+            {importResults && importResults.errors === 0 && (
               <Alert color="green" variant="light" icon={<CheckCircle size={20} />}>
                 <Text size="sm" fw={600}>Import Successful!</Text>
                 <Text size="xs">
                   Imported {importResults.imported} rides
                   {importResults.skipped > 0 && ` (${importResults.skipped} duplicates skipped)`}
+                </Text>
+              </Alert>
+            )}
+
+            {importResults && importResults.errors > 0 && (
+              <Alert color="red" variant="light" icon={<AlertCircle size={20} />}>
+                <Text size="sm" fw={600}>Import Failed</Text>
+                <Text size="xs">
+                  {importResults.errorMessage || 'An error occurred during import. Please try again.'}
                 </Text>
               </Alert>
             )}
