@@ -101,6 +101,7 @@ export default async function handler(req, res) {
     let imported = 0;
     let skipped = 0;
     let errors = 0;
+    const errorDetails = []; // Capture first 5 errors for debugging
 
     for (const activity of cyclingActivities) {
       try {
@@ -110,10 +111,22 @@ export default async function handler(req, res) {
       } catch (error) {
         console.error(`Error importing activity ${activity.id}:`, error);
         errors++;
+
+        // Capture first 5 errors with details
+        if (errorDetails.length < 5) {
+          errorDetails.push({
+            activityId: activity.id,
+            activityName: activity.name,
+            errorCode: error.code,
+            errorMessage: error.message,
+            errorDetails: error.details,
+            errorHint: error.hint
+          });
+        }
       }
     }
 
-    console.log('✅ Bulk import complete:', { imported, skipped, errors });
+    console.log('✅ Bulk import complete:', { imported, skipped, errors, errorDetails });
 
     return res.status(200).json({
       success: true,
@@ -121,7 +134,8 @@ export default async function handler(req, res) {
       skipped,
       errors,
       total: cyclingActivities.length,
-      message: `Imported ${imported} activities, ${skipped} duplicates skipped, ${errors} errors`
+      message: `Imported ${imported} activities, ${skipped} duplicates skipped, ${errors} errors`,
+      errorDetails: errorDetails.length > 0 ? errorDetails : undefined
     });
 
   } catch (error) {
@@ -262,7 +276,19 @@ async function importStravaActivity(userId, activity, accessToken) {
     .single();
 
   if (routeError) {
-    console.error(`Error creating route for activity ${activity.id}:`, routeError);
+    console.error(`❌ Error creating route for activity ${activity.id}:`, {
+      error: routeError,
+      code: routeError.code,
+      message: routeError.message,
+      details: routeError.details,
+      hint: routeError.hint,
+      activityData: {
+        id: activity.id,
+        name: activity.name,
+        distance: activity.distance,
+        start_date: activity.start_date
+      }
+    });
     throw routeError;
   }
 

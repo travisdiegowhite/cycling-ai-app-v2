@@ -346,11 +346,18 @@ export class StravaService {
 
       console.log('✅ Bulk import complete:', data);
 
+      // Log error details if any errors occurred
+      if (data.errorDetails && data.errorDetails.length > 0) {
+        console.error('❌ Import errors detected:', data.errorDetails);
+        console.table(data.errorDetails);
+      }
+
       return {
         imported: data.imported,
         skipped: data.skipped,
         errors: data.errors,
-        total: data.total
+        total: data.total,
+        errorDetails: data.errorDetails
       };
 
     } catch (error) {
