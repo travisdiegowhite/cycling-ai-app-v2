@@ -1,5 +1,6 @@
 // Advanced geometry utilities for route manipulation
-import { lineString, point, nearestPointOnLine, simplify } from '@turf/turf';
+import { lineString, point } from '@turf/helpers';
+import nearestPointOnLine from '@turf/nearest-point-on-line';
 
 // Find the nearest point on a line to a given coordinate
 export function findNearestPointOnLine(lineCoords, targetCoord) {
@@ -64,15 +65,30 @@ export function calculateBearing(start, end) {
 }
 
 // Smooth a route by removing unnecessary waypoints
+// Using simple Douglas-Peucker algorithm instead of Turf simplify
 export function simplifyRoute(waypoints, tolerance = 0.001) {
   if (waypoints.length <= 2) return waypoints;
-  
-  try {
-    const line = lineString(waypoints);
-    const simplified = simplify(line, { tolerance, highQuality: true });
-    return simplified.geometry.coordinates;
-  } catch (error) {
-    console.error('Route simplification failed:', error);
-    return waypoints;
+
+  // Simple point-to-point distance threshold simplification
+  const simplified = [waypoints[0]];
+
+  for (let i = 1; i < waypoints.length - 1; i++) {
+    const prev = simplified[simplified.length - 1];
+    const curr = waypoints[i];
+
+    // Calculate distance
+    const dx = curr[0] - prev[0];
+    const dy = curr[1] - prev[1];
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Only add if distance is above tolerance
+    if (dist > tolerance) {
+      simplified.push(curr);
+    }
   }
+
+  // Always include last point
+  simplified.push(waypoints[waypoints.length - 1]);
+
+  return simplified;
 }

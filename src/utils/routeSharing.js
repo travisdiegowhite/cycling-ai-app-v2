@@ -1,7 +1,11 @@
 // Route Sharing Utilities
 // Privacy-first route sharing with automatic privacy zone detection
 
-import * as turf from '@turf/turf';
+import { point, lineString } from '@turf/helpers';
+import distance from '@turf/distance';
+import length from '@turf/length';
+import along from '@turf/along';
+import lineSlice from '@turf/line-slice';
 import { supabase } from '../supabase';
 
 // Sharing levels
@@ -77,9 +81,9 @@ export const detectPrivacyZones = async (userId, routeGeometry) => {
 /**
  * Count how many routes have points near a given location
  */
-const countNearbyPoints = (point, routes, radiusMeters) => {
+const countNearbyPoints = (pt, routes, radiusMeters) => {
   let count = 0;
-  const searchPoint = turf.point(point);
+  const searchPoint = point(pt);
 
   routes.forEach(route => {
     if (route.route_data && route.route_data.coordinates) {
@@ -87,11 +91,11 @@ const countNearbyPoints = (point, routes, radiusMeters) => {
 
       // Check start and end points
       if (coords.length > 0) {
-        const start = turf.point(coords[0]);
-        const end = turf.point(coords[coords.length - 1]);
+        const start = point(coords[0]);
+        const end = point(coords[coords.length - 1]);
 
-        if (turf.distance(searchPoint, start, { units: 'meters' }) < radiusMeters ||
-            turf.distance(searchPoint, end, { units: 'meters' }) < radiusMeters) {
+        if (distance(searchPoint, start, { units: 'meters' }) < radiusMeters ||
+            distance(searchPoint, end, { units: 'meters' }) < radiusMeters) {
           count++;
         }
       }
@@ -114,21 +118,21 @@ export const sanitizeRouteGeometry = (routeGeometry, privacyZones, obscureStartE
 
   // Obscure start/end points (first/last 500m)
   if (obscureStartEnd && coords.length > 4) {
-    const line = turf.lineString(coords);
-    const totalLength = turf.length(line, { units: 'kilometers' });
+    const line = lineString(coords);
+    const totalLength = length(line, { units: 'kilometers' });
 
     // Only obscure if route is long enough
     if (totalLength > 1) { // More than 1km
       const obscureDistance = 0.5; // 500m in km
 
       // Find point 500m from start
-      const startCutPoint = turf.along(line, obscureDistance, { units: 'kilometers' });
+      const startCutPoint = along(line, obscureDistance, { units: 'kilometers' });
 
       // Find point 500m before end
-      const endCutPoint = turf.along(line, totalLength - obscureDistance, { units: 'kilometers' });
+      const endCutPoint = along(line, totalLength - obscureDistance, { units: 'kilometers' });
 
       // Slice the line
-      const sliced = turf.lineSlice(startCutPoint, endCutPoint, line);
+      const sliced = lineSlice(startCutPoint, endCutPoint, line);
       coords = sliced.geometry.coordinates;
     }
   }
@@ -136,10 +140,10 @@ export const sanitizeRouteGeometry = (routeGeometry, privacyZones, obscureStartE
   // Apply additional privacy zones
   privacyZones.forEach(zone => {
     coords = coords.filter(coord => {
-      const point = turf.point(coord);
-      const center = turf.point(zone.center);
-      const distance = turf.distance(point, center, { units: 'meters' });
-      return distance > zone.radius;
+      const pt = point(coord);
+      const center = point(zone.center);
+      const dist = distance(pt, center, { units: 'meters' });
+      return dist > zone.radius;
     });
   });
 
