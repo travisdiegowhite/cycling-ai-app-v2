@@ -212,10 +212,10 @@ async function importStravaActivity(userId, activity, accessToken) {
   const { data: nearDuplicates } = await supabase
     .from('routes')
     .select('id')
-    .gte('started_at', fiveMinutesAgo.toISOString())
-    .lte('started_at', fiveMinutesLater.toISOString())
-    .gte('distance', distanceKm - 0.1)
-    .lte('distance', distanceKm + 0.1)
+    .gte('recorded_at', fiveMinutesAgo.toISOString())
+    .lte('recorded_at', fiveMinutesLater.toISOString())
+    .gte('distance_km', distanceKm - 0.1)
+    .lte('distance_km', distanceKm + 0.1)
     .limit(1);
 
   if (nearDuplicates && nearDuplicates.length > 0) {
@@ -237,18 +237,16 @@ async function importStravaActivity(userId, activity, accessToken) {
       user_id: userId,
       name: activity.name || `Strava ${activityType.replace('_', ' ')}`,
       description: 'Imported from Strava',
-      distance: activity.distance ? activity.distance / 1000 : null, // meters to km
-      elevation_gain: activity.total_elevation_gain,
-      duration: activity.moving_time,
-      avg_speed: activity.average_speed ? activity.average_speed * 3.6 : null, // m/s to km/h
+      distance_km: activity.distance ? activity.distance / 1000 : null, // meters to km
+      elevation_gain_m: activity.total_elevation_gain,
+      duration_seconds: activity.moving_time,
+      average_speed: activity.average_speed ? activity.average_speed * 3.6 : null, // m/s to km/h
       max_speed: activity.max_speed ? activity.max_speed * 3.6 : null,
-      avg_heart_rate: activity.average_heartrate,
-      max_heart_rate: activity.max_heartrate,
-      avg_power: activity.average_watts,
-      max_power: activity.max_watts,
-      avg_cadence: activity.average_cadence,
-      calories: activity.calories,
-      polyline: activity.map?.summary_polyline,
+      average_heartrate: activity.average_heartrate,
+      max_heartrate: activity.max_heartrate,
+      average_watts: activity.average_watts,
+      max_watts: activity.max_watts,
+      kilojoules: activity.kilojoules,
       strava_id: activity.id.toString(),
       strava_url: `https://www.strava.com/activities/${activity.id}`,
       has_gps_data: !!activity.map?.summary_polyline,
@@ -256,8 +254,8 @@ async function importStravaActivity(userId, activity, accessToken) {
       has_power_data: !!activity.average_watts,
       has_cadence_data: !!activity.average_cadence,
       activity_type: activityType,
-      started_at: activity.start_date,
-      import_source: 'strava',
+      recorded_at: activity.start_date,
+      imported_from: 'strava',
       created_at: new Date().toISOString()
     })
     .select()
