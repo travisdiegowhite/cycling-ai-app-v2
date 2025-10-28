@@ -1,36 +1,43 @@
--- Add import_source column to routes table
--- This tracks where the route was imported from: strava, garmin, manual, file_upload
+-- Update routes table to support hybrid import tracking
+-- Note: imported_from column already exists with CHECK constraint
+-- This migration updates it to support 'garmin' value and creates indexes
 
--- Add column if it doesn't exist
-ALTER TABLE routes ADD COLUMN IF NOT EXISTS import_source TEXT;
+-- Step 1: Drop existing CHECK constraint
+ALTER TABLE routes DROP CONSTRAINT IF EXISTS routes_imported_from_check;
 
--- Add comment explaining the column
-COMMENT ON COLUMN routes.import_source IS 'Source of the route import: strava, garmin, manual, file_upload, wahoo';
+-- Step 2: Add new CHECK constraint that includes 'garmin'
+ALTER TABLE routes ADD CONSTRAINT routes_imported_from_check
+CHECK (imported_from IN ('manual', 'strava', 'file_upload', 'garmin'));
 
--- Create index for filtering by source
-CREATE INDEX IF NOT EXISTS idx_routes_import_source ON routes(import_source);
+-- Step 3: Add comment explaining the column
+COMMENT ON COLUMN routes.imported_from IS 'Source of the route import: manual, strava, file_upload, garmin';
 
--- Create index for duplicate detection (time + distance)
-CREATE INDEX IF NOT EXISTS idx_routes_started_at_distance ON routes(started_at, distance)
-WHERE started_at IS NOT NULL AND distance IS NOT NULL;
+-- Step 4: Create index for filtering by source (if not exists)
+CREATE INDEX IF NOT EXISTS idx_routes_imported_from ON routes(imported_from);
 
--- Update existing routes to mark their source if identifiable
+-- Step 5: Create index for duplicate detection (time + distance)
+CREATE INDEX IF NOT EXISTS idx_routes_recorded_at_distance ON routes(recorded_at, distance_km)
+WHERE recorded_at IS NOT NULL AND distance_km IS NOT NULL;
+
+-- Step 6: Update existing routes to mark their source if identifiable
+-- (Only update routes that are currently NULL or need correction)
 UPDATE routes
-SET import_source = CASE
+SET imported_from = CASE
   WHEN strava_id IS NOT NULL THEN 'strava'
-  WHEN garmin_id IS NOT NULL THEN 'garmin'
-  WHEN wahoo_id IS NOT NULL THEN 'wahoo'
-  ELSE 'manual'
+  WHEN external_id IS NOT NULL THEN 'garmin'
+  WHEN imported_from IS NULL THEN 'manual'
+  ELSE imported_from
 END
-WHERE import_source IS NULL;
+WHERE imported_from IS NULL
+   OR (imported_from = 'file_upload' AND strava_id IS NOT NULL)
+   OR (imported_from = 'file_upload' AND external_id IS NOT NULL);
 
 -- Verification query
 SELECT
-  import_source,
+  imported_from,
   COUNT(*) as count
 FROM routes
-WHERE import_source IS NOT NULL
-GROUP BY import_source
+GROUP BY imported_from
 ORDER BY count DESC;
 
-SELECT 'import_source column added and existing routes updated' AS status;
+SELECT 'imported_from column updated to support garmin, indexes created' AS status;
