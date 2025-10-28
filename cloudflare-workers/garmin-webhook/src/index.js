@@ -58,6 +58,22 @@ export default {
 
       // Route requests
       if (request.method === 'GET') {
+        const url = new URL(request.url);
+        const eventId = url.searchParams.get('reprocess');
+
+        if (eventId) {
+          console.log('🔄 Manual reprocess request for event:', eventId);
+          // Trigger reprocessing
+          ctx.waitUntil(processWebhookEvent(eventId, supabase, env));
+          return new Response(JSON.stringify({
+            success: true,
+            message: `Reprocessing event ${eventId}`
+          }), {
+            status: 200,
+            headers: corsHeaders()
+          });
+        }
+
         console.log('📋 Handling health check');
         return handleHealthCheck();
       }
@@ -170,14 +186,8 @@ async function handleWebhook(request, supabase, env, ctx) {
     // Parse webhook payload
     const webhookData = await request.json();
 
-    console.log('📥 Garmin webhook received:', {
-      eventType: webhookData.eventType,
-      userId: webhookData.userId,
-      activityId: webhookData.activityId,
-      ip: clientIP,
-      userAgent: userAgent,
-      timestamp: new Date().toISOString()
-    });
+    // Log the FULL payload to see what Garmin is sending
+    console.log('📥 Garmin webhook received - FULL PAYLOAD:', JSON.stringify(webhookData, null, 2));
 
     // Validate payload structure
     if (!webhookData || typeof webhookData !== 'object') {
@@ -188,35 +198,68 @@ async function handleWebhook(request, supabase, env, ctx) {
       });
     }
 
-    // Required fields validation
-    if (!webhookData.userId) {
-      console.warn('🚫 Missing userId in webhook payload');
-      return new Response(JSON.stringify({ error: 'Missing userId in webhook payload' }), {
+    // Garmin sends different payload structures for different webhook types
+    // Extract data from the appropriate array
+    let activityData = null;
+    let webhookType = null;
+
+    if (webhookData.activities && webhookData.activities.length > 0) {
+      activityData = webhookData.activities[0];
+      webhookType = 'CONNECT_ACTIVITY';
+    } else if (webhookData.activityDetails && webhookData.activityDetails.length > 0) {
+      activityData = webhookData.activityDetails[0];
+      webhookType = 'ACTIVITY_DETAIL';
+    } else if (webhookData.activityFiles && webhookData.activityFiles.length > 0) {
+      activityData = webhookData.activityFiles[0];
+      webhookType = 'ACTIVITY_FILE_DATA';
+    }
+
+    if (!activityData) {
+      console.warn('🚫 No activity data found in webhook');
+      return new Response(JSON.stringify({
+        error: 'No activity data found',
+        receivedKeys: Object.keys(webhookData)
+      }), {
         status: 400,
         headers: corsHeaders()
       });
     }
 
-    // Validate data types
-    if (webhookData.activityId && typeof webhookData.activityId !== 'string') {
-      console.warn('🚫 Invalid activityId type:', typeof webhookData.activityId);
-      return new Response(JSON.stringify({ error: 'Invalid activityId type' }), {
+    // Extract userId from activity data
+    const userId = activityData.userId;
+
+    if (!userId) {
+      console.warn('🚫 Missing userId in activity data');
+      return new Response(JSON.stringify({ error: 'Missing userId' }), {
         status: 400,
         headers: corsHeaders()
       });
     }
+
+    console.log('📥 Garmin webhook summary:', {
+      webhookType,
+      userId,
+      activityId: activityData.activityId,
+      summaryId: activityData.summaryId,
+      activityName: activityData.activityName,
+      activityType: activityData.activityType,
+      ip: clientIP,
+      userAgent: userAgent,
+      timestamp: new Date().toISOString()
+    });
 
     // Check for duplicate webhook (idempotency)
-    if (webhookData.activityId) {
+    const activityId = activityData.activityId?.toString();
+    if (activityId) {
       const { data: existingEvent } = await supabase
         .from('garmin_webhook_events')
         .select('id')
-        .eq('activity_id', webhookData.activityId)
-        .eq('garmin_user_id', webhookData.userId)
+        .eq('activity_id', activityId)
+        .eq('garmin_user_id', userId)
         .single();
 
       if (existingEvent) {
-        console.log('ℹ️ Duplicate webhook ignored:', webhookData.activityId);
+        console.log('ℹ️ Duplicate webhook ignored:', activityId);
         return new Response(JSON.stringify({
           success: true,
           message: 'Webhook already processed',
@@ -229,16 +272,16 @@ async function handleWebhook(request, supabase, env, ctx) {
     }
 
     // Store webhook event for async processing
-    const { data: event, error: eventError } = await supabase
+    const { data: event, error: eventError} = await supabase
       .from('garmin_webhook_events')
       .insert({
-        event_type: webhookData.eventType || 'activity',
-        garmin_user_id: webhookData.userId,
-        activity_id: webhookData.activityId,
-        file_url: webhookData.fileUrl || webhookData.activityFileUrl,
-        file_type: webhookData.fileType || 'FIT',
-        upload_timestamp: webhookData.uploadTimestamp || webhookData.startTimeInSeconds
-          ? new Date(webhookData.startTimeInSeconds * 1000).toISOString()
+        event_type: webhookType || 'activity',
+        garmin_user_id: userId,
+        activity_id: activityId,
+        file_url: activityData.callbackURL || activityData.fileUrl,
+        file_type: activityData.fileType || 'FIT',
+        upload_timestamp: activityData.startTimeInSeconds
+          ? new Date(activityData.startTimeInSeconds * 1000).toISOString()
           : null,
         payload: webhookData,
         processed: false
@@ -339,7 +382,7 @@ async function processWebhookEvent(eventId, supabase, env) {
       const { data: existing } = await supabase
         .from('routes')
         .select('id')
-        .eq('garmin_id', event.activity_id)
+        .eq('external_id', event.activity_id)
         .eq('user_id', integration.user_id)
         .single();
 
@@ -363,15 +406,40 @@ async function processWebhookEvent(eventId, supabase, env) {
     // Download and process FIT file
     if (event.file_url) {
       await downloadAndProcessFitFile(event, integration, supabase, env);
+    } else if (event.event_type === 'CONNECT_ACTIVITY' && event.activity_id) {
+      // CONNECT_ACTIVITY webhooks don't include file URL, so we construct it
+      // Garmin Activity API endpoint for downloading FIT files
+      console.log('📥 CONNECT_ACTIVITY webhook - constructing FIT file URL from activity ID');
+
+      // Get summaryId from webhook payload
+      const summaryId = event.payload?.activities?.[0]?.summaryId || event.activity_id;
+      const constructedFileUrl = `https://apis.garmin.com/wellness-api/rest/activityFile?id=${summaryId}`;
+
+      console.log('🔗 Constructed FIT file URL:', constructedFileUrl);
+
+      // Update event with constructed file URL
+      await supabase
+        .from('garmin_webhook_events')
+        .update({ file_url: constructedFileUrl })
+        .eq('id', eventId);
+
+      // Create updated event object
+      const updatedEvent = { ...event, file_url: constructedFileUrl };
+
+      await downloadAndProcessFitFile(updatedEvent, integration, supabase, env);
+    } else if (event.event_type === 'ACTIVITY_DETAIL' && event.payload?.activityDetails?.[0]?.samples) {
+      // ACTIVITY_DETAIL webhooks contain GPS data in the samples array
+      console.log('📥 ACTIVITY_DETAIL webhook - extracting GPS from samples array');
+      await processActivityDetail(event, integration, supabase);
     } else {
-      console.log('No file URL in webhook event');
+      console.log('No file URL in webhook event and cannot construct one');
 
       await supabase
         .from('garmin_webhook_events')
         .update({
           processed: true,
           processed_at: new Date().toISOString(),
-          process_error: 'No file URL provided in webhook'
+          process_error: 'No file URL provided in webhook and cannot construct one'
         })
         .eq('id', eventId);
     }
@@ -491,7 +559,7 @@ async function downloadAndProcessFitFile(event, integration, supabase, env) {
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = new Uint8Array(arrayBuffer);
 
     console.log('✅ FIT file downloaded, size:', buffer.length, 'bytes');
 
@@ -511,12 +579,131 @@ async function downloadAndProcessFitFile(event, integration, supabase, env) {
     });
 
     console.log('✅ FIT file parsed successfully');
+    console.log('🔍 FIT data top-level keys:', Object.keys(fitData));
 
     // Process activity data
     await processActivityData(event, integration, fitData, supabase);
 
   } catch (error) {
     console.error('FIT file download/parse error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Process ACTIVITY_DETAIL webhook which contains GPS data in samples array
+ */
+async function processActivityDetail(event, integration, supabase) {
+  try {
+    const activityDetail = event.payload.activityDetails[0];
+    const summary = activityDetail.summary;
+    const samples = activityDetail.samples || [];
+
+    console.log('📊 Processing ACTIVITY_DETAIL:', {
+      activityType: summary.activityType,
+      distance: summary.distanceInMeters,
+      duration: summary.durationInSeconds,
+      samples: samples.length
+    });
+
+    // Check if cycling activity
+    const activityType = summary.activityType?.toLowerCase() || '';
+    const isCycling = activityType.includes('cycling') || activityType.includes('biking');
+
+    if (!isCycling) {
+      console.log('Skipping non-cycling activity:', summary.activityType);
+      await supabase
+        .from('garmin_webhook_events')
+        .update({
+          processed: true,
+          processed_at: new Date().toISOString(),
+          process_error: `Non-cycling activity: ${summary.activityType}`
+        })
+        .eq('id', event.id);
+      return;
+    }
+
+    // Extract GPS points from samples
+    const gpsPoints = samples.filter(s => s.latitudeInDegree && s.longitudeInDegree);
+
+    console.log('📍 GPS data from samples:', {
+      totalSamples: samples.length,
+      gpsPointsFound: gpsPoints.length
+    });
+
+    // Create route
+    const { data: route, error: routeError } = await supabase
+      .from('routes')
+      .insert({
+        user_id: integration.user_id,
+        name: `Garmin ${summary.activityName || 'Cycling'} - ${new Date().toLocaleDateString()}`,
+        description: `Imported from Garmin Connect`,
+        imported_from: 'file_upload',
+        distance_km: summary.distanceInMeters ? summary.distanceInMeters / 1000 : null,
+        elevation_gain_m: summary.totalElevationGainInMeters,
+        elevation_loss_m: summary.totalElevationLossInMeters,
+        duration_seconds: summary.durationInSeconds,
+        average_speed: summary.averageSpeedInMetersPerSecond,
+        max_speed: summary.maxSpeedInMetersPerSecond,
+        average_heartrate: summary.averageHeartRateInBeatsPerMinute,
+        max_heartrate: summary.maxHeartRateInBeatsPerMinute,
+        kilojoules: summary.activeKilocalories,
+        has_gps_data: gpsPoints.length > 0,
+        has_heart_rate_data: samples.some(s => s.heartRate),
+        has_cadence_data: false,
+        has_power_data: false,
+        activity_type: 'road_biking',
+        external_id: event.activity_id,
+        strava_url: event.activity_id ? `https://connect.garmin.com/modern/activity/${event.activity_id}` : null,
+        recorded_at: summary.startTimeInSeconds ? new Date(summary.startTimeInSeconds * 1000).toISOString() : new Date().toISOString(),
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (routeError) throw routeError;
+
+    console.log('✅ Route created from ACTIVITY_DETAIL:', route.id);
+
+    // Store track points from samples
+    if (gpsPoints.length > 0) {
+      const startTime = summary.startTimeInSeconds;
+      const trackPoints = gpsPoints.map((sample, index) => ({
+        route_id: route.id,
+        time_seconds: sample.startTimeInSeconds - startTime,
+        latitude: sample.latitudeInDegree,
+        longitude: sample.longitudeInDegree,
+        elevation: sample.elevationInMeters,
+        heartrate: sample.heartRate,
+        speed: sample.speedMetersPerSecond,
+        temperature: sample.airTemperatureCelcius,
+        distance_m: sample.totalDistanceInMeters,
+        point_index: index
+      }));
+
+      // Insert in batches of 1000
+      for (let i = 0; i < trackPoints.length; i += 1000) {
+        const batch = trackPoints.slice(i, i + 1000);
+        await supabase.from('track_points').insert(batch);
+      }
+
+      console.log('✅ Track points stored from ACTIVITY_DETAIL:', trackPoints.length);
+    }
+
+    // Mark webhook as processed
+    await supabase
+      .from('garmin_webhook_events')
+      .update({
+        processed: true,
+        processed_at: new Date().toISOString(),
+        route_id: route.id
+      })
+      .eq('id', event.id);
+
+    console.log('🎉 Activity imported successfully from ACTIVITY_DETAIL:', route.id);
+
+  } catch (error) {
+    console.error('ACTIVITY_DETAIL processing error:', error);
     throw error;
   }
 }
@@ -529,6 +716,16 @@ async function processActivityData(event, integration, fitData, supabase) {
     const activity = fitData.activity;
     const session = activity.sessions?.[0];
     const records = activity.records || [];
+
+    // Debug: Log the full FIT data structure to see where GPS data is
+    console.log('🔍 FIT data structure:', {
+      hasActivity: !!activity,
+      hasSession: !!session,
+      recordsLength: records.length,
+      activityKeys: activity ? Object.keys(activity) : [],
+      sessionKeys: session ? Object.keys(session) : [],
+      sampleRecordKeys: records[0] ? Object.keys(records[0]) : []
+    });
 
     if (!session) {
       throw new Error('No session data in FIT file');
@@ -566,38 +763,48 @@ async function processActivityData(event, integration, fitData, supabase) {
     else if (sport.includes('gravel')) activityType = 'gravel_cycling';
     else if (sport.includes('indoor')) activityType = 'indoor_cycling';
 
-    // Calculate polyline from GPS data
+    // Get GPS data points
     const gpsPoints = records.filter(r => r.position_lat && r.position_long);
-    const polyline = encodePolyline(gpsPoints);
 
-    // Create route
+    console.log('📍 GPS data check:', {
+      totalRecords: records.length,
+      gpsPointsFound: gpsPoints.length,
+      sampleRecord: records[0] ? {
+        hasPositionLat: !!records[0].position_lat,
+        hasPositionLong: !!records[0].position_long,
+        lat: records[0].position_lat,
+        lng: records[0].position_long,
+        allKeys: Object.keys(records[0])
+      } : 'No records'
+    });
+
+    // Create route - using correct schema column names
     const { data: route, error: routeError } = await supabase
       .from('routes')
       .insert({
         user_id: integration.user_id,
         name: `Garmin ${activityType.replace('_', ' ')} - ${new Date().toLocaleDateString()}`,
         description: `Imported from Garmin Connect`,
-        distance: session.total_distance ? session.total_distance / 1000 : null,
-        elevation_gain: session.total_ascent,
-        elevation_loss: session.total_descent,
-        duration: session.total_elapsed_time,
-        avg_speed: session.avg_speed,
+        imported_from: 'file_upload',
+        distance_km: session.total_distance ? session.total_distance / 1000 : null,
+        elevation_gain_m: session.total_ascent,
+        elevation_loss_m: session.total_descent,
+        duration_seconds: session.total_elapsed_time,
+        average_speed: session.avg_speed,
         max_speed: session.max_speed,
-        avg_heart_rate: session.avg_heart_rate,
-        max_heart_rate: session.max_heart_rate,
-        avg_power: session.avg_power,
-        max_power: session.max_power,
-        avg_cadence: session.avg_cadence,
-        calories: session.total_calories,
-        polyline: polyline,
-        garmin_id: event.activity_id,
-        garmin_url: event.activity_id ? `https://connect.garmin.com/modern/activity/${event.activity_id}` : null,
+        average_heartrate: session.avg_heart_rate,
+        max_heartrate: session.max_heart_rate,
+        average_watts: session.avg_power,
+        max_watts: session.max_power,
+        kilojoules: session.total_calories,
         has_gps_data: gpsPoints.length > 0,
         has_heart_rate_data: records.some(r => r.heart_rate),
         has_power_data: records.some(r => r.power),
         has_cadence_data: records.some(r => r.cadence),
         activity_type: activityType,
-        started_at: session.start_time || new Date().toISOString(),
+        external_id: event.activity_id,
+        strava_url: event.activity_id ? `https://connect.garmin.com/modern/activity/${event.activity_id}` : null,
+        recorded_at: session.start_time || new Date().toISOString(),
         created_at: new Date().toISOString()
       })
       .select()
@@ -607,21 +814,21 @@ async function processActivityData(event, integration, fitData, supabase) {
 
     console.log('✅ Route created:', route.id);
 
-    // Store track points (GPS data)
+    // Store track points (GPS data) - using correct schema column names
     if (gpsPoints.length > 0) {
       const trackPoints = gpsPoints.map((r, index) => ({
         route_id: route.id,
-        timestamp: r.timestamp || new Date().toISOString(),
+        time_seconds: r.timestamp ? (new Date(r.timestamp).getTime() - new Date(session.start_time).getTime()) / 1000 : index,
         latitude: r.position_lat,
         longitude: r.position_long,
         elevation: r.altitude,
-        heart_rate: r.heart_rate,
-        power: r.power,
+        heartrate: r.heart_rate,
+        power_watts: r.power,
         cadence: r.cadence,
         speed: r.speed,
         temperature: r.temperature,
-        distance: r.distance,
-        sequence_number: index
+        distance_m: r.distance,
+        point_index: index
       }));
 
       // Insert in batches of 1000
