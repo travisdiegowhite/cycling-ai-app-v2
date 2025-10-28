@@ -31,53 +31,58 @@ SELECT
     -- Surface preferences
     sp.primary_surfaces,
     sp.surface_quality,
-    sp.avoid_gravel,
-    sp.avoid_unpaved,
-
-    -- Performance preferences
-    pp.fitness_level,
-    pp.typical_speed_kmh,
-    pp.max_comfortable_distance_km,
-    pp.preferred_route_duration_minutes,
-
-    -- Contextual preferences
-    cp.riding_style,
-    cp.group_size_preference,
-    cp.time_of_day_preference,
-    cp.weather_tolerance,
-    cp.temperature_preference_c,
-    cp.wind_tolerance,
-
-    -- Environmental preferences
-    ep.scenery_importance,
-    ep.urban_vs_rural,
-    ep.prefer_water_views,
-    ep.prefer_forests,
-    ep.prefer_open_views,
+    sp.gravel_tolerance,
+    sp.single_track_experience,
+    sp.weather_surface_adjustment,
+    sp.wet_weather_paved_only,
 
     -- Safety preferences
-    safep.night_riding_comfort,
-    safep.require_bike_lanes,
-    safep.require_shoulders,
-    safep.min_shoulder_width_m,
-    safep.avoid_high_speed_roads,
-    safep.max_speed_limit_kmh,
+    saf.lighting_requirement,
+    saf.shoulder_width,
+    saf.bike_infrastructure,
+    saf.emergency_access,
+    saf.cell_coverage,
+    saf.rest_stop_frequency,
+    saf.mechanical_support,
+    saf.group_riding,
+    saf.group_size,
 
-    -- Cycling equipment
-    eq.bikes,
-    eq.has_lights,
-    eq.has_gps,
-    eq.has_power_meter,
-    eq.has_heart_rate_monitor
+    -- Scenic preferences
+    sc.scenic_importance,
+    sc.preferred_views,
+    sc.avoided_views,
+    sc.cultural_interests,
+    sc.photography_stops,
+    sc.scenic_detours,
+    sc.quietness_level,
+    sc.variety_importance,
+
+    -- Training context
+    tc.current_phase,
+    tc.weekly_volume_km,
+    tc.weekly_rides,
+    tc.longest_recent_ride,
+    tc.recent_intensity,
+    tc.fatigue_level,
+    tc.primary_goal,
+    tc.upcoming_event_date,
+    tc.upcoming_event_type,
+    tc.injury_areas,
+    tc.recovery_focus,
+    tc.typical_ride_time,
+    tc.time_flexibility,
+    tc.equipment_status,
+
+    -- Timestamps
+    up.created_at,
+    up.updated_at
 FROM auth.users u
 LEFT JOIN user_preferences up ON u.id = up.user_id
 LEFT JOIN routing_preferences rp ON u.id = rp.user_id
 LEFT JOIN surface_preferences sp ON u.id = sp.user_id
-LEFT JOIN performance_preferences pp ON u.id = pp.user_id
-LEFT JOIN contextual_preferences cp ON u.id = cp.user_id
-LEFT JOIN environmental_preferences ep ON u.id = ep.user_id
-LEFT JOIN safety_preferences safep ON u.id = safep.user_id
-LEFT JOIN cycling_equipment eq ON u.id = eq.user_id;
+LEFT JOIN safety_preferences saf ON u.id = saf.user_id
+LEFT JOIN scenic_preferences sc ON u.id = sc.user_id
+LEFT JOIN training_context tc ON u.id = tc.user_id;
 
 -- Add RLS policy so users can only see their own preferences
 ALTER VIEW public.user_preferences_complete SET (security_invoker = true);
