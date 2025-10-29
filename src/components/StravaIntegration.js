@@ -41,6 +41,7 @@ const StravaIntegration = () => {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [lastImport, setLastImport] = useState(null);
+  const [backfilling, setBackfilling] = useState(false);
 
   useEffect(() => {
     checkConnection();
@@ -128,6 +129,26 @@ const StravaIntegration = () => {
     setAthlete(null);
     setLastImport(null);
     toast.success('Disconnected from Strava');
+  };
+
+  const handleBackfillGPS = async () => {
+    try {
+      setBackfilling(true);
+      toast.loading('Adding GPS data to existing routes...', { id: 'backfill' });
+
+      const result = await stravaService.backfillGPSData();
+
+      toast.success(`✅ GPS data added to ${result.updated} routes!`, { id: 'backfill' });
+
+      if (result.failed > 0) {
+        toast.error(`⚠️ ${result.failed} routes failed - check console for details`);
+      }
+    } catch (error) {
+      console.error('GPS backfill error:', error);
+      toast.error('Failed to add GPS data: ' + error.message, { id: 'backfill' });
+    } finally {
+      setBackfilling(false);
+    }
   };
 
   const importActivities = async (importType = 'recent', customLimit = null, overrideExisting = false) => {
@@ -1004,6 +1025,28 @@ const StravaIntegration = () => {
                     </Button>
                   </Tooltip>
                 </SimpleGrid>
+
+              {/* GPS Backfill Button */}
+              <Alert color="blue" variant="light" mt="md">
+                <Stack gap="sm">
+                  <div>
+                    <Text size="sm" fw={600} mb="xs">📍 Add GPS Data to Existing Rides</Text>
+                    <Text size="xs" c="dimmed">
+                      If your imported rides show "No GPS data available", click below to fetch and add GPS coordinates from Strava.
+                    </Text>
+                  </div>
+                  <Button
+                    leftSection={backfilling ? <Loader size={16} /> : <MapPin size={16} />}
+                    onClick={handleBackfillGPS}
+                    loading={backfilling}
+                    disabled={backfilling || importing}
+                    variant="light"
+                    size="sm"
+                  >
+                    {backfilling ? 'Adding GPS Data...' : 'Add GPS to Existing Rides'}
+                  </Button>
+                </Stack>
+              </Alert>
 
               {importing && (
                 <Progress value={importProgress} size="sm" mb="md" />
