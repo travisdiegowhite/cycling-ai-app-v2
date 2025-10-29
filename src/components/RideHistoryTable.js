@@ -3,6 +3,8 @@ import { Card, Table, Text, Badge, Group, ActionIcon, Tooltip, TextInput } from 
 import { Eye, Edit, Trash2, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUnits } from '../utils/units';
+import { supabase } from '../supabase';
+import RideDetailModal from './RideDetailModal';
 
 /**
  * Ride History Table Component
@@ -12,6 +14,9 @@ const RideHistoryTable = ({ rides }) => {
   const navigate = useNavigate();
   const { formatDistance, formatElevation } = useUnits();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRide, setSelectedRide] = useState(null);
+  const [modalOpened, setModalOpened] = useState(false);
+  const [trackPoints, setTrackPoints] = useState([]);
 
   // Filter rides based on search
   const filteredRides = rides.filter(ride =>
@@ -36,6 +41,35 @@ const RideHistoryTable = ({ rides }) => {
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
+  };
+
+  // Load ride details and track points
+  const handleViewRide = async (ride) => {
+    setSelectedRide(ride);
+    setModalOpened(true);
+
+    // Load track points if the ride has GPS data
+    if (ride.has_gps_data) {
+      try {
+        const { data: points, error } = await supabase
+          .from('track_points')
+          .select('latitude, longitude, elevation, time, distance')
+          .eq('route_id', ride.id)
+          .order('point_index', { ascending: true });
+
+        if (error) {
+          console.error('Failed to load track points:', error);
+          setTrackPoints([]);
+        } else {
+          setTrackPoints(points || []);
+        }
+      } catch (error) {
+        console.error('Error loading track points:', error);
+        setTrackPoints([]);
+      }
+    } else {
+      setTrackPoints([]);
+    }
   };
 
   // Estimate TSS (simple approximation)
@@ -131,7 +165,7 @@ const RideHistoryTable = ({ rides }) => {
                       <ActionIcon
                         size="sm"
                         variant="subtle"
-                        onClick={() => navigate(`/routes/${ride.id}`)}
+                        onClick={() => handleViewRide(ride)}
                       >
                         <Eye size={14} />
                       </ActionIcon>
@@ -153,6 +187,18 @@ const RideHistoryTable = ({ rides }) => {
           </Table.Tbody>
         </Table>
       </div>
+
+      {/* Ride Detail Modal */}
+      <RideDetailModal
+        opened={modalOpened}
+        onClose={() => {
+          setModalOpened(false);
+          setSelectedRide(null);
+          setTrackPoints([]);
+        }}
+        route={selectedRide}
+        trackPoints={trackPoints}
+      />
     </Card>
   );
 };

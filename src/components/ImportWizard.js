@@ -27,6 +27,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { stravaService } from '../utils/stravaService';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Smart Import Wizard - Guides users through hybrid Strava + Garmin setup
@@ -37,6 +38,7 @@ import { stravaService } from '../utils/stravaService';
  * Step 4: Complete
  */
 const ImportWizard = ({ opened, onClose, stravaConnected, garminConnected }) => {
+  const navigate = useNavigate();
   const [active, setActive] = useState(0);
   const [historicalPeriod, setHistoricalPeriod] = useState('1_year');
   const [importing, setImporting] = useState(false);
@@ -398,7 +400,10 @@ const ImportWizard = ({ opened, onClose, stravaConnected, garminConnected }) => 
             </Alert>
 
             <Button
-              onClick={onClose}
+              onClick={() => {
+                onClose();
+                navigate('/training-dashboard');
+              }}
               size="md"
               fullWidth
               style={{ backgroundColor: '#007CC3', color: 'white' }}

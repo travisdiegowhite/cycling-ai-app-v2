@@ -11,6 +11,48 @@ const supabase = createClient(
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
+/**
+ * Decode Google Polyline format
+ * Used by Strava to encode GPS coordinates
+ */
+function decodePolyline(encoded) {
+  const points = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    const deltaLat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += deltaLat;
+
+    shift = 0;
+    result = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    const deltaLng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += deltaLng;
+
+    points.push([lat / 1e5, lng / 1e5]);
+  }
+
+  return points;
+}
+
 const getAllowedOrigins = () => {
   if (process.env.NODE_ENV === 'production') {
     return ['https://www.tribos.studio', 'https://cycling-ai-app-v2.vercel.app'];
@@ -293,6 +335,56 @@ async function importStravaActivity(userId, activity, accessToken) {
   }
 
   console.log(`✅ Imported activity ${activity.id} as route ${route.id}`);
+
+  // Import GPS track points if available
+  if (activity.map?.summary_polyline) {
+    try {
+      const coordinates = decodePolyline(activity.map.summary_polyline);
+
+      if (coordinates.length > 0) {
+        // Prepare track points for insertion
+        const trackPoints = coordinates.map((coord, index) => ({
+          route_id: route.id,
+          point_index: index,
+          latitude: coord[0],
+          longitude: coord[1],
+          elevation: null, // Polyline doesn't include elevation
+          time: null, // Polyline doesn't include timestamps
+          distance: null // Will be calculated if needed
+        }));
+
+        // Batch insert track points (Supabase can handle large inserts)
+        const { error: trackPointsError } = await supabase
+          .from('track_points')
+          .insert(trackPoints);
+
+        if (trackPointsError) {
+          console.error(`⚠️ Failed to import track points for activity ${activity.id}:`, trackPointsError);
+          // Don't fail the entire import - route is still created
+        } else {
+          console.log(`📍 Imported ${trackPoints.length} GPS points for activity ${activity.id}`);
+
+          // Update route with start/end coordinates
+          const firstPoint = coordinates[0];
+          const lastPoint = coordinates[coordinates.length - 1];
+
+          await supabase
+            .from('routes')
+            .update({
+              start_latitude: firstPoint[0],
+              start_longitude: firstPoint[1],
+              end_latitude: lastPoint[0],
+              end_longitude: lastPoint[1],
+              track_points_count: coordinates.length
+            })
+            .eq('id', route.id);
+        }
+      }
+    } catch (polylineError) {
+      console.error(`⚠️ Failed to decode polyline for activity ${activity.id}:`, polylineError);
+      // Don't fail the entire import
+    }
+  }
 
   return 'imported';
 }
