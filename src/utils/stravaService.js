@@ -367,6 +367,43 @@ export class StravaService {
   }
 
   /**
+   * Backfill GPS data for existing Strava routes
+   */
+  async backfillGPSData() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) {
+      throw new Error('Not authenticated');
+    }
+
+    try {
+      console.log('🔄 Starting GPS data backfill...');
+
+      const response = await fetch(`${getApiBaseUrl()}/api/backfill-gps-data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ userId })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Backfill failed');
+      }
+
+      const data = await response.json();
+      console.log('✅ GPS backfill complete:', data);
+
+      return data;
+
+    } catch (error) {
+      console.error('GPS backfill error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if user is connected to Strava (secure server-side check)
    */
   async isConnected() {
