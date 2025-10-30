@@ -129,9 +129,17 @@ export default async function handler(req, res) {
 
     let updated = 0;
     let failed = 0;
+    const errorDetails = [];
 
     for (const route of routesNeedingGPS) {
       try {
+        if (!route.strava_id) {
+          console.error(`❌ Route ${route.id} has no strava_id`);
+          errorDetails.push({ routeId: route.id, routeName: route.name, error: 'No strava_id' });
+          failed++;
+          continue;
+        }
+
         // Fetch activity details from Strava
         const response = await fetch(`${STRAVA_API_BASE}/activities/${route.strava_id}`, {
           headers: {
@@ -140,7 +148,9 @@ export default async function handler(req, res) {
         });
 
         if (!response.ok) {
-          console.error(`❌ Failed to fetch Strava activity ${route.strava_id}: ${response.status}`);
+          const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+          console.error(`❌ Failed to fetch Strava activity ${route.strava_id}: ${errorMsg}`);
+          errorDetails.push({ routeId: route.id, routeName: route.name, stravaId: route.strava_id, error: errorMsg });
           failed++;
           continue;
         }
@@ -208,6 +218,7 @@ export default async function handler(req, res) {
 
       } catch (error) {
         console.error(`❌ Error processing route ${route.id}:`, error);
+        errorDetails.push({ routeId: route.id, routeName: route.name, error: error.message });
         failed++;
       }
     }
@@ -216,7 +227,8 @@ export default async function handler(req, res) {
       success: true,
       updated,
       failed,
-      total: routesNeedingGPS.length
+      total: routesNeedingGPS.length,
+      errorSamples: errorDetails.slice(0, 10) // Return first 10 errors for debugging
     });
 
   } catch (error) {

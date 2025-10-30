@@ -141,6 +141,10 @@ const StravaIntegration = () => {
       toast.success(`✅ GPS data added to ${result.updated} routes!`, { id: 'backfill' });
 
       if (result.failed > 0) {
+        console.error(`⚠️ ${result.failed} routes failed`);
+        if (result.errorSamples) {
+          console.table(result.errorSamples);
+        }
         toast.error(`⚠️ ${result.failed} routes failed - check console for details`);
       }
     } catch (error) {
