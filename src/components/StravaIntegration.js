@@ -138,14 +138,20 @@ const StravaIntegration = () => {
 
       const result = await stravaService.backfillGPSData();
 
-      toast.success(`✅ GPS data added to ${result.updated} routes!`, { id: 'backfill' });
-
-      if (result.failed > 0) {
-        console.error(`⚠️ ${result.failed} routes failed`);
-        if (result.errorSamples) {
-          console.table(result.errorSamples);
+      if (result.rateLimited) {
+        toast.error('🚫 Strava rate limit reached! Wait 15 minutes and try again.', { id: 'backfill', duration: 8000 });
+      } else if (result.updated > 0) {
+        toast.success(`✅ GPS data added to ${result.updated} routes!`, { id: 'backfill' });
+        if (result.remaining > 0) {
+          toast('Click again to process remaining ' + result.remaining + ' routes', { duration: 5000 });
         }
-        toast.error(`⚠️ ${result.failed} routes failed - check console for details`);
+      } else {
+        toast.error(`No routes updated. ${result.failed} failed.`, { id: 'backfill' });
+      }
+
+      if (result.failed > 0 && result.errorSamples) {
+        console.error(`⚠️ ${result.failed} routes failed`);
+        console.table(result.errorSamples);
       }
     } catch (error) {
       console.error('GPS backfill error:', error);

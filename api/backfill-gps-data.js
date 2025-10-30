@@ -127,11 +127,24 @@ export default async function handler(req, res) {
 
     console.log(`📊 Found ${routesNeedingGPS.length} routes needing GPS data`);
 
+    // Strava rate limit: 100 requests per 15 minutes, 1000 per day
+    // Process in batches of 50 with proper delays
+    const BATCH_SIZE = 50;
+    const DELAY_BETWEEN_REQUESTS = 2000; // 2 seconds (30 requests/min = well under 100/15min)
+
     let updated = 0;
     let failed = 0;
+    let rateLimited = false;
     const errorDetails = [];
 
-    for (const route of routesNeedingGPS) {
+    // Process only first batch to avoid hitting rate limits
+    const routesToProcess = routesNeedingGPS.slice(0, BATCH_SIZE);
+
+    if (routesNeedingGPS.length > BATCH_SIZE) {
+      console.log(`⚠️ Processing first ${BATCH_SIZE} routes to avoid rate limits. Run again later for remaining ${routesNeedingGPS.length - BATCH_SIZE} routes.`);
+    }
+
+    for (const route of routesToProcess) {
       try {
         if (!route.strava_id) {
           console.error(`❌ Route ${route.id} has no strava_id`);
@@ -151,6 +164,15 @@ export default async function handler(req, res) {
           const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
           console.error(`❌ Failed to fetch Strava activity ${route.strava_id}: ${errorMsg}`);
           errorDetails.push({ routeId: route.id, routeName: route.name, stravaId: route.strava_id, error: errorMsg });
+
+          // If rate limited, stop processing immediately
+          if (response.status === 429) {
+            rateLimited = true;
+            console.error('🚫 Strava rate limit reached. Stopping backfill. Wait 15 minutes and try again.');
+            failed++;
+            break; // Stop processing more routes
+          }
+
           failed++;
           continue;
         }
@@ -214,7 +236,7 @@ export default async function handler(req, res) {
         }
 
         // Rate limiting - Strava allows 100 requests per 15 minutes
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS));
 
       } catch (error) {
         console.error(`❌ Error processing route ${route.id}:`, error);
@@ -228,7 +250,15 @@ export default async function handler(req, res) {
       updated,
       failed,
       total: routesNeedingGPS.length,
-      errorSamples: errorDetails.slice(0, 10) // Return first 10 errors for debugging
+      processed: routesToProcess.length,
+      remaining: routesNeedingGPS.length - routesToProcess.length,
+      rateLimited,
+      errorSamples: errorDetails.slice(0, 10), // Return first 10 errors for debugging
+      message: rateLimited
+        ? '⚠️ Rate limited by Strava. Wait 15 minutes before trying again.'
+        : routesNeedingGPS.length > BATCH_SIZE
+        ? `✅ Processed ${routesToProcess.length} routes. Run again to process remaining ${routesNeedingGPS.length - BATCH_SIZE} routes.`
+        : null
     });
 
   } catch (error) {
