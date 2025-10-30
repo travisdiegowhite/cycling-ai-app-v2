@@ -662,23 +662,23 @@ const StravaIntegration = () => {
           
           // Core metrics
           distance_km: convertedActivity.distance_km || 0,
-          duration_seconds: convertedActivity.duration_seconds || 0,
-          elevation_gain_m: convertedActivity.elevation_gain_m || 0,
-          elevation_loss_m: convertedActivity.elevation_loss_m || 0,
-          
+          duration_seconds: convertedActivity.duration_seconds ? Math.round(convertedActivity.duration_seconds) : 0,
+          elevation_gain_m: convertedActivity.elevation_gain_m ? Math.round(convertedActivity.elevation_gain_m) : 0,
+          elevation_loss_m: convertedActivity.elevation_loss_m ? Math.round(convertedActivity.elevation_loss_m) : 0,
+
           // Performance metrics
           average_speed: convertedActivity.average_speed || null,
           max_speed: convertedActivity.max_speed || null,
           average_pace: convertedActivity.average_speed ? (60 / convertedActivity.average_speed) : null,
-          
+
           // Heart rate data
-          average_heartrate: convertedActivity.average_heartrate || null,
-          max_heartrate: convertedActivity.max_heartrate || null,
-          
+          average_heartrate: convertedActivity.average_heartrate ? Math.round(convertedActivity.average_heartrate) : null,
+          max_heartrate: convertedActivity.max_heartrate ? Math.round(convertedActivity.max_heartrate) : null,
+
           // Power data
-          average_watts: convertedActivity.average_watts || null,
-          max_watts: convertedActivity.max_watts || null,
-          kilojoules: convertedActivity.kilojoules || null,
+          average_watts: convertedActivity.average_watts ? Math.round(convertedActivity.average_watts) : null,
+          max_watts: convertedActivity.max_watts ? Math.round(convertedActivity.max_watts) : null,
+          kilojoules: convertedActivity.kilojoules ? Math.round(convertedActivity.kilojoules) : null,
           
           // Location data
           start_latitude: convertedActivity.start_latitude || null,
