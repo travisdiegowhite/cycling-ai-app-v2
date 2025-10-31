@@ -87,10 +87,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { userId, startDate, endDate } = req.body;
+    const { userId, startDate, endDate, force = false } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: 'UserId required' });
+    }
+
+    if (force) {
+      console.log('⚠️ FORCE MODE ENABLED - Will skip duplicate checks and re-import everything');
     }
 
     // Get Strava access token
@@ -147,7 +151,7 @@ export default async function handler(req, res) {
 
     for (const activity of cyclingActivities) {
       try {
-        const result = await importStravaActivity(userId, activity, accessToken);
+        const result = await importStravaActivity(userId, activity, accessToken, force);
         if (result === 'imported') imported++;
         else if (result === 'skipped') skipped++;
       } catch (error) {
@@ -246,46 +250,51 @@ async function fetchAllStravaActivities(accessToken, afterTimestamp, beforeTimes
 /**
  * Import a single Strava activity into routes table
  */
-async function importStravaActivity(userId, activity, accessToken) {
-  // Check for duplicates
-  const { data: existing, error: existingError } = await supabase
-    .from('routes')
-    .select('id')
-    .eq('strava_id', activity.id.toString())
-    .single();
+async function importStravaActivity(userId, activity, accessToken, force = false) {
+  // Skip duplicate checks if force mode is enabled
+  if (!force) {
+    // Check for duplicates
+    const { data: existing, error: existingError } = await supabase
+      .from('routes')
+      .select('id')
+      .eq('strava_id', activity.id.toString())
+      .single();
 
-  // Debug: Log the duplicate check result
-  console.log(`🔍 Duplicate check for activity ${activity.id}: existing=${!!existing}, error=${existingError?.code}`);
+    // Debug: Log the duplicate check result
+    console.log(`🔍 Duplicate check for activity ${activity.id}: existing=${!!existing}, error=${existingError?.code}`);
 
-  if (existing) {
-    console.log(`⏭️ Activity ${activity.id} already imported (route_id: ${existing.id})`);
-    return 'skipped';
-  }
+    if (existing) {
+      console.log(`⏭️ Activity ${activity.id} already imported (route_id: ${existing.id})`);
+      return 'skipped';
+    }
 
-  // If there was an error OTHER than "not found", something's wrong
-  if (existingError && existingError.code !== 'PGRST116') {
-    console.error(`❌ Error checking for duplicates for activity ${activity.id}:`, existingError);
-    // Continue anyway - better to try importing than skip
-  }
+    // If there was an error OTHER than "not found", something's wrong
+    if (existingError && existingError.code !== 'PGRST116') {
+      console.error(`❌ Error checking for duplicates for activity ${activity.id}:`, existingError);
+      // Continue anyway - better to try importing than skip
+    }
 
-  // Check for near-duplicate based on time and distance
-  const startTime = new Date(activity.start_date);
-  const fiveMinutesAgo = new Date(startTime.getTime() - 5 * 60 * 1000);
-  const fiveMinutesLater = new Date(startTime.getTime() + 5 * 60 * 1000);
-  const distanceKm = activity.distance / 1000; // meters to km
+    // Check for near-duplicate based on time and distance
+    const startTime = new Date(activity.start_date);
+    const fiveMinutesAgo = new Date(startTime.getTime() - 5 * 60 * 1000);
+    const fiveMinutesLater = new Date(startTime.getTime() + 5 * 60 * 1000);
+    const distanceKm = activity.distance / 1000; // meters to km
 
-  const { data: nearDuplicates } = await supabase
-    .from('routes')
-    .select('id')
-    .gte('recorded_at', fiveMinutesAgo.toISOString())
-    .lte('recorded_at', fiveMinutesLater.toISOString())
-    .gte('distance_km', distanceKm - 0.1)
-    .lte('distance_km', distanceKm + 0.1)
-    .limit(1);
+    const { data: nearDuplicates } = await supabase
+      .from('routes')
+      .select('id')
+      .gte('recorded_at', fiveMinutesAgo.toISOString())
+      .lte('recorded_at', fiveMinutesLater.toISOString())
+      .gte('distance_km', distanceKm - 0.1)
+      .lte('distance_km', distanceKm + 0.1)
+      .limit(1);
 
-  if (nearDuplicates && nearDuplicates.length > 0) {
-    console.log(`⏭️ Near-duplicate found for activity ${activity.id} (time+distance match)`);
-    return 'skipped';
+    if (nearDuplicates && nearDuplicates.length > 0) {
+      console.log(`⏭️ Near-duplicate found for activity ${activity.id} (time+distance match)`);
+      return 'skipped';
+    }
+  } else {
+    console.log(`🔄 FORCE MODE: Importing activity ${activity.id} without duplicate check`);
   }
 
   // Determine activity type

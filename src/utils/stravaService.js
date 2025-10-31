@@ -316,7 +316,11 @@ export class StravaService {
     }
 
     try {
-      const { startDate, endDate } = options;
+      const { startDate, endDate, force = true } = options; // Default force=true to bypass duplicate checks
+
+      if (force) {
+        console.log('⚠️ FORCE MODE: Bypassing duplicate checks');
+      }
 
       console.log('📥 Starting Strava bulk import...');
 
@@ -329,7 +333,8 @@ export class StravaService {
         body: JSON.stringify({
           userId,
           startDate,
-          endDate
+          endDate,
+          force
         })
       });
 
