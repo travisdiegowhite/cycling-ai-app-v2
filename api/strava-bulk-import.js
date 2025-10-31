@@ -336,52 +336,81 @@ async function importStravaActivity(userId, activity, accessToken) {
 
   console.log(`✅ Imported activity ${activity.id} as route ${route.id}`);
 
-  // Import GPS track points if available
-  if (activity.map?.summary_polyline) {
+  // Fetch detailed GPS streams from Strava (like the old working code)
+  const shouldHaveGPS = activity.start_latlng &&
+                       activity.start_latlng.length === 2 &&
+                       activity.type !== 'VirtualRide' &&
+                       activity.distance > 100;
+
+  if (shouldHaveGPS) {
     try {
-      const coordinates = decodePolyline(activity.map.summary_polyline);
+      console.log(`📍 Fetching GPS streams for activity ${activity.id}...`);
 
-      if (coordinates.length > 0) {
-        // Prepare track points for insertion
-        const trackPoints = coordinates.map((coord, index) => ({
-          route_id: route.id,
-          point_index: index,
-          latitude: coord[0],
-          longitude: coord[1],
-          elevation: null, // Polyline doesn't include elevation
-          time_seconds: null, // Polyline doesn't include timestamps
-          distance_m: null // Polyline doesn't include distance markers
-        }));
-
-        // Batch insert track points (Supabase can handle large inserts)
-        const { error: trackPointsError } = await supabase
-          .from('track_points')
-          .insert(trackPoints);
-
-        if (trackPointsError) {
-          console.error(`⚠️ Failed to import track points for activity ${activity.id}:`, trackPointsError);
-          // Don't fail the entire import - route is still created
-        } else {
-          console.log(`📍 Imported ${trackPoints.length} GPS points for activity ${activity.id}`);
-
-          // Update route with start/end coordinates
-          const firstPoint = coordinates[0];
-          const lastPoint = coordinates[coordinates.length - 1];
-
-          await supabase
-            .from('routes')
-            .update({
-              start_latitude: firstPoint[0],
-              start_longitude: firstPoint[1],
-              end_latitude: lastPoint[0],
-              end_longitude: lastPoint[1],
-              track_points_count: coordinates.length
-            })
-            .eq('id', route.id);
+      // Fetch streams from Strava API
+      const response = await fetch(
+        `${STRAVA_API_BASE}/activities/${activity.id}/streams?keys=latlng,time,altitude,distance&key_by_type=true`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
         }
+      );
+
+      if (response.ok) {
+        const streams = await response.json();
+
+        if (streams.latlng && streams.latlng.data && streams.latlng.data.length > 0) {
+          const pointCount = streams.latlng.data.length;
+          console.log(`✅ Got ${pointCount} GPS points for activity ${activity.id}`);
+
+          // Convert Strava streams to track points format
+          const trackPoints = streams.latlng.data.map((latLng, index) => ({
+            route_id: route.id,
+            point_index: index,
+            latitude: latLng[0],
+            longitude: latLng[1],
+            elevation: streams.altitude?.data?.[index] || null,
+            time_seconds: streams.time?.data?.[index] || null,
+            distance_m: streams.distance?.data?.[index] || null
+          }));
+
+          // Insert track points
+          const { error: trackPointsError } = await supabase
+            .from('track_points')
+            .insert(trackPoints);
+
+          if (trackPointsError) {
+            console.error(`⚠️ Failed to import track points for activity ${activity.id}:`, trackPointsError);
+          } else {
+            console.log(`📍 Imported ${trackPoints.length} GPS points for activity ${activity.id}`);
+
+            // Update route with coordinates
+            const firstPoint = trackPoints[0];
+            const lastPoint = trackPoints[trackPoints.length - 1];
+
+            await supabase
+              .from('routes')
+              .update({
+                start_latitude: firstPoint.latitude,
+                start_longitude: firstPoint.longitude,
+                end_latitude: lastPoint.latitude,
+                end_longitude: lastPoint.longitude,
+                track_points_count: trackPoints.length
+              })
+              .eq('id', route.id);
+          }
+        } else {
+          console.warn(`⚠️ No GPS data in streams for activity ${activity.id}`);
+        }
+      } else {
+        console.warn(`⚠️ Failed to fetch streams for activity ${activity.id}: ${response.status}`);
       }
-    } catch (polylineError) {
-      console.error(`⚠️ Failed to decode polyline for activity ${activity.id}:`, polylineError);
+
+      // Rate limiting - wait 1 second between stream requests
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+    } catch (streamError) {
+      console.error(`⚠️ Error fetching GPS streams for activity ${activity.id}:`, streamError);
       // Don't fail the entire import
     }
   }
