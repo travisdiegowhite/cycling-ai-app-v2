@@ -248,15 +248,24 @@ async function fetchAllStravaActivities(accessToken, afterTimestamp, beforeTimes
  */
 async function importStravaActivity(userId, activity, accessToken) {
   // Check for duplicates
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('routes')
     .select('id')
     .eq('strava_id', activity.id.toString())
     .single();
 
+  // Debug: Log the duplicate check result
+  console.log(`🔍 Duplicate check for activity ${activity.id}: existing=${!!existing}, error=${existingError?.code}`);
+
   if (existing) {
-    console.log(`⏭️ Activity ${activity.id} already imported`);
+    console.log(`⏭️ Activity ${activity.id} already imported (route_id: ${existing.id})`);
     return 'skipped';
+  }
+
+  // If there was an error OTHER than "not found", something's wrong
+  if (existingError && existingError.code !== 'PGRST116') {
+    console.error(`❌ Error checking for duplicates for activity ${activity.id}:`, existingError);
+    // Continue anyway - better to try importing than skip
   }
 
   // Check for near-duplicate based on time and distance
