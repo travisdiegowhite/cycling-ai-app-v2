@@ -349,8 +349,8 @@ async function importStravaActivity(userId, activity, accessToken) {
           latitude: coord[0],
           longitude: coord[1],
           elevation: null, // Polyline doesn't include elevation
-          time: null, // Polyline doesn't include timestamps
-          distance: null // Will be calculated if needed
+          time_seconds: null, // Polyline doesn't include timestamps
+          distance_m: null // Polyline doesn't include distance markers
         }));
 
         // Batch insert track points (Supabase can handle large inserts)
