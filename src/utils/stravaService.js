@@ -316,53 +316,96 @@ export class StravaService {
     }
 
     try {
-      const { startDate, endDate, force = true } = options; // Default force=true to bypass duplicate checks
+      const { startDate, endDate, force = true, batchSize = 5 } = options; // Default force=true, small batches
 
       if (force) {
         console.log('⚠️ FORCE MODE: Bypassing duplicate checks');
       }
 
-      console.log('📥 Starting Strava bulk import...');
+      console.log('📥 Starting Strava bulk import with batching...', { from: startDate, to: endDate });
 
-      const response = await fetch(`${getApiBaseUrl()}/api/strava-bulk-import`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          userId,
-          startDate,
-          endDate,
-          force
-        })
+      let totalImported = 0;
+      let totalSkipped = 0;
+      let totalErrors = 0;
+      let allErrorDetails = [];
+      let batchNumber = 1;
+      let hasMore = true;
+
+      // Keep importing batches until all activities are processed
+      while (hasMore) {
+        console.log(`📦 Processing batch ${batchNumber}...`);
+
+        const response = await fetch(`${getApiBaseUrl()}/api/strava-bulk-import`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            userId,
+            startDate,
+            endDate,
+            force,
+            batchSize
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Bulk import failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.message || 'Bulk import failed');
+        }
+
+        // Accumulate results
+        totalImported += data.imported;
+        totalSkipped += data.skipped;
+        totalErrors += data.errors;
+        if (data.errorDetails) {
+          allErrorDetails.push(...data.errorDetails);
+        }
+
+        console.log(`✅ Batch ${batchNumber} complete:`, {
+          imported: data.imported,
+          skipped: data.skipped,
+          errors: data.errors,
+          processed: data.processed,
+          total: data.total
+        });
+
+        hasMore = data.hasMore;
+        batchNumber++;
+
+        // Add a small delay between batches to avoid rate limits
+        if (hasMore) {
+          console.log('⏳ Waiting 2 seconds before next batch...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      console.log('🎉 All batches complete!', {
+        totalImported,
+        totalSkipped,
+        totalErrors,
+        totalBatches: batchNumber - 1
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Bulk import failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || 'Bulk import failed');
-      }
-
-      console.log('✅ Bulk import complete:', data);
-
       // Log error details if any errors occurred
-      if (data.errorDetails && data.errorDetails.length > 0) {
-        console.error('❌ Import errors detected:', data.errorDetails);
-        console.table(data.errorDetails);
+      if (allErrorDetails.length > 0) {
+        console.error('❌ Import errors detected:', allErrorDetails);
+        console.table(allErrorDetails);
       }
 
       return {
-        imported: data.imported,
-        skipped: data.skipped,
-        errors: data.errors,
-        total: data.total,
-        errorDetails: data.errorDetails
+        imported: totalImported,
+        skipped: totalSkipped,
+        errors: totalErrors,
+        batches: batchNumber - 1,
+        errorDetails: allErrorDetails.length > 0 ? allErrorDetails : undefined
       };
 
     } catch (error) {

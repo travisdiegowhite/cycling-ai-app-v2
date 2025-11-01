@@ -87,7 +87,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { userId, startDate, endDate, force = false } = req.body;
+    const { userId, startDate, endDate, force = false, batchSize = 5 } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: 'UserId required' });
@@ -96,6 +96,8 @@ export default async function handler(req, res) {
     if (force) {
       console.log('⚠️ FORCE MODE ENABLED - Will skip duplicate checks and re-import everything');
     }
+
+    console.log(`📦 Batch size: ${batchSize} activities (to avoid timeout)`);
 
     // Get Strava access token
     const { data: stravaToken, error: tokenError } = await supabase
@@ -143,13 +145,36 @@ export default async function handler(req, res) {
 
     console.log(`🚴 ${cyclingActivities.length} cycling activities to import`);
 
+    // Filter out activities that were already imported (unless force mode)
+    let activitiesRemaining = cyclingActivities;
+
+    if (!force) {
+      // Get list of already imported strava_ids
+      const { data: existingRoutes } = await supabase
+        .from('routes')
+        .select('strava_id')
+        .eq('user_id', userId)
+        .not('strava_id', 'is', null);
+
+      const existingStravaIds = new Set(existingRoutes?.map(r => r.strava_id) || []);
+      activitiesRemaining = cyclingActivities.filter(a => !existingStravaIds.has(a.id.toString()));
+
+      console.log(`🔍 ${cyclingActivities.length - activitiesRemaining.length} already imported, ${activitiesRemaining.length} remaining`);
+    }
+
+    // Limit to batchSize to avoid timeout
+    const activitiesToProcess = activitiesRemaining.slice(0, batchSize);
+    const hasMore = activitiesRemaining.length > batchSize;
+
+    console.log(`⏱️ Processing ${activitiesToProcess.length} activities in this batch (${hasMore ? activitiesRemaining.length - batchSize + ' more available' : 'all done'})`);
+
     // Import each activity
     let imported = 0;
     let skipped = 0;
     let errors = 0;
     const errorDetails = []; // Capture first 5 errors for debugging
 
-    for (const activity of cyclingActivities) {
+    for (const activity of activitiesToProcess) {
       try {
         const result = await importStravaActivity(userId, activity, accessToken, force);
         if (result === 'imported') imported++;
@@ -172,7 +197,7 @@ export default async function handler(req, res) {
       }
     }
 
-    console.log('✅ Bulk import complete:', { imported, skipped, errors, errorDetails });
+    console.log('✅ Batch import complete:', { imported, skipped, errors, errorDetails });
 
     return res.status(200).json({
       success: true,
@@ -180,7 +205,9 @@ export default async function handler(req, res) {
       skipped,
       errors,
       total: cyclingActivities.length,
-      message: `Imported ${imported} activities, ${skipped} duplicates skipped, ${errors} errors`,
+      processed: activitiesToProcess.length,
+      hasMore,
+      message: `Imported ${imported} activities, ${skipped} duplicates skipped, ${errors} errors. ${hasMore ? `${cyclingActivities.length - batchSize} more activities available.` : 'All activities processed.'}`,
       errorDetails: errorDetails.length > 0 ? errorDetails : undefined
     });
 
