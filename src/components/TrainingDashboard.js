@@ -219,10 +219,10 @@ const TrainingDashboard = () => {
       const daysAgo = new Date();
       daysAgo.setDate(daysAgo.getDate() - 90);
 
-      // Load only essential fields to avoid memory issues and use correct field names
+      // Load essential fields including GPS data flags for map display
       const { data: rides } = await supabase
         .from('routes')
-        .select('id, name, distance_km, elevation_gain_m, duration_seconds, recorded_at, created_at, route_type, training_stress_score, has_power_data')
+        .select('id, name, distance_km, elevation_gain_m, duration_seconds, recorded_at, created_at, route_type, training_stress_score, has_power_data, has_gps_data, has_heart_rate_data, track_points_count, start_latitude, start_longitude, average_speed, average_heartrate, average_watts, max_watts, imported_from')
         .eq('user_id', user.id)
         .gte('recorded_at', daysAgo.toISOString())
         .order('recorded_at', { ascending: false })
