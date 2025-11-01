@@ -387,16 +387,16 @@ export class StravaService {
       start_date: stravaActivity.start_date,
       distance_m: stravaActivity.distance,
       distance_km: stravaActivity.distance / 1000,
-      duration_seconds: stravaActivity.moving_time ? Math.round(stravaActivity.moving_time) : null,
-      elevation_gain_m: stravaActivity.total_elevation_gain ? Math.round(stravaActivity.total_elevation_gain) : null,
-      elevation_loss_m: stravaActivity.total_elevation_gain ? Math.round(stravaActivity.total_elevation_gain) : null, // Approximate
+      duration_seconds: stravaActivity.moving_time ? Math.round(stravaActivity.moving_time) : null, // Round seconds
+      elevation_gain_m: stravaActivity.total_elevation_gain, // Keep precision - schema uses FLOAT
+      elevation_loss_m: stravaActivity.total_elevation_gain, // Approximate - schema uses FLOAT
       average_speed: stravaActivity.average_speed ? stravaActivity.average_speed * 3.6 : null, // Convert m/s to km/h
       max_speed: stravaActivity.max_speed ? stravaActivity.max_speed * 3.6 : null, // Convert m/s to km/h
-      average_heartrate: stravaActivity.average_heartrate ? Math.round(stravaActivity.average_heartrate) : null,
-      max_heartrate: stravaActivity.max_heartrate ? Math.round(stravaActivity.max_heartrate) : null,
-      average_watts: stravaActivity.average_watts ? Math.round(stravaActivity.average_watts) : null,
-      max_watts: stravaActivity.max_watts ? Math.round(stravaActivity.max_watts) : null,
-      kilojoules: stravaActivity.kilojoules ? Math.round(stravaActivity.kilojoules) : null,
+      average_heartrate: stravaActivity.average_heartrate ? Math.round(stravaActivity.average_heartrate) : null, // Round BPM
+      max_heartrate: stravaActivity.max_heartrate ? Math.round(stravaActivity.max_heartrate) : null, // Round BPM
+      average_watts: stravaActivity.average_watts, // Keep precision - schema uses FLOAT
+      max_watts: stravaActivity.max_watts, // Keep precision - schema uses FLOAT
+      kilojoules: stravaActivity.kilojoules ? Math.round(stravaActivity.kilojoules) : null, // Round energy
       bounds_north: stravaActivity.start_latitude + 0.01, // Approximate
       bounds_south: stravaActivity.start_latitude - 0.01,
       bounds_east: stravaActivity.start_longitude + 0.01,
