@@ -387,19 +387,19 @@ export class StravaService {
       start_date: stravaActivity.start_date,
       distance_m: stravaActivity.distance,
       distance_km: stravaActivity.distance / 1000,
-      duration_seconds: stravaActivity.moving_time,
-      elevation_gain_m: stravaActivity.total_elevation_gain,
-      elevation_loss_m: stravaActivity.total_elevation_gain, // Approximate
+      duration_seconds: stravaActivity.moving_time ? Math.round(stravaActivity.moving_time) : null,
+      elevation_gain_m: stravaActivity.total_elevation_gain ? Math.round(stravaActivity.total_elevation_gain) : null,
+      elevation_loss_m: stravaActivity.total_elevation_gain ? Math.round(stravaActivity.total_elevation_gain) : null, // Approximate
       average_speed: stravaActivity.average_speed ? stravaActivity.average_speed * 3.6 : null, // Convert m/s to km/h
       max_speed: stravaActivity.max_speed ? stravaActivity.max_speed * 3.6 : null, // Convert m/s to km/h
-      average_heartrate: stravaActivity.average_heartrate,
-      max_heartrate: stravaActivity.max_heartrate,
-      average_watts: stravaActivity.average_watts,
-      max_watts: stravaActivity.max_watts,
-      kilojoules: stravaActivity.kilojoules,
+      average_heartrate: stravaActivity.average_heartrate ? Math.round(stravaActivity.average_heartrate) : null,
+      max_heartrate: stravaActivity.max_heartrate ? Math.round(stravaActivity.max_heartrate) : null,
+      average_watts: stravaActivity.average_watts ? Math.round(stravaActivity.average_watts) : null,
+      max_watts: stravaActivity.max_watts ? Math.round(stravaActivity.max_watts) : null,
+      kilojoules: stravaActivity.kilojoules ? Math.round(stravaActivity.kilojoules) : null,
       bounds_north: stravaActivity.start_latitude + 0.01, // Approximate
       bounds_south: stravaActivity.start_latitude - 0.01,
-      bounds_east: stravaActivity.start_longitude + 0.01,  
+      bounds_east: stravaActivity.start_longitude + 0.01,
       bounds_west: stravaActivity.start_longitude - 0.01,
       start_latitude: stravaActivity.start_latitude,
       start_longitude: stravaActivity.start_longitude,
