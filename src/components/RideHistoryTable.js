@@ -61,7 +61,15 @@ const RideHistoryTable = ({ rides }) => {
           console.error('Failed to load track points:', error);
           setTrackPoints([]);
         } else {
-          setTrackPoints(points || []);
+          // Map database field names (latitude/longitude) to RouteMap expected names (lat/lng)
+          const mappedPoints = (points || []).map(point => ({
+            lat: point.latitude,
+            lng: point.longitude,
+            elevation: point.elevation,
+            time: point.time,
+            distance: point.distance
+          }));
+          setTrackPoints(mappedPoints);
         }
       } catch (error) {
         console.error('Error loading track points:', error);
