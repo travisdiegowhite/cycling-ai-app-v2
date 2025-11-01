@@ -43,40 +43,53 @@ const RideHistoryTable = ({ rides }) => {
     return `${minutes}m`;
   };
 
-  // Load ride details and track points
+  // Load ride details and track points using nested query (like old working code)
   const handleViewRide = async (ride) => {
-    setSelectedRide(ride);
-    setModalOpened(true);
+    try {
+      // Fetch route with track points using nested selection (old working approach)
+      const { data, error } = await supabase
+        .from('routes')
+        .select(`
+          *,
+          track_points(
+            latitude,
+            longitude,
+            elevation,
+            time_seconds,
+            distance_m,
+            point_index
+          )
+        `)
+        .eq('id', ride.id)
+        .single();
 
-    // Load track points if the ride has GPS data
-    if (ride.has_gps_data) {
-      try {
-        const { data: points, error } = await supabase
-          .from('track_points')
-          .select('latitude, longitude, elevation, time, distance')
-          .eq('route_id', ride.id)
-          .order('point_index', { ascending: true });
-
-        if (error) {
-          console.error('Failed to load track points:', error);
-          setTrackPoints([]);
-        } else {
-          // Map database field names (latitude/longitude) to RouteMap expected names (lat/lng)
-          const mappedPoints = (points || []).map(point => ({
-            lat: point.latitude,
-            lng: point.longitude,
-            elevation: point.elevation,
-            time: point.time,
-            distance: point.distance
-          }));
-          setTrackPoints(mappedPoints);
-        }
-      } catch (error) {
-        console.error('Error loading track points:', error);
+      if (error) {
+        console.error('Error loading route details:', error);
+        setSelectedRide(ride);
         setTrackPoints([]);
+        setModalOpened(true);
+        return;
       }
-    } else {
+
+      // Process track points to format expected by RouteMap (like old code)
+      const trackPoints = data.track_points
+        ?.sort((a, b) => a.point_index - b.point_index)
+        .map(point => ({
+          lat: point.latitude,
+          lng: point.longitude,
+          elevation: point.elevation,
+        })) || [];
+
+      console.log(`📍 Loaded ${trackPoints.length} track points for ride ${ride.name}`);
+
+      setSelectedRide(data); // Use full route data from query
+      setTrackPoints(trackPoints);
+      setModalOpened(true);
+    } catch (error) {
+      console.error('Error loading route:', error);
+      setSelectedRide(ride);
       setTrackPoints([]);
+      setModalOpened(true);
     }
   };
 
