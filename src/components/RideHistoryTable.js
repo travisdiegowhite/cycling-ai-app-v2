@@ -43,46 +43,67 @@ const RideHistoryTable = ({ rides }) => {
     return `${minutes}m`;
   };
 
-  // Load ride details and track points using nested query (like old working code)
+  // Load ride details and track points with proper handling for large datasets
   const handleViewRide = async (ride) => {
     try {
-      // Fetch route with track points using nested selection (old working approach)
-      const { data, error } = await supabase
+      // First, fetch the full route details
+      const { data: routeData, error: routeError } = await supabase
         .from('routes')
-        .select(`
-          *,
-          track_points(
-            latitude,
-            longitude,
-            elevation,
-            time_seconds,
-            distance_m,
-            point_index
-          )
-        `)
+        .select('*')
         .eq('id', ride.id)
         .single();
 
-      if (error) {
-        console.error('Error loading route details:', error);
+      if (routeError) {
+        console.error('Error loading route details:', routeError);
         setSelectedRide(ride);
         setTrackPoints([]);
         setModalOpened(true);
         return;
       }
 
-      // Process track points to format expected by RouteMap (like old code)
-      const trackPoints = data.track_points
-        ?.sort((a, b) => a.point_index - b.point_index)
-        .map(point => ({
-          lat: point.latitude,
-          lng: point.longitude,
-          elevation: point.elevation,
-        })) || [];
+      // Then fetch ALL track points in batches (no 1000 limit)
+      // Supabase default limit is 1000, but we can fetch more by using range()
+      let allTrackPoints = [];
+      let from = 0;
+      const batchSize = 5000; // Fetch 5000 at a time
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: batch, error: batchError } = await supabase
+          .from('track_points')
+          .select('latitude, longitude, elevation, time_seconds, distance_m, point_index')
+          .eq('route_id', ride.id)
+          .order('point_index', { ascending: true })
+          .range(from, from + batchSize - 1);
+
+        if (batchError) {
+          console.error('Error loading track points batch:', batchError);
+          break;
+        }
+
+        if (batch && batch.length > 0) {
+          allTrackPoints = [...allTrackPoints, ...batch];
+          from += batchSize;
+
+          // If we got less than batchSize, we've reached the end
+          if (batch.length < batchSize) {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // Process track points to format expected by RouteMap
+      const trackPoints = allTrackPoints.map(point => ({
+        lat: point.latitude,
+        lng: point.longitude,
+        elevation: point.elevation,
+      }));
 
       console.log(`📍 Loaded ${trackPoints.length} track points for ride ${ride.name}`);
 
-      setSelectedRide(data); // Use full route data from query
+      setSelectedRide(routeData);
       setTrackPoints(trackPoints);
       setModalOpened(true);
     } catch (error) {
