@@ -61,12 +61,14 @@ const RideHistoryTable = ({ rides }) => {
         return;
       }
 
-      // Then fetch ALL track points in batches (no 1000 limit)
-      // Supabase default limit is 1000, but we can fetch more by using range()
+      // Then fetch ALL track points in batches (Supabase max is 1000 per request)
+      // We use range() to paginate through all points
       let allTrackPoints = [];
       let from = 0;
-      const batchSize = 5000; // Fetch 5000 at a time
+      const batchSize = 1000; // Supabase limit is 1000 rows per request
       let hasMore = true;
+
+      console.log(`📍 Loading track points for ${ride.name || 'route'}...`);
 
       while (hasMore) {
         const { data: batch, error: batchError } = await supabase
@@ -83,6 +85,7 @@ const RideHistoryTable = ({ rides }) => {
 
         if (batch && batch.length > 0) {
           allTrackPoints = [...allTrackPoints, ...batch];
+          console.log(`  ✓ Loaded batch ${Math.floor(from / batchSize) + 1}: ${batch.length} points (total: ${allTrackPoints.length})`);
           from += batchSize;
 
           // If we got less than batchSize, we've reached the end
